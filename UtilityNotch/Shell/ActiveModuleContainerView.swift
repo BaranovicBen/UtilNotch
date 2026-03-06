@@ -9,13 +9,18 @@ struct ActiveModuleContainerView: View {
         Group {
             if let module = ModuleRegistry.module(for: appState.activeModuleID) {
                 module.makeMainView()
-                    .id(module.id) // force view identity change on switch
+                    .id(module.id)
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .offset(y: 6)),
+                        removal: .opacity.combined(with: .offset(y: -6))
+                    ))
             } else {
                 placeholder
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .clipped()
+        .animation(.easeInOut(duration: 0.25), value: appState.activeModuleID)
     }
     
     private var placeholder: some View {

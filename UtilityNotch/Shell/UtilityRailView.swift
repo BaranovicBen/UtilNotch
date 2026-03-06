@@ -6,7 +6,7 @@ struct UtilityRailView: View {
     @Environment(AppState.self) private var appState
     
     var body: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 6) {
             ForEach(enabledModules, id: \.id) { module in
                 RailButton(
                     icon: module.icon,
@@ -22,10 +22,10 @@ struct UtilityRailView: View {
             
             Spacer()
         }
-        .padding(.vertical, 12)
-        .padding(.horizontal, 6)
+        .padding(.vertical, 14)
+        .padding(.horizontal, 8)
         .frame(maxHeight: .infinity)
-        .background(UNConstants.railBackground)
+        .background(UNConstants.railBackground.opacity(0.5))
     }
     
     private var enabledModules: [any UtilityModule] {
@@ -47,26 +47,54 @@ private struct RailButton: View {
     var body: some View {
         Button(action: action) {
             ZStack {
+                // Background highlight
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(isActive ? UNConstants.accentHighlight : Color.clear)
-                    .animation(.easeInOut(duration: 0.2), value: isActive)
+                    .fill(backgroundColor)
                 
+                // Icon
                 Image(systemName: icon)
                     .font(.system(size: 16, weight: .medium))
                     .foregroundStyle(isActive ? UNConstants.iconActiveTint : UNConstants.iconTint)
+                    .scaleEffect(isHovering ? 1.1 : 1.0)
+                    .animation(.easeOut(duration: 0.15), value: isHovering)
             }
-            .frame(width: 40, height: 40)
+            .frame(width: 42, height: 42)
         }
         .buttonStyle(.plain)
         .onHover { hovering in
-            isHovering = hovering
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovering = hovering
+            }
         }
-        .popover(isPresented: .constant(isHovering && showLabel && !isActive), arrowEdge: .leading) {
-            Text(name)
-                .font(.caption)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
+        .help(name)
+        .overlay(alignment: .leading) {
+            // Floating label on hover (appears to the left of the rail)
+            if isHovering && showLabel {
+                Text(name)
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule()
+                            .fill(Color(white: 0.15))
+                            .shadow(color: .black.opacity(0.3), radius: 4, x: -2)
+                    )
+                    .offset(x: -100)
+                    .transition(.opacity.combined(with: .offset(x: 8)))
+                    .allowsHitTesting(false)
+            }
         }
-        .help(name) // native macOS tooltip fallback
+        .animation(.easeOut(duration: 0.18), value: isHovering)
+    }
+    
+    private var backgroundColor: Color {
+        if isActive {
+            return UNConstants.accentHighlight
+        } else if isHovering {
+            return Color.white.opacity(0.06)
+        }
+        return .clear
     }
 }

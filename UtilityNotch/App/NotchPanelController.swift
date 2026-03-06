@@ -23,7 +23,10 @@ final class NotchPanelController {
         guard let panel else { return }
         
         positionPanel(panel)
+        
+        // Start state: invisible and slightly scaled up toward the notch
         panel.alphaValue = 0
+        panel.contentView?.layer?.anchorPoint = CGPoint(x: 0.5, y: 1.0)
         panel.orderFrontRegardless()
         
         NSAnimationContext.runAnimationGroup { ctx in
@@ -37,7 +40,7 @@ final class NotchPanelController {
         guard let panel else { return }
         
         NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = UNConstants.animationDuration
+            ctx.duration = UNConstants.animationDuration * 0.8  // slightly faster close
             ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
             panel.animator().alphaValue = 0
         }, completionHandler: { [weak self] in
