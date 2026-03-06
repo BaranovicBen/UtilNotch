@@ -7,10 +7,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     
     private let appState = AppState.shared
     private var panelController: NotchPanelController?
+    private var hoverTrigger: HoverTriggerZone?
+    private var eventManager: EventTriggerManager?
     
     func applicationDidFinishLaunching(_ notification: Notification) {
         panelController = NotchPanelController(appState: appState)
+        
+        // Install hover trigger zone at top-center of screen
+        hoverTrigger = HoverTriggerZone(appState: appState)
+        hoverTrigger?.install()
+        
+        // Install all event monitors (hotkey, escape, click-outside, inactivity)
+        if let panelController {
+            eventManager = EventTriggerManager(appState: appState, panelController: panelController)
+            eventManager?.install()
+        }
+        
         startObservingPanelVisibility()
+    }
+    
+    func applicationWillTerminate(_ notification: Notification) {
+        hoverTrigger?.uninstall()
+        eventManager?.uninstall()
     }
     
     private func startObservingPanelVisibility() {
@@ -36,6 +54,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
     
-    /// Expose panel controller for trigger system (Segment 5)
+    /// Expose panel controller for external access
     var notchPanelController: NotchPanelController? { panelController }
 }
