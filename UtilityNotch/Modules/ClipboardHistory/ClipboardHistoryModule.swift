@@ -1,6 +1,7 @@
-import SwiftUI
+i8mport SwiftUI
 
-/// Clipboard History utility module — stub (fleshed out in Segment 6)
+/// Clipboard History utility module — mock clipboard entries with search and copy.
+/// Replace with real NSPasteboard monitoring + Accessibility permission in production.
 struct ClipboardHistoryModule: UtilityModule {
     let id = "clipboardHistory"
     let name = "Clipboard History"
@@ -18,6 +19,19 @@ struct ClipboardHistoryModule: UtilityModule {
     }
     
     func makeMainView() -> AnyView {
-        AnyView(Text("Clipboard History — coming soon").foregroundStyle(.secondary))
+        AnyView(ClipboardHistoryView())
+    }
+    
+    func makeSettingsView() -> AnyView? {
+        AnyView(
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Clipboard History Settings")
+                    .font(.headline)
+                Text("History limit, auto-clear, and exclusion rules will be configurable in production.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding()
+        )
     }
 }

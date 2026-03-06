@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Todo List utility module — stub (fleshed out in Segment 6)
+/// Todo List utility module — local task management with add/delete/toggle.
 struct TodoListModule: UtilityModule {
     let id = "todoList"
     let name = "Todo List"
@@ -8,6 +8,19 @@ struct TodoListModule: UtilityModule {
     var isEnabled = true
     
     func makeMainView() -> AnyView {
-        AnyView(Text("Todo List — coming soon").foregroundStyle(.secondary))
+        AnyView(TodoListView())
+    }
+    
+    func makeSettingsView() -> AnyView? {
+        AnyView(
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Todo List Settings")
+                    .font(.headline)
+                Text("Local storage only in beta. Persistent storage and sync will be added later.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding()
+        )
     }
 }
