@@ -1,0 +1,300 @@
+Utility Notch, Product Description
+
+Product Overview
+
+Utility Notch is a native macOS utility hub built in Swift and SwiftUI.
+
+It lives in the background and extends the Mac notch into a clean interactive workspace. When the user hovers over the notch, clicks it, or uses a keyboard shortcut, the notch expands sideways and downward into a floating interface. The center area shows the currently active utility. A vertical utility rail on the right displays enabled tools.
+
+The goal is simple. One elegant shell that holds many small utility apps in one place.
+
+Core Product Vision
+
+Utility Notch is a modular notch-based workspace for quick desktop utilities.
+
+It should feel:
+	•	native to macOS
+	•	visually close to Apple UI language
+	•	smooth, minimal, and lightweight
+	•	configurable without becoming complex
+
+The product should act like a clean system layer, not a heavy standalone app.
+
+Platform and Technology
+
+Platform
+	•	macOS only
+
+Tech stack
+	•	Native Swift
+	•	SwiftUI
+	•	Compile-time utility modules only
+
+App presence
+	•	Launch at login
+	•	Run in background
+	•	Menu bar presence
+	•	No Dock icon
+	•	Separate Settings window
+
+Main Interaction Model
+
+Open triggers
+
+The interface opens when the user:
+	•	hovers over the notch
+	•	clicks the notch
+	•	uses the assigned keyboard shortcut
+
+Closed state
+
+When no utility is actively running in the background, nothing should be visible on screen.
+
+The app should stay invisible until triggered.
+
+Close triggers
+
+The interface closes when:
+	•	the mouse leaves the interactive area
+	•	the user clicks outside the interface
+	•	the user presses Escape
+	•	inactivity timeout is reached
+
+UI Layout
+
+Expanded notch behavior
+
+When opened, the notch expands sideways and downward into a polished floating panel.
+
+Main layout
+
+Center panel
+	•	shows the currently selected utility
+	•	acts as the main content area
+	•	supports each utility’s custom UI
+
+Right utility rail
+	•	vertical list of enabled utility icons
+	•	takes roughly one fifth of the expanded interface width
+	•	loops through enabled tools
+	•	user switches tools by clicking icons
+	•	icon name appears on hover
+	•	this hover label behavior can be disabled in settings
+
+Utility switching behavior
+
+On open, the current or previously selected utility is shown in the center.
+
+The user can browse other utilities without forced snapping behavior. The interface should feel fluid and forgiving.
+
+Visual Design Direction
+
+Style target
+
+The design should resemble Apple’s Dynamic Island language and polished third-party notch utilities.
+
+Visual rules
+	•	dark floating surface
+	•	rounded corners throughout
+	•	soft blur and layered depth
+	•	subtle, fluid animations
+	•	clean icon-first interaction
+	•	seamless integration with the notch area
+	•	minimal visual noise
+
+Color direction
+	•	main UI in dark grey or black tones
+	•	strong contrast for content clarity
+	•	optional accent colors for active states and utility-specific actions
+
+Modular Architecture
+
+Core architecture idea
+
+Utility Notch is a shell application that hosts many small utility modules.
+
+The shell handles:
+	•	notch expansion and collapse
+	•	utility registration
+	•	active utility selection
+	•	enabled and disabled state
+	•	shared settings
+	•	permissions messaging
+	•	performance rules
+
+Each utility module should remain self-contained.
+
+Module contract
+
+Each module should expose:
+	•	id
+	•	name
+	•	icon
+	•	main view
+	•	enabled state
+	•	optional settings view
+	•	optional background task support
+	•	optional notification support
+
+Module loading
+
+Modules are compile-time modules included in the codebase.
+
+To add a new utility, the developer should only need to:
+	•	include the module in the project
+	•	register it with the shell
+	•	call its entry point
+
+No complex plugin system is needed in V1.
+
+Settings
+
+Global settings
+
+The app should include a separate Settings window with broad customization.
+
+Users should be able to:
+	•	enable or disable utilities
+	•	reorder enabled utilities
+	•	choose whether utility names appear on hover
+	•	choose default utility
+	•	manage notifications
+	•	manage per-utility background behavior
+	•	adjust launch at login
+	•	adjust interaction preferences such as hover behavior or delay
+	•	tune appearance preferences where useful
+
+Per-utility settings
+
+Each utility can have its own settings screen or settings section.
+
+Examples:
+	•	Todo list preferences
+	•	Clipboard history limits
+	•	Music control display preferences
+	•	File converter defaults
+
+Permissions
+
+Permission strategy
+
+On first setup, the app should request the important permissions needed by its utilities.
+
+If the user denies permissions, the app should clearly explain:
+	•	which utility is affected
+	•	which feature will not work
+	•	why the permission is needed
+
+This explanation should be direct and user-friendly.
+
+Permissions should be handled centrally by the shell, while each module declares what it needs.
+
+Performance Rules
+
+Non-negotiable product rules
+
+Utility Notch must:
+	•	stay lightweight
+	•	load modules only when needed
+	•	keep background resource usage low
+
+The app should always feel fast, calm, and unobtrusive.
+
+V1 Utility Modules
+
+Initial utilities
+
+The first version should include:
+	•	Todo List
+	•	Clipboard History
+	•	Music Control
+	•	File Converter
+
+These modules are enough to prove the shell architecture and modular workflow.
+
+Functional Summary
+
+What Utility Notch does
+
+Utility Notch turns the Mac notch into a modular utility hub.
+
+It gives users:
+	•	instant access to small desktop tools
+	•	a native, clean, Apple-like interaction model
+	•	one expandable notch workspace
+	•	flexible module control without clutter
+
+One-Sentence Product Pitch
+
+Utility Notch is a native macOS notch workspace that lets users open and manage modular desktop utilities from one elegant, always-available interface.
+
+Recommended V1 Scope
+
+To keep the build clean, V1 should focus on:
+	•	notch expansion system
+	•	shell UI
+	•	utility rail
+	•	active utility center panel
+	•	settings window
+	•	permission flow
+	•	one or two fully working modules first
+
+Best first build order:
+	1.	Shell and notch interaction
+	2.	Utility rail and active view switching
+	3.	Settings window
+	4.	Todo module
+	5.	Clipboard module
+	6.	Permission system
+	7.	Music and file converter modules
+
+Build Note for Other AIs
+
+This project should be treated as a native macOS Swift and SwiftUI application with a modular shell architecture, Apple-like motion and visual language, compile-time utility registration, centralized settings and permissions, and strict performance constraints.
+
+1. Non-goals
+
+Example:
+	•	no backend
+	•	no cloud sync
+	•	no user accounts
+	•	no real plugin marketplace
+	•	no production-grade permissions system in beta
+
+2. Beta simplifications
+
+Example:
+	•	top-center hover zone instead of true notch detection
+	•	mock music control
+	•	mock file converter logic if needed
+	•	local-only data
+
+3. Exact V1 success criteria
+
+Example:
+	•	app launches
+	•	top-center trigger works
+	•	shell expands and collapses
+	•	right utility rail works
+	•	settings window works
+	•	user can switch between 4 utilities
+	•	new module can be added by registering it in one place
+
+4. File structure expectations
+
+Example:
+	•	App
+	•	Shell
+	•	Modules
+	•	Settings
+	•	Models
+	•	Services
+
+5. State ownership
+
+Define who owns:
+	•	active utility
+	•	enabled utilities
+	•	settings
+	•	permissions
+	•	module registry
