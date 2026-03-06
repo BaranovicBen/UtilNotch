@@ -1,7 +1,6 @@
 import SwiftUI
 
 /// Right-side vertical icon rail showing enabled utility modules.
-/// Takes ~1/5 of the panel width. Shows SF Symbols; clicking switches the active utility.
 struct UtilityRailView: View {
     @Environment(AppState.self) private var appState
     
@@ -11,8 +10,7 @@ struct UtilityRailView: View {
                 RailButton(
                     icon: module.icon,
                     name: module.name,
-                    isActive: appState.activeModuleID == module.id,
-                    showLabel: appState.showHoverLabels
+                    isActive: appState.activeModuleID == module.id
                 ) {
                     withAnimation(.spring(duration: 0.3, bounce: 0.15)) {
                         appState.selectModule(module.id)
@@ -39,7 +37,6 @@ private struct RailButton: View {
     let icon: String
     let name: String
     let isActive: Bool
-    let showLabel: Bool
     let action: () -> Void
     
     @State private var isHovering = false
@@ -47,11 +44,9 @@ private struct RailButton: View {
     var body: some View {
         Button(action: action) {
             ZStack {
-                // Background highlight
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(backgroundColor)
                 
-                // Icon
                 Image(systemName: icon)
                     .font(.system(size: 16, weight: .medium))
                     .foregroundStyle(isActive ? UNConstants.iconActiveTint : UNConstants.iconTint)
@@ -66,27 +61,7 @@ private struct RailButton: View {
                 isHovering = hovering
             }
         }
-        .help(name)
-        .overlay(alignment: .leading) {
-            // Floating label on hover (appears to the left of the rail)
-            if isHovering && showLabel {
-                Text(name)
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(
-                        Capsule()
-                            .fill(Color(white: 0.15))
-                            .shadow(color: .black.opacity(0.3), radius: 4, x: -2)
-                    )
-                    .offset(x: -100)
-                    .transition(.opacity.combined(with: .offset(x: 8)))
-                    .allowsHitTesting(false)
-            }
-        }
-        .animation(.easeOut(duration: 0.18), value: isHovering)
+        .help(name) // Native macOS tooltip — clean Apple-like treatment
     }
     
     private var backgroundColor: Color {

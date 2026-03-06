@@ -33,6 +33,13 @@ struct MenuBarView: View {
     @Environment(AppState.self) private var appState
     
     var body: some View {
+        // Next pending task
+        if let task = appState.nextPendingTask {
+            Text("📋 \(task)")
+                .font(.callout)
+            Divider()
+        }
+        
         Button(appState.isPanelVisible ? "Hide Notch Panel" : "Show Notch Panel") {
             appState.togglePanel()
         }

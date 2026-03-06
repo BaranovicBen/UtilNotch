@@ -1,11 +1,11 @@
 import AppKit
 
 /// Manages all event monitors for closing and toggling the panel:
-/// - Global keyboard shortcut (⌥Space)
-/// - Escape key to close
-/// - Click outside panel to close
-/// - Inactivity timeout auto-close
-/// - Mouse exit from panel area to close
+/// - Global keyboard shortcut (⌥Space) — always toggles
+/// - Escape key — force-closes
+/// - Click outside panel — closes only if not interacting
+/// - Mouse leave panel area — primary close signal (with grace period)
+/// - Inactivity timeout — only when idle and not suppressed
 @MainActor
 final class EventTriggerManager {
     
@@ -15,10 +15,14 @@ final class EventTriggerManager {
     private var globalKeyMonitor: Any?
     private var localKeyMonitor: Any?
     private var globalClickMonitor: Any?
+    private var mouseMoveMonitor: Any?
     private var inactivityTimer: Timer?
+    private var mouseLeaveTimer: Timer?
     
-    /// Tracks the last known panel visibility to detect edges
     private var lastKnownVisibility: Bool = false
+    
+    /// Grace period before closing after mouse leaves the panel area
+    private let mouseLeaveGracePeriod: TimeInterval = 0.4
     
     init(appState: AppState, panelController: NotchPanelController) {
         self.appState = appState
@@ -30,6 +34,7 @@ final class EventTriggerManager {
     func install() {
         installGlobalHotkey()
         installClickOutsideMonitor()
+        installMouseTrackingMonitor()
         startObservingPanelState()
     }
     
@@ -37,11 +42,14 @@ final class EventTriggerManager {
         if let globalKeyMonitor { NSEvent.removeMonitor(globalKeyMonitor) }
         if let localKeyMonitor { NSEvent.removeMonitor(localKeyMonitor) }
         if let globalClickMonitor { NSEvent.removeMonitor(globalClickMonitor) }
+        if let mouseMoveMonitor { NSEvent.removeMonitor(mouseMoveMonitor) }
         inactivityTimer?.invalidate()
+        mouseLeaveTimer?.invalidate()
         
         globalKeyMonitor = nil
         localKeyMonitor = nil
         globalClickMonitor = nil
+        mouseMoveMonitor = nil
     }
     
     // MARK: - Global Hotkey (⌥Space)
@@ -57,16 +65,20 @@ final class EventTriggerManager {
     }
     
     private func handleKeyEvent(_ event: NSEvent) {
-        // ⌥Space toggles panel
+        // ⌥Space toggles panel (force — ignores interaction lock)
         if event.keyCode == UNConstants.globalHotkeyKeyCode &&
            event.modifierFlags.contains(UNConstants.globalHotkeyModifiers) {
-            appState.togglePanel()
+            if appState.isPanelVisible {
+                appState.forceHidePanel()
+            } else {
+                appState.showPanel()
+            }
             return
         }
         
-        // Escape closes panel
+        // Escape force-closes panel
         if event.keyCode == 53 && appState.isPanelVisible {
-            appState.hidePanel()
+            appState.forceHidePanel()
         }
     }
     
@@ -76,13 +88,61 @@ final class EventTriggerManager {
         globalClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
             DispatchQueue.main.async {
                 guard let self, self.appState.isPanelVisible else { return }
+                // Respect interaction lock — don't close during active use
+                guard !self.appState.shouldSuppressClose else { return }
                 
                 if let panelWindow = self.panelController?.panelWindow {
                     let screenPoint = NSEvent.mouseLocation
-                    let panelFrame = panelWindow.frame
-                    
-                    if !panelFrame.contains(screenPoint) {
+                    if !panelWindow.frame.contains(screenPoint) {
                         self.appState.hidePanel()
+                    }
+                }
+            }
+        }
+    }
+    
+    // MARK: - Mouse Leave Detection (primary close signal)
+    
+    private func installMouseTrackingMonitor() {
+        mouseMoveMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged, .rightMouseDragged]) { [weak self] _ in
+            DispatchQueue.main.async {
+                self?.checkMousePosition()
+            }
+        }
+    }
+    
+    private func checkMousePosition() {
+        guard appState.isPanelVisible else {
+            mouseLeaveTimer?.invalidate()
+            mouseLeaveTimer = nil
+            return
+        }
+        
+        guard let panelWindow = panelController?.panelWindow else { return }
+        
+        let mouseLocation = NSEvent.mouseLocation
+        // Expand the panel frame slightly for a generous hit area
+        let expandedFrame = panelWindow.frame.insetBy(dx: -12, dy: -12)
+        
+        if expandedFrame.contains(mouseLocation) {
+            // Mouse is inside — cancel any pending close, mark as interacting
+            mouseLeaveTimer?.invalidate()
+            mouseLeaveTimer = nil
+        } else {
+            // Mouse is outside — start grace period if not already started
+            if mouseLeaveTimer == nil && !appState.shouldSuppressClose {
+                mouseLeaveTimer = Timer.scheduledTimer(withTimeInterval: mouseLeaveGracePeriod, repeats: false) { [weak self] _ in
+                    DispatchQueue.main.async {
+                        guard let self else { return }
+                        // Double-check: still outside and not suppressed?
+                        if let pw = self.panelController?.panelWindow {
+                            let pos = NSEvent.mouseLocation
+                            let frame = pw.frame.insetBy(dx: -12, dy: -12)
+                            if !frame.contains(pos) && !self.appState.shouldSuppressClose {
+                                self.appState.hidePanel()
+                            }
+                        }
+                        self.mouseLeaveTimer = nil
                     }
                 }
             }
@@ -95,31 +155,27 @@ final class EventTriggerManager {
         inactivityTimer?.invalidate()
         inactivityTimer = nil
         
-        guard appState.isPanelVisible, appState.inactivityTimeout > 0 else { return }
+        guard appState.isPanelVisible,
+              appState.inactivityTimeout > 0,
+              !appState.shouldSuppressClose else { return }
         
         inactivityTimer = Timer.scheduledTimer(withTimeInterval: appState.inactivityTimeout, repeats: false) { [weak self] _ in
             DispatchQueue.main.async {
-                self?.appState.hidePanel()
+                guard let self, !self.appState.shouldSuppressClose else { return }
+                self.appState.hidePanel()
             }
         }
     }
     
-    // MARK: - Observe Panel State (robust, cannot silently die)
+    // MARK: - Observe Panel State
     
     private func startObservingPanelState() {
-        // Use withObservationTracking with unconditional re-registration.
-        // The key difference: we do NOT use [weak self] — this manager lives
-        // for the entire app lifetime (owned by AppDelegate), so weak is unnecessary
-        // and was causing the observation chain to break.
         func observe() {
             withObservationTracking {
                 _ = appState.isPanelVisible
             } onChange: { [appState] in
                 DispatchQueue.main.async { [weak self] in
-                    guard let self else {
-                        // Re-register even if self is gone — but it shouldn't be
-                        return
-                    }
+                    guard let self else { return }
                     let visible = appState.isPanelVisible
                     if visible != self.lastKnownVisibility {
                         self.lastKnownVisibility = visible
@@ -128,9 +184,10 @@ final class EventTriggerManager {
                         } else {
                             self.inactivityTimer?.invalidate()
                             self.inactivityTimer = nil
+                            self.mouseLeaveTimer?.invalidate()
+                            self.mouseLeaveTimer = nil
                         }
                     }
-                    // ALWAYS re-register, unconditionally
                     observe()
                 }
             }

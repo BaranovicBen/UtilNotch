@@ -1,11 +1,14 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
-/// File Converter view — mock UI with conversion type picker and placeholder action.
-/// Replace with real file conversion logic in production.
+/// File Converter view — with drag-and-drop, paste support, and improved from/to picker.
 struct FileConverterView: View {
-    @State private var selectedConversion: ConversionType = .pngToJpg
+    @Environment(AppState.self) private var appState
+    @State private var inputFormat: FileFormat = .png
+    @State private var outputFormat: FileFormat = .jpg
     @State private var selectedFile: String = ""
     @State private var conversionStatus: ConversionStatus = .idle
+    @State private var isDragTargeted = false
     
     var body: some View {
         VStack(spacing: 0) {
@@ -16,56 +19,85 @@ struct FileConverterView: View {
                     .foregroundStyle(.white)
                 Spacer()
             }
-            .padding(.bottom, 16)
+            .padding(.bottom, 14)
             
-            Spacer()
-            
-            // Conversion type picker
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Conversion Type")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                
-                Picker("", selection: $selectedConversion) {
-                    ForEach(ConversionType.allCases) { type in
-                        Text(type.label).tag(type)
-                    }
-                }
-                .pickerStyle(.menu)
-                .tint(.white)
-            }
-            .padding(.bottom, 16)
-            
-            // File drop zone
-            VStack(spacing: 10) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: UNConstants.innerCornerRadius, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.15), style: StrokeStyle(lineWidth: 1.5, dash: [6]))
-                        .frame(height: 100)
-                    
-                    VStack(spacing: 6) {
-                        Image(systemName: "arrow.down.doc")
-                            .font(.system(size: 28))
-                            .foregroundStyle(.secondary)
-                        
-                        if selectedFile.isEmpty {
-                            Text("Drop a file here or click to select")
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
-                        } else {
-                            Text(selectedFile)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
+            // From / To pickers
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("From")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Picker("", selection: $inputFormat) {
+                        ForEach(FileFormat.allCases) { fmt in
+                            Text(fmt.label).tag(fmt)
                         }
                     }
+                    .pickerStyle(.menu)
+                    .frame(maxWidth: .infinity)
+                    .padding(6)
+                    .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
                 }
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    mockSelectFile()
+                
+                Image(systemName: "arrow.right")
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 16)
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("To")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Picker("", selection: $outputFormat) {
+                        ForEach(FileFormat.allCases) { fmt in
+                            Text(fmt.label).tag(fmt)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .frame(maxWidth: .infinity)
+                    .padding(6)
+                    .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
                 }
             }
-            .padding(.bottom, 16)
+            .padding(.bottom, 14)
+            
+            // File drop zone
+            ZStack {
+                RoundedRectangle(cornerRadius: UNConstants.innerCornerRadius, style: .continuous)
+                    .strokeBorder(
+                        isDragTargeted ? Color.blue.opacity(0.6) : Color.white.opacity(0.15),
+                        style: StrokeStyle(lineWidth: isDragTargeted ? 2 : 1.5, dash: isDragTargeted ? [] : [6])
+                    )
+                    .background(
+                        RoundedRectangle(cornerRadius: UNConstants.innerCornerRadius, style: .continuous)
+                            .fill(isDragTargeted ? Color.blue.opacity(0.08) : Color.clear)
+                    )
+                    .frame(height: 90)
+                
+                VStack(spacing: 6) {
+                    Image(systemName: isDragTargeted ? "arrow.down.circle.fill" : "arrow.down.doc")
+                        .font(.system(size: 24))
+                        .foregroundStyle(isDragTargeted ? .blue : .secondary)
+                    
+                    if selectedFile.isEmpty {
+                        Text("Drop a file, click to select, or ⌘V to paste")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    } else {
+                        Text(selectedFile)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+            }
+            .contentShape(Rectangle())
+            .onTapGesture { mockSelectFile() }
+            .onDrop(of: [.fileURL], isTargeted: $isDragTargeted) { providers in
+                handleDrop(providers)
+            }
+            .onChange(of: isDragTargeted) { _, targeted in
+                appState.isDraggingOver = targeted
+            }
+            .padding(.bottom, 14)
             
             // Convert button
             Button(action: mockConvert) {
@@ -97,82 +129,72 @@ struct FileConverterView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                .padding(.top, 10)
+                .padding(.top, 8)
                 .transition(.opacity)
             }
             
             Spacer()
             
-            // Beta note
-            Text("Mock converter • Real file conversion will use system frameworks")
+            Text("Mock converter • ⌘V to paste file path • Drag files onto the panel")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .onAppear { appState.isInteracting = false }
+        .onDisappear {
+            appState.isDraggingOver = false
+            if conversionStatus != .converting {
+                appState.hasActiveTask = false
+            }
+        }
     }
     
-    // MARK: - Mock Actions
+    // MARK: - Actions
     
     private func mockSelectFile() {
-        // MARK: TODO — Replace with NSOpenPanel in production
-        selectedFile = "example_image.\(selectedConversion.inputExtension)"
+        appState.isInteracting = true
+        selectedFile = "example_image.\(inputFormat.ext)"
         conversionStatus = .idle
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            appState.isInteracting = false
+        }
+    }
+    
+    private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
+        guard let provider = providers.first else { return false }
+        provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+            if let data = item as? Data, let url = URL(dataRepresentation: data, relativeTo: nil) {
+                DispatchQueue.main.async {
+                    selectedFile = url.lastPathComponent
+                    conversionStatus = .idle
+                }
+            }
+        }
+        return true
     }
     
     private func mockConvert() {
         conversionStatus = .converting
+        appState.hasActiveTask = true
         
-        // Simulate a short conversion delay
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
             withAnimation {
-                conversionStatus = .done("Converted to \(selectedConversion.outputExtension.uppercased()) successfully")
+                conversionStatus = .done("Converted \(inputFormat.label) → \(outputFormat.label) successfully")
             }
+            appState.hasActiveTask = false
         }
     }
 }
 
 // MARK: - Models
 
-private enum ConversionType: String, CaseIterable, Identifiable {
-    case pngToJpg
-    case jpgToPng
-    case heicToJpg
-    case pdfToPng
-    case webpToPng
-    case markdownToHtml
+private enum FileFormat: String, CaseIterable, Identifiable {
+    case png, jpg, heic, pdf, webp, md, html
     
     var id: String { rawValue }
     
-    var label: String {
-        switch self {
-        case .pngToJpg: return "PNG → JPEG"
-        case .jpgToPng: return "JPEG → PNG"
-        case .heicToJpg: return "HEIC → JPEG"
-        case .pdfToPng: return "PDF → PNG"
-        case .webpToPng: return "WebP → PNG"
-        case .markdownToHtml: return "Markdown → HTML"
-        }
-    }
-    
-    var inputExtension: String {
-        switch self {
-        case .pngToJpg: return "png"
-        case .jpgToPng: return "jpg"
-        case .heicToJpg: return "heic"
-        case .pdfToPng: return "pdf"
-        case .webpToPng: return "webp"
-        case .markdownToHtml: return "md"
-        }
-    }
-    
-    var outputExtension: String {
-        switch self {
-        case .pngToJpg: return "jpg"
-        case .jpgToPng, .heicToJpg, .webpToPng: return "png"
-        case .pdfToPng: return "png"
-        case .markdownToHtml: return "html"
-        }
-    }
+    var label: String { rawValue.uppercased() }
+    var ext: String { rawValue }
 }
 
 private enum ConversionStatus: Equatable {

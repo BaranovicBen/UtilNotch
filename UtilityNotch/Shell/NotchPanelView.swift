@@ -12,16 +12,17 @@ struct NotchPanelView: View {
             
             // Main content area
             HStack(spacing: 0) {
-                // Center: active module content
+                // Center: active module content — properly centered
                 ActiveModuleContainerView()
-                    .padding(16)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 14)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 
                 // Thin separator
                 Rectangle()
                     .fill(Color.white.opacity(0.06))
-                    .frame(width: 1)
-                    .padding(.vertical, 10)
+                    .frame(width: 0.5)
+                    .padding(.vertical, 12)
                 
                 // Right rail: utility icons (~1/5 width)
                 UtilityRailView()
@@ -31,9 +32,8 @@ struct NotchPanelView: View {
         .frame(width: UNConstants.panelWidth, height: UNConstants.panelHeight)
         .background {
             ZStack {
-                // Base dark fill
-                RoundedRectangle(cornerRadius: UNConstants.panelCornerRadius, style: .continuous)
-                    .fill(UNConstants.panelBackground)
+                // Solid dark base — prevents transparent/artifact flicker on launch
+                UNConstants.panelBackground
                 
                 // Glass material overlay
                 RoundedRectangle(cornerRadius: UNConstants.panelCornerRadius, style: .continuous)
@@ -43,6 +43,7 @@ struct NotchPanelView: View {
                 RoundedRectangle(cornerRadius: UNConstants.panelCornerRadius, style: .continuous)
                     .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
             }
+            .clipShape(RoundedRectangle(cornerRadius: UNConstants.panelCornerRadius, style: .continuous))
             .shadow(color: .black.opacity(0.55), radius: 40, y: 12)
         }
         .clipShape(RoundedRectangle(cornerRadius: UNConstants.panelCornerRadius, style: .continuous))
@@ -52,7 +53,7 @@ struct NotchPanelView: View {
     /// Small pill at the top center that visually connects to the notch area.
     private var notchPill: some View {
         Capsule()
-            .fill(Color.white.opacity(0.08))
+            .fill(Color.white.opacity(0.1))
             .frame(width: 36, height: 5)
             .padding(.top, 8)
             .padding(.bottom, 4)

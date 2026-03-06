@@ -12,6 +12,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var eventManager: EventTriggerManager?
     
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Suppress window state restoration noise
+        NSWindow.allowsAutomaticWindowTabbing = false
+        UserDefaults.standard.set(false, forKey: "NSQuitAlwaysKeepsWindows")
+        
         panelController = NotchPanelController(appState: appState)
         
         // Install hover trigger zone at top-center of screen

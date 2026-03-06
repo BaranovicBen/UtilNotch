@@ -125,8 +125,11 @@ private class NotchPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
     
+    // Disable window state restoration — prevents restorecount.plist noise
+    override class var restorableStateKeyPaths: [String] { [] }
+    override class func allowedClasses(forRestorableStateKeyPath keyPath: String) -> [AnyClass] { [] }
+    
     override func resignKey() {
         super.resignKey()
-        // Panel lost key status — can be used for auto-close later
     }
 }
