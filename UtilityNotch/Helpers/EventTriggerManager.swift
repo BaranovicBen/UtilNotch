@@ -1,4 +1,4 @@
-%import AppKit
+import AppKit
 
 /// Manages all event monitors for closing and toggling the panel:
 /// - Global keyboard shortcut (⌥Space)
@@ -16,7 +16,9 @@ final class EventTriggerManager {
     private var localKeyMonitor: Any?
     private var globalClickMonitor: Any?
     private var inactivityTimer: Timer?
-    private var mouseExitMonitor: Any?
+    
+    /// Tracks the last known panel visibility to detect edges
+    private var lastKnownVisibility: Bool = false
     
     init(appState: AppState, panelController: NotchPanelController) {
         self.appState = appState
@@ -28,7 +30,6 @@ final class EventTriggerManager {
     func install() {
         installGlobalHotkey()
         installClickOutsideMonitor()
-        installEscapeMonitor()
         startObservingPanelState()
     }
     
@@ -36,23 +37,21 @@ final class EventTriggerManager {
         if let globalKeyMonitor { NSEvent.removeMonitor(globalKeyMonitor) }
         if let localKeyMonitor { NSEvent.removeMonitor(localKeyMonitor) }
         if let globalClickMonitor { NSEvent.removeMonitor(globalClickMonitor) }
-        if let mouseExitMonitor { NSEvent.removeMonitor(mouseExitMonitor) }
         inactivityTimer?.invalidate()
         
         globalKeyMonitor = nil
         localKeyMonitor = nil
         globalClickMonitor = nil
-        mouseExitMonitor = nil
     }
     
     // MARK: - Global Hotkey (⌥Space)
     
     private func installGlobalHotkey() {
         globalKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            self?.handleKeyEvent(event)
+            DispatchQueue.main.async { self?.handleKeyEvent(event) }
         }
         localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            self?.handleKeyEvent(event)
+            DispatchQueue.main.async { self?.handleKeyEvent(event) }
             return event
         }
     }
@@ -61,41 +60,29 @@ final class EventTriggerManager {
         // ⌥Space toggles panel
         if event.keyCode == UNConstants.globalHotkeyKeyCode &&
            event.modifierFlags.contains(UNConstants.globalHotkeyModifiers) {
-            DispatchQueue.main.async { [weak self] in
-                self?.appState.togglePanel()
-            }
+            appState.togglePanel()
             return
         }
         
         // Escape closes panel
         if event.keyCode == 53 && appState.isPanelVisible {
-            DispatchQueue.main.async { [weak self] in
-                self?.appState.hidePanel()
-            }
+            appState.hidePanel()
         }
-    }
-    
-    // MARK: - Escape (redundant path via local monitor, kept for clarity)
-    
-    private func installEscapeMonitor() {
-        // Handled inside handleKeyEvent above
     }
     
     // MARK: - Click Outside
     
     private func installClickOutsideMonitor() {
         globalClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
-            guard let self, self.appState.isPanelVisible else { return }
-            
-            // Check if click is outside the panel window
-            if let panelWindow = self.panelController?.panelWindow {
-                let clickLocation = event.locationInWindow
-                let screenPoint = NSEvent.mouseLocation
-                let panelFrame = panelWindow.frame
+            DispatchQueue.main.async {
+                guard let self, self.appState.isPanelVisible else { return }
                 
-                if !panelFrame.contains(screenPoint) {
-                    DispatchQueue.main.async { [weak self] in
-                        self?.appState.hidePanel()
+                if let panelWindow = self.panelController?.panelWindow {
+                    let screenPoint = NSEvent.mouseLocation
+                    let panelFrame = panelWindow.frame
+                    
+                    if !panelFrame.contains(screenPoint) {
+                        self.appState.hidePanel()
                     }
                 }
             }
@@ -106,11 +93,9 @@ final class EventTriggerManager {
     
     private func resetInactivityTimer() {
         inactivityTimer?.invalidate()
+        inactivityTimer = nil
         
-        guard appState.isPanelVisible, appState.inactivityTimeout > 0 else {
-            inactivityTimer = nil
-            return
-        }
+        guard appState.isPanelVisible, appState.inactivityTimeout > 0 else { return }
         
         inactivityTimer = Timer.scheduledTimer(withTimeInterval: appState.inactivityTimeout, repeats: false) { [weak self] _ in
             DispatchQueue.main.async {
@@ -119,20 +104,33 @@ final class EventTriggerManager {
         }
     }
     
-    // MARK: - Observe Panel State
+    // MARK: - Observe Panel State (robust, cannot silently die)
     
     private func startObservingPanelState() {
+        // Use withObservationTracking with unconditional re-registration.
+        // The key difference: we do NOT use [weak self] — this manager lives
+        // for the entire app lifetime (owned by AppDelegate), so weak is unnecessary
+        // and was causing the observation chain to break.
         func observe() {
             withObservationTracking {
                 _ = appState.isPanelVisible
-            } onChange: { [weak self] in
-                DispatchQueue.main.async {
-                    if self?.appState.isPanelVisible == true {
-                        self?.resetInactivityTimer()
-                    } else {
-                        self?.inactivityTimer?.invalidate()
-                        self?.inactivityTimer = nil
+            } onChange: { [appState] in
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else {
+                        // Re-register even if self is gone — but it shouldn't be
+                        return
                     }
+                    let visible = appState.isPanelVisible
+                    if visible != self.lastKnownVisibility {
+                        self.lastKnownVisibility = visible
+                        if visible {
+                            self.resetInactivityTimer()
+                        } else {
+                            self.inactivityTimer?.invalidate()
+                            self.inactivityTimer = nil
+                        }
+                    }
+                    // ALWAYS re-register, unconditionally
                     observe()
                 }
             }

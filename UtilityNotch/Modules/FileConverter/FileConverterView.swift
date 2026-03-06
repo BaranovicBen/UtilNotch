@@ -83,7 +83,7 @@ struct FileConverterView: View {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(selectedFile.isEmpty ? Color.white.opacity(0.06) : Color.blue.opacity(0.6))
                 )
-                .foregroundStyle(selectedFile.isEmpty ? .tertiary : .white)
+                .foregroundColor(selectedFile.isEmpty ? .gray : .white)
             }
             .buttonStyle(.plain)
             .disabled(selectedFile.isEmpty || conversionStatus == .converting)

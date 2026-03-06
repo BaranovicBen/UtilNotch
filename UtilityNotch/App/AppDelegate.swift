@@ -3,6 +3,7 @@ import Combine
 
 /// AppDelegate that owns the NotchPanelController and observes AppState
 /// to show/hide the floating panel. Bridges SwiftUI ↔ AppKit.
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     
     private let appState = AppState.shared
@@ -32,12 +33,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     private func startObservingPanelVisibility() {
+        // Robust observation loop: captures appState strongly (it's a singleton),
+        // and ALWAYS re-registers even if self is transiently nil.
         func observe() {
             withObservationTracking {
                 _ = appState.isPanelVisible
             } onChange: { [weak self] in
-                DispatchQueue.main.async {
+                Task { @MainActor in
                     self?.handlePanelVisibilityChange()
+                    // ALWAYS re-register — this line must execute unconditionally
                     observe()
                 }
             }

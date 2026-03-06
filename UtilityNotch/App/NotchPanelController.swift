@@ -10,6 +10,9 @@ final class NotchPanelController {
     private var panel: NSPanel?
     private var appState: AppState
     
+    /// Tracks the pending orderOut so we can cancel it if show is called mid-hide.
+    private var hideWorkItem: DispatchWorkItem?
+    
     init(appState: AppState) {
         self.appState = appState
     }
@@ -17,16 +20,22 @@ final class NotchPanelController {
     // MARK: - Panel Lifecycle
     
     func showPanel() {
+        // Cancel any pending hide completion — this is the race-fix
+        hideWorkItem?.cancel()
+        hideWorkItem = nil
+        
         if panel == nil {
             createPanel()
         }
         guard let panel else { return }
         
-        positionPanel(panel)
+        // Always reset to a clean pre-show state
+        NSAnimationContext.beginGrouping()
+        NSAnimationContext.current.duration = 0
+        panel.animator().alphaValue = 0
+        NSAnimationContext.endGrouping()
         
-        // Start state: invisible and slightly scaled up toward the notch
-        panel.alphaValue = 0
-        panel.contentView?.layer?.anchorPoint = CGPoint(x: 0.5, y: 1.0)
+        positionPanel(panel)
         panel.orderFrontRegardless()
         
         NSAnimationContext.runAnimationGroup { ctx in
@@ -39,12 +48,22 @@ final class NotchPanelController {
     func hidePanel() {
         guard let panel else { return }
         
+        // Cancel any previous pending hide
+        hideWorkItem?.cancel()
+        
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.panel?.orderOut(nil)
+            self?.hideWorkItem = nil
+        }
+        hideWorkItem = workItem
+        
         NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = UNConstants.animationDuration * 0.8  // slightly faster close
+            ctx.duration = UNConstants.animationDuration * 0.8
             ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
             panel.animator().alphaValue = 0
-        }, completionHandler: { [weak self] in
-            self?.panel?.orderOut(nil)
+        }, completionHandler: {
+            // Only order out if this hide was not cancelled by a subsequent show
+            workItem.perform()
         })
     }
     

@@ -1,4 +1,4 @@
-i8mport SwiftUI
+import SwiftUI
 
 /// Clipboard History utility module — mock clipboard entries with search and copy.
 /// Replace with real NSPasteboard monitoring + Accessibility permission in production.

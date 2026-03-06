@@ -1,4 +1,4 @@
-stemimport SwiftUI
+import SwiftUI
 
 /// Clipboard History view — displays a scrollable list of recent clipboard entries.
 /// Mock data in beta. Replace with real NSPasteboard monitoring later.
