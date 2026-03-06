@@ -53,11 +53,30 @@ struct MenuBarView: View {
     }
 }
 
-// MARK: - Placeholder Settings (replaced in Segment 7)
+// MARK: - Settings Root (tabbed)
 
 struct SettingsRootView: View {
+    @Environment(AppState.self) private var appState
+    
     var body: some View {
-        Text("Settings — coming soon")
-            .frame(width: 480, height: 320)
+        TabView {
+            GeneralSettingsView()
+                .environment(appState)
+                .tabItem {
+                    Label("General", systemImage: "gear")
+                }
+            
+            ModuleSettingsView()
+                .environment(appState)
+                .tabItem {
+                    Label("Modules", systemImage: "square.grid.2x2")
+                }
+            
+            PermissionsInfoView()
+                .tabItem {
+                    Label("Permissions", systemImage: "lock.shield")
+                }
+        }
+        .frame(width: 520, height: 460)
     }
 }
