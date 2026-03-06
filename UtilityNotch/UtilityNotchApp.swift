@@ -7,7 +7,9 @@ import SwiftUI
 
 @main
 struct UtilityNotchApp: App {
-    @State private var appState = AppState()
+    @NSApplicationDelegateAdaptor private var appDelegate: AppDelegate
+    
+    private var appState: AppState { AppState.shared }
     
     var body: some Scene {
         // Menu bar icon — the only persistent UI element

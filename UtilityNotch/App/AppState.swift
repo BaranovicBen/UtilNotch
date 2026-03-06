@@ -5,6 +5,9 @@ import SwiftUI
 @Observable
 final class AppState {
     
+    /// Shared instance — used by both SwiftUI scenes and AppDelegate
+    static let shared = AppState()
+    
     // MARK: - Panel State
     
     var isPanelVisible: Bool = false
