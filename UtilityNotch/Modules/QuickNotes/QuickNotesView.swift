@@ -188,6 +188,7 @@ private struct NoteCard: View {
             Text(note.createdAt, style: .relative)
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
+                .accessibilityLabel(Text(note.createdAt, style: .date))
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)

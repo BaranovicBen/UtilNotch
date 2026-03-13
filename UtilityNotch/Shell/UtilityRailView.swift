@@ -6,6 +6,7 @@ struct UtilityRailView: View {
     @Environment(AppState.self) private var appState
     @State private var draggingID: String?
     @State private var isCommandHeld: Bool = false
+    @State private var commandKeyMonitor: Any?
 
     private var enabledModuleIDsBinding: Binding<[String]> {
         Binding(
@@ -55,6 +56,7 @@ struct UtilityRailView: View {
                 .padding(.vertical, 6)
         )
         .onAppear { installCommandKeyMonitor() }
+        .onDisappear { removeCommandKeyMonitor() }
     }
 
     private var enabledModules: [any UtilityModule] {
@@ -63,9 +65,16 @@ struct UtilityRailView: View {
 
     /// Track whether the Command key is currently held via local key-flag events.
     private func installCommandKeyMonitor() {
-        NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
+        commandKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
             isCommandHeld = event.modifierFlags.contains(.command)
             return event
+        }
+    }
+
+    private func removeCommandKeyMonitor() {
+        if let monitor = commandKeyMonitor {
+            NSEvent.removeMonitor(monitor)
+            commandKeyMonitor = nil
         }
     }
 }
