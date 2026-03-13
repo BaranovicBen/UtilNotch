@@ -12,15 +12,34 @@ struct TodoListModule: UtilityModule {
     }
     
     func makeSettingsView() -> AnyView? {
-        AnyView(
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Todo List Settings")
-                    .font(.headline)
-                Text("Local storage only in beta. Persistent storage and sync will be added later.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        AnyView(TodoListSettingsView())
+    }
+}
+
+/// Per-module settings for Todo List.
+private struct TodoListSettingsView: View {
+    @Environment(AppState.self) private var appState
+
+    var body: some View {
+        @Bindable var state = appState
+
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Todo List Settings")
+                .font(.headline)
+
+            Picker("Menu bar summary", selection: $state.menuBarSummaryMode) {
+                ForEach(TodoSummaryMode.allCases) { mode in
+                    Text(mode.label).tag(mode)
+                }
             }
-            .padding()
-        )
+            Text("Controls the text shown in the status bar icon. Long task names are truncated.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Text("Local storage only in beta. Persistent storage and sync will be added later.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding()
     }
 }
