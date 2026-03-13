@@ -88,13 +88,15 @@ final class EventTriggerManager {
         globalClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
             DispatchQueue.main.async {
                 guard let self, self.appState.isPanelVisible else { return }
-                // Respect interaction lock — don't close during active use
-                guard !self.appState.shouldSuppressClose else { return }
+                // Only block click-outside for active interaction/task/drag — not pointer position
+                guard !self.appState.shouldSuppressClickOutside else { return }
                 
                 if let panelWindow = self.panelController?.panelWindow {
                     let screenPoint = NSEvent.mouseLocation
                     if !panelWindow.frame.contains(screenPoint) {
-                        self.appState.hidePanel()
+                        self.appState.isPanelVisible = false
+                        self.appState.isInteracting = false
+                        self.appState.isPointerInsidePanel = false
                     }
                 }
             }
