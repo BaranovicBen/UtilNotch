@@ -23,6 +23,17 @@ struct GeneralSettingsView: View {
                 }
             }
             
+            Section("Menu Bar") {
+                Picker("Todo summary", selection: $state.menuBarSummaryMode) {
+                    ForEach(TodoSummaryMode.allCases) { mode in
+                        Text(mode.label).tag(mode)
+                    }
+                }
+                Text("Controls the text shown in the status bar icon. Long task names are truncated.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            
             Section("System") {
                 Toggle("Launch at login", isOn: $state.launchAtLogin)
                 // MARK: TODO — Wire to SMAppService.mainApp.register() in production

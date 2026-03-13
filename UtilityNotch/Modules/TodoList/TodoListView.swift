@@ -5,10 +5,13 @@ struct TodoListView: View {
     @Environment(AppState.self) private var appState
     @State private var newItemText: String = ""
     @FocusState private var isInputFocused: Bool
-    
+    @State private var editingID: UUID?
+    @State private var draftTitle: String = ""
+    @State private var draggingID: UUID?
+
     var body: some View {
         @Bindable var state = appState
-        
+
         VStack(spacing: 0) {
             // Header
             HStack {
@@ -30,6 +33,7 @@ struct TodoListView: View {
                     .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
                     .focused($isInputFocused)
                     .onSubmit { addItem() }
+                    .onChange(of: isInputFocused) { _, focused in appState.isInteracting = focused }
                 
                 Button(action: addItem) {
                     Image(systemName: "plus.circle.fill")
@@ -44,17 +48,37 @@ struct TodoListView: View {
             // List with drag reordering
             List {
                 ForEach(appState.todoItems) { item in
-                    TodoRow(item: item, onToggle: {
-                        toggleItem(item.id)
-                    }, onDelete: {
-                        deleteItem(item.id)
-                    })
+                    TodoRow(
+                        item: item,
+                        isEditing: editingID == item.id,
+                        draftTitle: editingID == item.id ? $draftTitle : .constant(item.title),
+                        onBeginEdit: {
+                            editingID = item.id
+                            draftTitle = item.title
+                            appState.isInteracting = true
+                        },
+                        onCommit: { title in
+                            saveEdit(id: item.id, newTitle: title)
+                        },
+                        onCancel: {
+                            editingID = nil
+                            appState.isInteracting = false
+                        },
+                        onToggle: {
+                            toggleItem(item.id)
+                        },
+                        onDelete: {
+                            deleteItem(item.id)
+                        }
+                    )
+                    .onDrag {
+                        draggingID = item.id
+                        return NSItemProvider(object: item.id.uuidString as NSString)
+                    }
+                    .onDrop(of: [.text], delegate: TodoDropDelegate(item: item, items: $state.todoItems, draggingID: $draggingID))
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
                     .listRowInsets(EdgeInsets(top: 2, leading: 0, bottom: 2, trailing: 0))
-                }
-                .onMove { source, destination in
-                    appState.todoItems.move(fromOffsets: source, toOffset: destination)
                 }
             }
             .listStyle(.plain)
@@ -72,6 +96,7 @@ struct TodoListView: View {
             appState.todoItems.insert(TodoItem(title: text), at: 0)
         }
         newItemText = ""
+        appState.isInteracting = false
     }
     
     private func toggleItem(_ id: UUID) {
@@ -85,6 +110,19 @@ struct TodoListView: View {
         withAnimation(.easeOut(duration: 0.2)) {
             appState.todoItems.removeAll { $0.id == id }
         }
+        if editingID == id { editingID = nil }
+    }
+    
+    private func saveEdit(id: UUID, newTitle: String) {
+        let title = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty, let idx = appState.todoItems.firstIndex(where: { $0.id == id }) else {
+            editingID = nil
+            appState.isInteracting = false
+            return
+        }
+        appState.todoItems[idx].title = title
+        editingID = nil
+        appState.isInteracting = false
     }
 }
 
@@ -92,10 +130,16 @@ struct TodoListView: View {
 
 private struct TodoRow: View {
     let item: TodoItem
+    let isEditing: Bool
+    @Binding var draftTitle: String
+    let onBeginEdit: () -> Void
+    let onCommit: (String) -> Void
+    let onCancel: () -> Void
     let onToggle: () -> Void
     let onDelete: () -> Void
     
     @State private var isHovering = false
+    @FocusState private var isFieldFocused: Bool
     
     var body: some View {
         HStack(spacing: 10) {
@@ -106,14 +150,23 @@ private struct TodoRow: View {
             }
             .buttonStyle(.plain)
             
-            Text(item.title)
-                .strikethrough(item.isDone)
-                .foregroundStyle(item.isDone ? .secondary : .primary)
-                .lineLimit(1)
+            if isEditing {
+                TextField("Edit task", text: $draftTitle)
+                    .textFieldStyle(.plain)
+                    .focused($isFieldFocused)
+                    .onSubmit { commit() }
+                    .onAppear { isFieldFocused = true }
+            } else {
+                Text(item.title)
+                    .strikethrough(item.isDone)
+                    .foregroundStyle(item.isDone ? .secondary : .primary)
+                    .lineLimit(1)
+                    .onTapGesture(count: 2, perform: onBeginEdit)
+            }
             
             Spacer()
             
-            if isHovering {
+            if isHovering && !isEditing {
                 Button(action: onDelete) {
                     Image(systemName: "trash")
                         .font(.caption)
@@ -127,6 +180,11 @@ private struct TodoRow: View {
         .padding(.vertical, 6)
         .background(isHovering ? Color.white.opacity(0.04) : Color.clear, in: RoundedRectangle(cornerRadius: 8))
         .onHover { isHovering = $0 }
+        .onExitCommand(perform: onCancel)
+    }
+    
+    private func commit() {
+        onCommit(draftTitle)
     }
 }
 
@@ -144,4 +202,32 @@ struct TodoItem: Identifiable {
         TodoItem(title: "Write unit tests for module registry"),
         TodoItem(title: "Prepare demo for team meeting"),
     ]
+}
+
+// MARK: - Drag and Drop Delegate
+
+private struct TodoDropDelegate: DropDelegate {
+    let item: TodoItem
+    @Binding var items: [TodoItem]
+    @Binding var draggingID: UUID?
+
+    func dropEntered(info: DropInfo) {
+        guard let draggingID,
+              draggingID != item.id,
+              let from = items.firstIndex(where: { $0.id == draggingID }),
+              let to = items.firstIndex(where: { $0.id == item.id }) else { return }
+
+        withAnimation(.easeInOut(duration: 0.15)) {
+            items.move(fromOffsets: IndexSet(integer: from), toOffset: to > from ? to + 1 : to)
+        }
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggingID = nil
+        return true
+    }
+
+    func dropExited(info: DropInfo) {
+        draggingID = nil
+    }
 }

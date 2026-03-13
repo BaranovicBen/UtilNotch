@@ -22,7 +22,7 @@ final class EventTriggerManager {
     private var lastKnownVisibility: Bool = false
     
     /// Grace period before closing after mouse leaves the panel area
-    private let mouseLeaveGracePeriod: TimeInterval = 0.4
+    private let mouseLeaveGracePeriod: TimeInterval = 0.6
     
     init(appState: AppState, panelController: NotchPanelController) {
         self.appState = appState
@@ -115,6 +115,7 @@ final class EventTriggerManager {
         guard appState.isPanelVisible else {
             mouseLeaveTimer?.invalidate()
             mouseLeaveTimer = nil
+            appState.isPointerInsidePanel = false
             return
         }
         
@@ -123,9 +124,10 @@ final class EventTriggerManager {
         let mouseLocation = NSEvent.mouseLocation
         // Expand the panel frame slightly for a generous hit area
         let expandedFrame = panelWindow.frame.insetBy(dx: -12, dy: -12)
+        appState.isPointerInsidePanel = expandedFrame.contains(mouseLocation)
         
-        if expandedFrame.contains(mouseLocation) {
-            // Mouse is inside — cancel any pending close, mark as interacting
+        if appState.isPointerInsidePanel {
+            // Mouse is inside — cancel any pending close
             mouseLeaveTimer?.invalidate()
             mouseLeaveTimer = nil
         } else {
@@ -173,6 +175,7 @@ final class EventTriggerManager {
         func observe() {
             withObservationTracking {
                 _ = appState.isPanelVisible
+                _ = appState.shouldSuppressClose
             } onChange: { [appState] in
                 DispatchQueue.main.async { [weak self] in
                     guard let self else { return }
@@ -187,6 +190,8 @@ final class EventTriggerManager {
                             self.mouseLeaveTimer?.invalidate()
                             self.mouseLeaveTimer = nil
                         }
+                    } else if !appState.shouldSuppressClose {
+                        self.resetInactivityTimer()
                     }
                     observe()
                 }

@@ -1,9 +1,11 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Root SwiftUI view hosted inside the floating NSPanel.
 /// Layout: notch-shaped top edge, center content + right utility rail, dark glass surface.
 struct NotchPanelView: View {
     @Environment(AppState.self) private var appState
+    @State private var isPanelDropTargeted = false
     
     var body: some View {
         VStack(spacing: 0) {
@@ -14,9 +16,9 @@ struct NotchPanelView: View {
             HStack(spacing: 0) {
                 // Center: active module content — properly centered
                 ActiveModuleContainerView()
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 14)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 16)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 
                 // Thin separator
                 Rectangle()
@@ -27,6 +29,7 @@ struct NotchPanelView: View {
                 // Right rail: utility icons (~1/5 width)
                 UtilityRailView()
                     .frame(width: UNConstants.panelWidth * UNConstants.railWidthFraction)
+                    .padding(.vertical, 10)
             }
         }
         .frame(width: UNConstants.panelWidth, height: UNConstants.panelHeight)
@@ -39,14 +42,30 @@ struct NotchPanelView: View {
                 RoundedRectangle(cornerRadius: UNConstants.panelCornerRadius, style: .continuous)
                     .fill(.ultraThinMaterial)
                 
+                // Rail integration gradient — keeps rail attached visually
+                LinearGradient(colors: [Color.white.opacity(0.04), Color.white.opacity(0.08)], startPoint: .leading, endPoint: .trailing)
+                    .mask(
+                        RoundedRectangle(cornerRadius: UNConstants.panelCornerRadius, style: .continuous)
+                    )
+                
                 // Subtle inner border
                 RoundedRectangle(cornerRadius: UNConstants.panelCornerRadius, style: .continuous)
                     .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
             }
             .clipShape(RoundedRectangle(cornerRadius: UNConstants.panelCornerRadius, style: .continuous))
-            .shadow(color: .black.opacity(0.55), radius: 40, y: 12)
+            .shadow(color: .black.opacity(0.45), radius: 32, y: 10)
         }
         .clipShape(RoundedRectangle(cornerRadius: UNConstants.panelCornerRadius, style: .continuous))
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            appState.isPointerInsidePanel = hovering
+        }
+        .onDrop(of: [.fileURL], isTargeted: $isPanelDropTargeted) { providers in
+            handlePanelDrop(providers)
+        }
+        .onChange(of: isPanelDropTargeted) { _, targeted in
+            appState.isDraggingOver = targeted
+        }
         .environment(\.colorScheme, .dark)
     }
     
@@ -56,6 +75,20 @@ struct NotchPanelView: View {
             .fill(Color.white.opacity(0.1))
             .frame(width: 36, height: 5)
             .padding(.top, 8)
-            .padding(.bottom, 4)
+            .padding(.bottom, 6)
+    }
+    
+    private func handlePanelDrop(_ providers: [NSItemProvider]) -> Bool {
+        guard let provider = providers.first else { return false }
+        provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+            if let data = item as? Data, let url = URL(dataRepresentation: data, relativeTo: nil) {
+                DispatchQueue.main.async {
+                    appState.pendingFileURL = url
+                    appState.selectModule("fileConverter")
+                    appState.showPanel()
+                }
+            }
+        }
+        return true
     }
 }

@@ -13,11 +13,18 @@ struct UtilityNotchApp: App {
     
     var body: some Scene {
         // Menu bar icon — the only persistent UI element
-        MenuBarExtra("Utility Notch", systemImage: "rectangle.expand.vertical") {
+        MenuBarExtra {
             MenuBarView()
                 .environment(appState)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "rectangle.expand.vertical")
+                Text(appState.summaryTextForMenuBar())
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
         }
-        
+
         // Separate settings window (opened via ⌘, or menu)
         Settings {
             SettingsRootView()
@@ -33,10 +40,11 @@ struct MenuBarView: View {
     @Environment(AppState.self) private var appState
     
     var body: some View {
-        // Next pending task
-        if let task = appState.nextPendingTask {
-            Text("📋 \(task)")
+        VStack(alignment: .leading, spacing: 6) {
+            Text(appState.summaryTextForMenuBar())
                 .font(.callout)
+                .lineLimit(1)
+                .truncationMode(.tail)
             Divider()
         }
         

@@ -8,6 +8,7 @@ enum ModuleRegistry {
     /// This is the ONLY place modules are registered.
     static var allModules: [any UtilityModule] = [
         TodoListModule(),
+        QuickNotesModule(),
         ClipboardHistoryModule(),
         MusicControlModule(),
         FileConverterModule()
