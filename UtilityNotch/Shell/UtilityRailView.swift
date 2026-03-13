@@ -1,9 +1,12 @@
 import SwiftUI
 
 /// Right-side vertical icon rail showing enabled utility modules.
+/// Command+drag reorders modules; normal click selects.
 struct UtilityRailView: View {
     @Environment(AppState.self) private var appState
     @State private var draggingID: String?
+    @State private var isCommandHeld: Bool = false
+    @State private var commandKeyMonitor: Any?
 
     private var enabledModuleIDsBinding: Binding<[String]> {
         Binding(
@@ -13,7 +16,7 @@ struct UtilityRailView: View {
     }
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 6) {
             ForEach(enabledModules, id: \.id) { module in
                 RailButton(
                     icon: module.icon,
@@ -32,29 +35,47 @@ struct UtilityRailView: View {
                 .onDrop(of: [.text], delegate: ModuleDropDelegate(
                     item: module.id,
                     current: enabledModuleIDsBinding,
-                    draggingID: $draggingID
+                    draggingID: $draggingID,
+                    commandHeld: isCommandHeld
                 ))
             }
 
             Spacer(minLength: 4)
         }
-        .padding(.vertical, 12)
-        .padding(.horizontal, 10)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 8)
         .frame(maxHeight: .infinity)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.white.opacity(0.05))
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.white.opacity(0.03))
                 .padding(.vertical, 6)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.white.opacity(0.06), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.white.opacity(0.04), lineWidth: 0.5)
                 .padding(.vertical, 6)
         )
+        .onAppear { installCommandKeyMonitor() }
+        .onDisappear { removeCommandKeyMonitor() }
     }
 
     private var enabledModules: [any UtilityModule] {
         appState.enabledModuleIDs.compactMap { ModuleRegistry.module(for: $0) }
+    }
+
+    /// Track whether the Command key is currently held via local key-flag events.
+    private func installCommandKeyMonitor() {
+        commandKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
+            isCommandHeld = event.modifierFlags.contains(.command)
+            return event
+        }
+    }
+
+    private func removeCommandKeyMonitor() {
+        if let monitor = commandKeyMonitor {
+            NSEvent.removeMonitor(monitor)
+            commandKeyMonitor = nil
+        }
     }
 }
 
@@ -72,16 +93,16 @@ private struct RailButton: View {
     var body: some View {
         Button(action: action) {
             ZStack {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(backgroundColor)
 
                 Image(systemName: icon)
-                    .font(.system(size: 16, weight: .medium))
+                    .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(isActive ? UNConstants.iconActiveTint : UNConstants.iconTint)
                     .scaleEffect(isHovering ? 1.08 : 1.0)
                     .animation(.easeOut(duration: 0.14), value: isHovering)
             }
-            .frame(width: 44, height: 44)
+            .frame(width: 40, height: 40)
         }
         .buttonStyle(.plain)
         .onHover { hovering in
@@ -96,7 +117,7 @@ private struct RailButton: View {
         if isActive {
             return UNConstants.accentHighlight
         } else if isHovering {
-            return Color.white.opacity(0.08)
+            return Color.white.opacity(0.06)
         }
         return .clear
     }
@@ -108,8 +129,10 @@ private struct ModuleDropDelegate: DropDelegate {
     let item: String
     @Binding var current: [String]
     @Binding var draggingID: String?
+    let commandHeld: Bool
 
     func dropEntered(info: DropInfo) {
+        guard commandHeld else { return }
         guard let draggingID, draggingID != item,
               let from = current.firstIndex(of: draggingID),
               let to = current.firstIndex(of: item) else { return }

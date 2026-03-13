@@ -36,9 +36,15 @@ final class AppState {
     /// True during an active drag session targeting the panel.
     var isDraggingOver: Bool = false
     
-    /// Whether the panel should resist auto-close right now.
+    /// Whether the panel should resist auto-close right now (for mouse-leave and inactivity).
     var shouldSuppressClose: Bool {
         isPointerInsidePanel || isInteracting || hasActiveTask || isDraggingOver
+    }
+
+    /// Whether active work should block an explicit outside-click dismiss.
+    /// Does NOT include isPointerInsidePanel — an explicit click outside is intentional.
+    var shouldSuppressClickOutside: Bool {
+        isInteracting || hasActiveTask || isDraggingOver
     }
     
     // MARK: - Module State
