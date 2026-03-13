@@ -11,8 +11,8 @@ struct ActiveModuleContainerView: View {
                 module.makeMainView()
                     .id(module.id)
                     .transition(.asymmetric(
-                        insertion: .opacity.combined(with: .offset(y: 6)),
-                        removal: .opacity.combined(with: .offset(y: -6))
+                        insertion: .opacity.combined(with: .offset(y: 4)),
+                        removal: .opacity
                     ))
             } else {
                 placeholder
@@ -20,17 +20,17 @@ struct ActiveModuleContainerView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .clipped()
-        .animation(.easeInOut(duration: 0.25), value: appState.activeModuleID)
+        .animation(.easeInOut(duration: 0.22), value: appState.activeModuleID)
     }
     
     private var placeholder: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 6) {
             Image(systemName: "square.dashed")
-                .font(.system(size: 32))
-                .foregroundStyle(.tertiary)
+                .font(.system(size: 28))
+                .foregroundStyle(.quaternary)
             Text("No utility selected")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .font(.caption)
+                .foregroundStyle(.tertiary)
         }
     }
 }
