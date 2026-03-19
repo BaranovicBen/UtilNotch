@@ -319,7 +319,6 @@ private struct NoteCard: View {
 
     private func exactTimeString(_ date: Date) -> String {
         let cal = Calendar.current
-        let now = Date()
 
         if cal.isDateInToday(date) {
             let formatter = DateFormatter()

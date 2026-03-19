@@ -122,12 +122,12 @@ struct FileConverterView: View {
             HStack(spacing: 8) {
                 Image(systemName: isDragTargeted ? "arrow.down.circle.fill" : "arrow.down.doc")
                     .font(.system(size: 16))
-                    .foregroundStyle(isDragTargeted ? .blue : .quaternary)
+                    .foregroundStyle(isDragTargeted ? Color.blue : Color.white.opacity(0.25))
 
                 if selectedFile.isEmpty {
                     Text(isDragTargeted ? "Release to select" : "Drop file · click · ⌘V")
                         .font(.caption)
-                        .foregroundStyle(.quaternary)
+                        .foregroundStyle(Color.white.opacity(0.25))
                 } else {
                     Text(selectedFile)
                         .font(.caption.weight(.medium))
@@ -181,7 +181,7 @@ struct FileConverterView: View {
                           ? Color.white.opacity(0.05)
                           : Color.blue.opacity(0.55))
             )
-            .foregroundStyle(selectedFile.isEmpty ? .tertiary : .white)
+            .foregroundStyle(selectedFile.isEmpty ? Color.white.opacity(0.3) : Color.white)
         }
         .buttonStyle(.plain)
         .disabled(selectedFile.isEmpty || conversionStatus == .converting)

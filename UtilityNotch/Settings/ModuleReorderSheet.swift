@@ -49,7 +49,6 @@ struct ModuleReorderSheet: View {
                 }
             }
             .listStyle(.plain)
-            .environment(\.editMode, .constant(.active))
             .frame(minHeight: 260)
 
             Divider()

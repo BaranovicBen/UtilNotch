@@ -87,7 +87,7 @@ struct TimerView: View {
                         RoundedRectangle(cornerRadius: 9)
                             .fill(totalInputSeconds > 0 ? Color.white.opacity(0.15) : Color.white.opacity(0.05))
                     )
-                    .foregroundStyle(totalInputSeconds > 0 ? .white : .tertiary)
+                    .foregroundStyle(totalInputSeconds > 0 ? Color.white : Color.secondary)
             }
             .buttonStyle(.plain)
             .disabled(totalInputSeconds == 0)

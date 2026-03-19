@@ -13,5 +13,4 @@ struct TimerModule: UtilityModule {
         AnyView(TimerView())
     }
 
-    func makeSettingsView() -> AnyView? { nil }
 }
