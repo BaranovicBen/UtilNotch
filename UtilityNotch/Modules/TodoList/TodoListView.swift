@@ -190,18 +190,16 @@ private struct TodoRow: View {
 
 // MARK: - Model
 
-struct TodoItem: Identifiable {
-    let id = UUID()
+struct TodoItem: Identifiable, Codable, Equatable {
+    let id: UUID
     var title: String
-    var isDone: Bool = false
-    
-    static let sampleItems: [TodoItem] = [
-        TodoItem(title: "Design onboarding flow"),
-        TodoItem(title: "Review pull requests", isDone: true),
-        TodoItem(title: "Update dependencies"),
-        TodoItem(title: "Write unit tests for module registry"),
-        TodoItem(title: "Prepare demo for team meeting"),
-    ]
+    var isDone: Bool
+
+    init(id: UUID = UUID(), title: String, isDone: Bool = false) {
+        self.id = id
+        self.title = title
+        self.isDone = isDone
+    }
 }
 
 // MARK: - Drag and Drop Delegate
