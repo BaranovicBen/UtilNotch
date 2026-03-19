@@ -1,14 +1,14 @@
 import SwiftUI
 
-/// Redesigned Quick Notes — compact capture, clean preview cards, hover actions, click-to-expand.
+/// Quick Notes — compact capture, clean cards, hover actions, double-click to edit, copy, exact time.
 struct QuickNotesView: View {
     @Environment(AppState.self) private var appState
     @State private var newTitle: String = ""
     @State private var newBody: String = ""
     @FocusState private var isTitleFocused: Bool
     @State private var expandedNoteID: UUID?
+    @State private var editingNoteID: UUID?
 
-    /// Character limits
     private let titleLimit = 60
     private let bodyLimit = 280
 
@@ -31,7 +31,7 @@ struct QuickNotesView: View {
                 .font(.headline)
                 .foregroundStyle(.white)
             Spacer()
-            Text("\(appState.quickNotes.count) notes")
+            Text(appState.quickNotes.count == 1 ? "1 note" : "\(appState.quickNotes.count) notes")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -50,7 +50,6 @@ struct QuickNotesView: View {
                     .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
                     .focused($isTitleFocused)
                     .onSubmit(addNote)
-                    .onTapGesture { appState.isInteracting = true }
                     .onChange(of: isTitleFocused) { _, focused in appState.isInteracting = focused }
                     .onChange(of: newTitle) { _, val in
                         if val.count > titleLimit { newTitle = String(val.prefix(titleLimit)) }
@@ -87,7 +86,12 @@ struct QuickNotesView: View {
                     NoteCard(
                         note: note,
                         isExpanded: expandedNoteID == note.id,
+                        isEditing: editingNoteID == note.id,
                         onToggleExpand: { toggleExpand(note.id) },
+                        onBeginEdit: { beginEdit(note.id) },
+                        onCommitEdit: { newTitle, newBody in commitEdit(note.id, title: newTitle, body: newBody) },
+                        onCancelEdit: { editingNoteID = nil; appState.isInteracting = false },
+                        onCopy: { copyNote(note) },
                         onConvertToTodo: { convertToTodo(note) },
                         onDelete: { delete(note.id) }
                     )
@@ -111,9 +115,30 @@ struct QuickNotesView: View {
     }
 
     private func toggleExpand(_ id: UUID) {
+        guard editingNoteID != id else { return }
         withAnimation(.easeInOut(duration: 0.2)) {
             expandedNoteID = expandedNoteID == id ? nil : id
         }
+    }
+
+    private func beginEdit(_ id: UUID) {
+        expandedNoteID = id
+        editingNoteID = id
+        appState.isInteracting = true
+    }
+
+    private func commitEdit(_ id: UUID, title: String, body: String) {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty,
+              let idx = appState.quickNotes.firstIndex(where: { $0.id == id }) else {
+            editingNoteID = nil
+            appState.isInteracting = false
+            return
+        }
+        appState.quickNotes[idx].title = trimmedTitle
+        appState.quickNotes[idx].body = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        editingNoteID = nil
+        appState.isInteracting = false
     }
 
     private func delete(_ id: UUID) {
@@ -121,6 +146,13 @@ struct QuickNotesView: View {
             appState.quickNotes.removeAll { $0.id == id }
         }
         if expandedNoteID == id { expandedNoteID = nil }
+        if editingNoteID == id { editingNoteID = nil; appState.isInteracting = false }
+    }
+
+    private func copyNote(_ note: QuickNote) {
+        let text = note.body.isEmpty ? note.title : "\(note.title)\n\(note.body)"
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 
     private func convertToTodo(_ note: QuickNote) {
@@ -135,74 +167,172 @@ struct QuickNotesView: View {
 private struct NoteCard: View {
     let note: QuickNote
     let isExpanded: Bool
+    let isEditing: Bool
     let onToggleExpand: () -> Void
+    let onBeginEdit: () -> Void
+    let onCommitEdit: (String, String) -> Void
+    let onCancelEdit: () -> Void
+    let onCopy: () -> Void
     let onConvertToTodo: () -> Void
     let onDelete: () -> Void
 
     @State private var isHovering = false
+    @State private var editTitle: String = ""
+    @State private var editBody: String = ""
+    @FocusState private var isTitleFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            // Top row: title + hover actions
-            HStack(alignment: .top, spacing: 6) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(note.title)
-                        .font(.callout.weight(.medium))
-                        .foregroundStyle(.white)
-                        .lineLimit(isExpanded ? nil : 1)
-                }
-
-                Spacer(minLength: 4)
-
-                if isHovering {
-                    HStack(spacing: 6) {
-                        Button(action: onConvertToTodo) {
-                            Image(systemName: "rectangle.portrait.and.arrow.right")
-                                .font(.caption)
-                                .foregroundStyle(.blue.opacity(0.8))
-                        }
-                        .buttonStyle(.plain)
-                        .help("Convert to Todo")
-
-                        Button(action: onDelete) {
-                            Image(systemName: "trash")
-                                .font(.caption)
-                                .foregroundStyle(.red.opacity(0.7))
-                        }
-                        .buttonStyle(.plain)
-                        .help("Delete")
-                    }
-                    .transition(.opacity)
-                }
+            if isEditing {
+                editingContent
+            } else {
+                displayContent
             }
-
-            // Body preview or full body
-            if !note.body.isEmpty {
-                Text(note.body)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(isExpanded ? nil : 2)
-            }
-
-            // Timestamp
-            Text(note.createdAt, style: .relative)
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-                .accessibilityLabel(Text(note.createdAt, style: .date))
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.white.opacity(isHovering ? 0.05 : 0.03))
+                .fill(Color.white.opacity(isEditing ? 0.07 : isHovering ? 0.05 : 0.03))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(isEditing ? Color.white.opacity(0.12) : Color.clear, lineWidth: 0.5)
         )
         .contentShape(Rectangle())
-        .onTapGesture { onToggleExpand() }
         .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.12)) {
-                isHovering = hovering
+            withAnimation(.easeInOut(duration: 0.12)) { isHovering = hovering }
+        }
+        .onTapGesture(count: 2) {
+            if !isEditing {
+                editTitle = note.title
+                editBody = note.body
+                onBeginEdit()
             }
+        }
+        .onTapGesture(count: 1) {
+            if !isEditing { onToggleExpand() }
+        }
+    }
+
+    // MARK: - Display Mode
+
+    @ViewBuilder
+    private var displayContent: some View {
+        HStack(alignment: .top, spacing: 6) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(note.title)
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(.white)
+                    .lineLimit(isExpanded ? nil : 1)
+            }
+
+            Spacer(minLength: 4)
+
+            if isHovering {
+                hoverActions
+                    .transition(.opacity)
+            }
+        }
+
+        if !note.body.isEmpty {
+            Text(note.body)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(isExpanded ? nil : 2)
+        }
+
+        // Exact creation time
+        Text(exactTimeString(note.createdAt))
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
+    }
+
+    // MARK: - Edit Mode
+
+    @ViewBuilder
+    private var editingContent: some View {
+        VStack(spacing: 6) {
+            TextField("Title", text: $editTitle)
+                .textFieldStyle(.plain)
+                .font(.callout.weight(.medium))
+                .focused($isTitleFocused)
+                .onSubmit { onCommitEdit(editTitle, editBody) }
+                .onExitCommand(perform: onCancelEdit)
+
+            TextField("Body", text: $editBody)
+                .textFieldStyle(.plain)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .onSubmit { onCommitEdit(editTitle, editBody) }
+                .onExitCommand(perform: onCancelEdit)
+
+            HStack {
+                Button("Cancel") { onCancelEdit() }
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .buttonStyle(.plain)
+                Spacer()
+                Button("Save") { onCommitEdit(editTitle, editBody) }
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.blue)
+                    .buttonStyle(.plain)
+                    .disabled(editTitle.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .onAppear { isTitleFocused = true }
+    }
+
+    // MARK: - Hover Actions
+
+    @ViewBuilder
+    private var hoverActions: some View {
+        HStack(spacing: 6) {
+            Button(action: onCopy) {
+                Image(systemName: "doc.on.doc")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.6))
+            }
+            .buttonStyle(.plain)
+            .help("Copy note")
+
+            Button(action: onConvertToTodo) {
+                Image(systemName: "rectangle.portrait.and.arrow.right")
+                    .font(.caption)
+                    .foregroundStyle(.blue.opacity(0.8))
+            }
+            .buttonStyle(.plain)
+            .help("Convert to Todo")
+
+            Button(action: onDelete) {
+                Image(systemName: "trash")
+                    .font(.caption)
+                    .foregroundStyle(.red.opacity(0.7))
+            }
+            .buttonStyle(.plain)
+            .help("Delete")
+        }
+    }
+
+    // MARK: - Exact Time
+
+    private func exactTimeString(_ date: Date) -> String {
+        let cal = Calendar.current
+        let now = Date()
+
+        if cal.isDateInToday(date) {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "h:mm a"
+            return "Today \(formatter.string(from: date))"
+        } else if cal.isDateInYesterday(date) {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "h:mm a"
+            return "Yesterday \(formatter.string(from: date))"
+        } else {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "MMM d, h:mm a"
+            return formatter.string(from: date)
         }
     }
 }
