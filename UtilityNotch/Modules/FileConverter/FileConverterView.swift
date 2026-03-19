@@ -1,7 +1,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// File Converter view — with drag-and-drop, paste support, and improved from/to picker.
+/// File Converter — clean, compact UI with pill format selectors and minimal drop zone.
 struct FileConverterView: View {
     @Environment(AppState.self) private var appState
     @State private var inputFormat: FileFormat = .png
@@ -9,7 +9,7 @@ struct FileConverterView: View {
     @State private var selectedFile: String = ""
     @State private var conversionStatus: ConversionStatus = .idle
     @State private var isDragTargeted = false
-    
+
     var body: some View {
         VStack(spacing: 0) {
             // Header
@@ -19,169 +19,207 @@ struct FileConverterView: View {
                     .foregroundStyle(.white)
                 Spacer()
             }
-            .padding(.bottom, 14)
-            
-            // From / To pickers
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("From")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Picker("", selection: $inputFormat) {
-                        ForEach(FileFormat.allCases) { fmt in
-                            Text(fmt.label).tag(fmt)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .frame(maxWidth: .infinity)
-                    .padding(6)
-                    .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
-                }
-                
-                Image(systemName: "arrow.right")
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 16)
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("To")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Picker("", selection: $outputFormat) {
-                        ForEach(FileFormat.allCases) { fmt in
-                            Text(fmt.label).tag(fmt)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .frame(maxWidth: .infinity)
-                    .padding(6)
-                    .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+            .padding(.bottom, 16)
+
+            // Inline format row: [FROM pills] → [TO pills]
+            VStack(spacing: 8) {
+                HStack(spacing: 0) {
+                    formatPills(selection: $inputFormat, label: "From")
+                    Spacer(minLength: 8)
+                    Image(systemName: "arrow.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .padding(.top, 18)
+                    Spacer(minLength: 8)
+                    formatPills(selection: $outputFormat, label: "To")
                 }
             }
-            .padding(.bottom, 14)
-            
-            // File drop zone
-            ZStack {
-                RoundedRectangle(cornerRadius: UNConstants.innerCornerRadius, style: .continuous)
-                    .strokeBorder(
-                        isDragTargeted ? Color.blue.opacity(0.6) : Color.white.opacity(0.15),
-                        style: StrokeStyle(lineWidth: isDragTargeted ? 2 : 1.5, dash: isDragTargeted ? [] : [6])
-                    )
-                    .background(
-                        RoundedRectangle(cornerRadius: UNConstants.innerCornerRadius, style: .continuous)
-                            .fill(isDragTargeted ? Color.blue.opacity(0.08) : Color.clear)
-                    )
-                    .frame(height: 90)
-                
-                VStack(spacing: 6) {
-                    Image(systemName: isDragTargeted ? "arrow.down.circle.fill" : "arrow.down.doc")
-                        .font(.system(size: 24))
-                        .foregroundStyle(isDragTargeted ? .blue : .secondary)
-                    
-                    if selectedFile.isEmpty {
-                        Text("Drop a file, click to select, or ⌘V to paste")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                    } else {
-                        Text(selectedFile)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                }
-            }
-            .contentShape(Rectangle())
-            .onTapGesture { mockSelectFile() }
-            .onDrop(of: [.fileURL], isTargeted: $isDragTargeted) { providers in
-                handleDrop(providers)
-            }
-            .onChange(of: isDragTargeted) { _, targeted in
-                appState.isDraggingOver = targeted
-            }
-            .padding(.bottom, 14)
-            
+            .padding(.bottom, 16)
+
+            // Drop zone — minimal, clear
+            dropZone
+                .padding(.bottom, 12)
+
             // Convert button
-            Button(action: mockConvert) {
-                HStack {
-                    if conversionStatus == .converting {
-                        ProgressView()
-                            .controlSize(.small)
-                            .scaleEffect(0.8)
-                    }
-                    Text(conversionStatus.buttonLabel)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
-                .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(selectedFile.isEmpty ? Color.white.opacity(0.06) : Color.blue.opacity(0.6))
-                )
-                .foregroundColor(selectedFile.isEmpty ? .gray : .white)
-            }
-            .buttonStyle(.plain)
-            .disabled(selectedFile.isEmpty || conversionStatus == .converting)
-            
-            // Status
+            convertButton
+
+            // Status message
             if case .done(let message) = conversionStatus {
-                HStack(spacing: 4) {
+                HStack(spacing: 5) {
                     Image(systemName: "checkmark.circle.fill")
+                        .font(.caption)
                         .foregroundStyle(.green)
                     Text(message)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
                 .padding(.top, 8)
-                .transition(.opacity)
+                .transition(.opacity.combined(with: .offset(y: 2)))
             }
-            
+
             Spacer()
-            
-            Text("Mock converter • ⌘V to paste file path • Drag files onto the panel")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onAppear { appState.isInteracting = false }
         .onDisappear {
             appState.isDraggingOver = false
-            if conversionStatus != .converting {
-                appState.hasActiveTask = false
+            if conversionStatus != .converting { appState.hasActiveTask = false }
+        }
+    }
+
+    // MARK: - Format Pills
+
+    @ViewBuilder
+    private func formatPills(selection: Binding<FileFormat>, label: String) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .padding(.leading, 2)
+
+            HStack(spacing: 4) {
+                ForEach(FileFormat.allCases) { fmt in
+                    Button {
+                        withAnimation(.easeOut(duration: 0.12)) {
+                            selection.wrappedValue = fmt
+                        }
+                    } label: {
+                        Text(fmt.label)
+                            .font(.caption2.weight(selection.wrappedValue == fmt ? .semibold : .regular))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(
+                                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                    .fill(selection.wrappedValue == fmt
+                                          ? Color.white.opacity(0.15)
+                                          : Color.white.opacity(0.04))
+                            )
+                            .foregroundStyle(selection.wrappedValue == fmt ? .white : .secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
         }
     }
-    
+
+    // MARK: - Drop Zone
+
+    @ViewBuilder
+    private var dropZone: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(
+                    isDragTargeted ? Color.blue.opacity(0.7) : Color.white.opacity(0.10),
+                    style: StrokeStyle(lineWidth: isDragTargeted ? 1.5 : 1, dash: isDragTargeted ? [] : [5, 4])
+                )
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(isDragTargeted ? Color.blue.opacity(0.06) : Color.clear)
+                )
+                .frame(height: 72)
+
+            HStack(spacing: 8) {
+                Image(systemName: isDragTargeted ? "arrow.down.circle.fill" : "arrow.down.doc")
+                    .font(.system(size: 16))
+                    .foregroundStyle(isDragTargeted ? .blue : .quaternary)
+
+                if selectedFile.isEmpty {
+                    Text(isDragTargeted ? "Release to select" : "Drop file · click · ⌘V")
+                        .font(.caption)
+                        .foregroundStyle(.quaternary)
+                } else {
+                    Text(selectedFile)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+
+                    Spacer()
+
+                    Button {
+                        selectedFile = ""
+                        conversionStatus = .idle
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 12)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { mockSelectFile() }
+        .onDrop(of: [.fileURL], isTargeted: $isDragTargeted) { providers in
+            handleDrop(providers)
+        }
+        .onChange(of: isDragTargeted) { _, targeted in
+            appState.isDraggingOver = targeted
+        }
+    }
+
+    // MARK: - Convert Button
+
+    @ViewBuilder
+    private var convertButton: some View {
+        Button(action: mockConvert) {
+            HStack(spacing: 6) {
+                if conversionStatus == .converting {
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.75)
+                }
+                Text(conversionStatus.buttonLabel)
+                    .font(.callout.weight(.medium))
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(selectedFile.isEmpty
+                          ? Color.white.opacity(0.05)
+                          : Color.blue.opacity(0.55))
+            )
+            .foregroundStyle(selectedFile.isEmpty ? .tertiary : .white)
+        }
+        .buttonStyle(.plain)
+        .disabled(selectedFile.isEmpty || conversionStatus == .converting)
+    }
+
     // MARK: - Actions
-    
+
     private func mockSelectFile() {
         appState.isInteracting = true
         selectedFile = "example_image.\(inputFormat.ext)"
         conversionStatus = .idle
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
             appState.isInteracting = false
         }
     }
-    
+
     private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
         guard let provider = providers.first else { return false }
         provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
             if let data = item as? Data, let url = URL(dataRepresentation: data, relativeTo: nil) {
                 DispatchQueue.main.async {
-                    selectedFile = url.lastPathComponent
-                    conversionStatus = .idle
+                    self.selectedFile = url.lastPathComponent
+                    self.conversionStatus = .idle
                 }
             }
         }
         return true
     }
-    
+
     private func mockConvert() {
         conversionStatus = .converting
         appState.hasActiveTask = true
-        
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            withAnimation {
-                conversionStatus = .done("Converted \(inputFormat.label) → \(outputFormat.label) successfully")
+            withAnimation(.easeOut(duration: 0.2)) {
+                self.conversionStatus = .done("\(self.inputFormat.label) → \(self.outputFormat.label)")
             }
-            appState.hasActiveTask = false
+            self.appState.hasActiveTask = false
         }
     }
 }
@@ -189,10 +227,9 @@ struct FileConverterView: View {
 // MARK: - Models
 
 private enum FileFormat: String, CaseIterable, Identifiable {
-    case png, jpg, heic, pdf, webp, md, html
-    
+    case png, jpg, heic, pdf, webp
+
     var id: String { rawValue }
-    
     var label: String { rawValue.uppercased() }
     var ext: String { rawValue }
 }
@@ -201,7 +238,7 @@ private enum ConversionStatus: Equatable {
     case idle
     case converting
     case done(String)
-    
+
     var buttonLabel: String {
         switch self {
         case .idle: return "Convert"
