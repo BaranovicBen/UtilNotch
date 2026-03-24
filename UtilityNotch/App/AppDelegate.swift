@@ -51,6 +51,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         observe()
+        startObservingPanelStyle()
+    }
+
+    private func startObservingPanelStyle() {
+        func observe() {
+            withObservationTracking {
+                _ = appState.panelStyle
+            } onChange: { [weak self] in
+                Task { @MainActor in
+                    // Rebuild panel so next show uses the new style
+                    self?.panelController?.rebuildPanel()
+                    observe()
+                }
+            }
+        }
+        observe()
     }
     
     private func handlePanelVisibilityChange() {

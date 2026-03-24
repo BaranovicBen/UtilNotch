@@ -56,4 +56,5 @@ struct PersistedSettings: Codable {
     var defaultModuleID: String?
     var activeModuleID: String
     var showMusicWaveform: Bool
+    var panelStyle: String?   // Optional for backward compat with old saves
 }

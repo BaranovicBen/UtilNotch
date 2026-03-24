@@ -39,6 +39,7 @@ final class AppState {
             _defaultModuleID = s.defaultModuleID
             _activeModuleID = s.activeModuleID
             _showMusicWaveform = s.showMusicWaveform
+            _panelStyle = PanelStyle(rawValue: s.panelStyle ?? "") ?? .expandedPanel
         } else if let raw = defaults.string(forKey: "menuBarSummaryMode"),
                   let mode = TodoSummaryMode(rawValue: raw) {
             // Migrate from old UserDefaults
@@ -134,6 +135,13 @@ final class AppState {
         set { _showMusicWaveform = newValue; saveSettings() }
     }
 
+    private var _panelStyle: PanelStyle = .expandedPanel
+    /// The visual style used for the notch panel (persisted).
+    var panelStyle: PanelStyle {
+        get { _panelStyle }
+        set { _panelStyle = newValue; saveSettings() }
+    }
+
     // MARK: - Todo State (shared for menu bar)
 
     private var _todoItems: [TodoItem] = []
@@ -215,7 +223,8 @@ final class AppState {
             inactivityTimeout: _inactivityTimeout,
             defaultModuleID: _defaultModuleID,
             activeModuleID: _activeModuleID,
-            showMusicWaveform: _showMusicWaveform
+            showMusicWaveform: _showMusicWaveform,
+            panelStyle: _panelStyle.rawValue
         )
         persistence.save(snapshot, key: .settings)
     }
@@ -267,6 +276,21 @@ enum TodoSummaryMode: String, CaseIterable, Identifiable {
         case .nextOnly:
             if let nextText { return nextText }
             return remaining > 0 ? "Next task" : "All clear"
+        }
+    }
+}
+
+// MARK: - Panel Style
+
+enum PanelStyle: String, CaseIterable, Identifiable {
+    case expandedPanel = "expandedPanel"
+    case dynamicIsland = "dynamicIsland"
+
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .expandedPanel: return "Expanded Panel"
+        case .dynamicIsland: return "Dynamic Island"
         }
     }
 }

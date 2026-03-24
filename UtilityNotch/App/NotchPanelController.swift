@@ -78,7 +78,7 @@ final class NotchPanelController {
             backing: .buffered,
             defer: false
         )
-        
+
         panel.isFloatingPanel = true
         panel.level = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
@@ -88,17 +88,31 @@ final class NotchPanelController {
         panel.hasShadow = true
         panel.titleVisibility = .hidden
         panel.titlebarAppearsTransparent = true
-        
-        // Host SwiftUI content
-        let hostingView = NSHostingView(
-            rootView: NotchPanelView()
-                .environment(appState)
-        )
+
+        // Choose root view based on persisted panel style
+        let hostingView: NSHostingView<AnyView>
+        switch appState.panelStyle {
+        case .expandedPanel:
+            hostingView = NSHostingView(
+                rootView: AnyView(NotchPanelView().environment(appState))
+            )
+        case .dynamicIsland:
+            hostingView = NSHostingView(
+                rootView: AnyView(DynamicIslandView().environment(appState))
+            )
+        }
         hostingView.frame = panel.contentView?.bounds ?? .zero
         hostingView.autoresizingMask = [.width, .height]
         panel.contentView?.addSubview(hostingView)
-        
+
         self.panel = panel
+    }
+
+    /// Rebuild the panel with the new style. Call after `appState.panelStyle` changes.
+    func rebuildPanel() {
+        panel?.orderOut(nil)
+        panel = nil
+        // createPanel() is called lazily on next showPanel()
     }
     
     private func positionPanel(_ panel: NSPanel) {

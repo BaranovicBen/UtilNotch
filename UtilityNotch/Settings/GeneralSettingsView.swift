@@ -33,6 +33,18 @@ struct GeneralSettingsView: View {
                 // MARK: TODO — Make configurable with a shortcut recorder
             }
             
+            Section("Appearance") {
+                Picker("Panel Style", selection: $state.panelStyle) {
+                    ForEach(PanelStyle.allCases) { style in
+                        Text(style.label).tag(style)
+                    }
+                }
+                .pickerStyle(.segmented)
+                Text("Dynamic Island: hovers expand from a compact pill. Expanded Panel: always shows the full panel.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("About") {
                 HStack {
                     Text("Utility Notch")
