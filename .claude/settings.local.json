@@ -5,7 +5,21 @@
       "Bash(git commit:*)",
       "Bash(xcodebuild -scheme UtilityNotch -destination 'platform=macOS' build)",
       "Bash(sudo xcode-select:*)",
-      "Bash(DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -scheme UtilityNotch -destination 'platform=macOS' build)"
+      "Bash(DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -scheme UtilityNotch -destination 'platform=macOS' build)",
+      "Skill(update-config)",
+      "Bash(npx asar:*)",
+      "Read(//opt/homebrew/lib/node_modules/@anthropic-ai/**)",
+      "Read(//opt/homebrew/**)",
+      "Bash(python3 -m json.tool)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(list\\(d.keys\\(\\)\\) if isinstance\\(d, dict\\) else d[:5]\\)\")",
+      "Bash(git clone:*)",
+      "Bash(cp -r ~/.claude/skills/ios-simulator-skill/ios-simulator-skill/SKILL.md /tmp/ios-sim-skill.md)",
+      "Bash(cp -rp ~/.claude/skills/ios-simulator-skill/ios-simulator-skill/scripts /tmp/ios-sim-scripts)",
+      "Bash(rm -rf ~/.claude/skills/ios-simulator-skill)",
+      "Bash(mkdir ~/.claude/skills/ios-simulator-skill)",
+      "Bash(cp /tmp/ios-sim-skill.md ~/.claude/skills/ios-simulator-skill/SKILL.md)",
+      "Bash(git pull:*)",
+      "Bash(gem list:*)"
     ]
   }
 }

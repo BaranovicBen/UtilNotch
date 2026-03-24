@@ -12,7 +12,9 @@ struct UtilityNotchApp: App {
     private var appState: AppState { AppState.shared }
     
     var body: some Scene {
-        // Menu bar icon — the only persistent UI element
+        // Menu bar icon — the only persistent UI element.
+        // .menu style renders a native dropdown; avoids the stray popup-window box
+        // that appears when using the default (.window) style.
         MenuBarExtra {
             MenuBarView()
                 .environment(appState)
@@ -24,6 +26,7 @@ struct UtilityNotchApp: App {
                     .truncationMode(.tail)
             }
         }
+        .menuBarExtraStyle(.menu)
 
         // Separate settings window (opened via ⌘, or menu)
         Settings {
@@ -38,31 +41,31 @@ struct UtilityNotchApp: App {
 /// Simple menu that appears when clicking the menu bar icon.
 struct MenuBarView: View {
     @Environment(AppState.self) private var appState
-    
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(appState.summaryTextForMenuBar())
-                .font(.callout)
-                .lineLimit(1)
-                .truncationMode(.tail)
-            Divider()
-        }
-        
+        // Non-interactive summary line at top of menu
+        Text(appState.summaryTextForMenuBar())
+            .font(.callout)
+            .lineLimit(1)
+            .truncationMode(.tail)
+
+        Divider()
+
         Button(appState.isPanelVisible ? "Hide Notch Panel" : "Show Notch Panel") {
             appState.togglePanel()
         }
         .keyboardShortcut("n", modifiers: [.option])
-        
+
         Divider()
-        
+
         Button("Settings…") {
             NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
             NSApp.activate(ignoringOtherApps: true)
         }
         .keyboardShortcut(",", modifiers: .command)
-        
+
         Divider()
-        
+
         Button("Quit Utility Notch") {
             NSApplication.shared.terminate(nil)
         }
