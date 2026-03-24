@@ -119,11 +119,18 @@ final class NotchPanelController {
         guard let screen = NSScreen.main else { return }
         let screenFrame = screen.frame
         let visibleFrame = screen.visibleFrame
-        
-        // Position: top-center of screen, just below the menu bar
+
         let x = screenFrame.midX - (UNConstants.panelWidth / 2)
-        let y = visibleFrame.maxY - UNConstants.panelHeight
-        
+
+        // Dynamic Island: anchor top edge at physical screen top (over the notch/menu bar).
+        // Expanded Panel: sit just below the menu bar (standard position).
+        let y: CGFloat
+        if appState.panelStyle == .dynamicIsland {
+            y = screenFrame.maxY - UNConstants.panelHeight
+        } else {
+            y = visibleFrame.maxY - UNConstants.panelHeight
+        }
+
         panel.setFrameOrigin(NSPoint(x: x, y: y))
     }
     

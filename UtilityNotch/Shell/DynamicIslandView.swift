@@ -73,6 +73,21 @@ struct DynamicIslandView: View {
                 withAnimation(.spring(response: 0.38, dampingFraction: 0.78)) { isExpanded = true }
             }
         }
+        .onAppear {
+            isExpanded = false
+        }
+        .onChange(of: appState.isPanelVisible) { _, visible in
+            if visible {
+                isExpanded = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    withAnimation(.spring(response: 0.38, dampingFraction: 0.78)) {
+                        isExpanded = true
+                    }
+                }
+            } else {
+                isExpanded = false
+            }
+        }
         .environment(\.colorScheme, .dark)
     }
 
