@@ -59,7 +59,8 @@ struct NotchPanelView: View {
             handlePanelDrop(providers)
         }
         .onChange(of: isPanelDropTargeted) { _, targeted in
-            appState.isDraggingOver = targeted
+            if targeted { appState.dismissalLocks.insert(.dragDrop) }
+            else { appState.dismissalLocks.remove(.dragDrop) }
         }
         .environment(\.colorScheme, .dark)
     }

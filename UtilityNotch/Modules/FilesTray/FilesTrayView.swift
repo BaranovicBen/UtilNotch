@@ -114,7 +114,10 @@ struct FilesTrayView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onDrop(of: [.fileURL], isTargeted: $isDropTargeted, perform: handleDrop)
-        .onChange(of: isDropTargeted) { _, v in appState.isDraggingOver = v }
+        .onChange(of: isDropTargeted) { _, v in
+            if v { appState.dismissalLocks.insert(.dragDrop) }
+            else { appState.dismissalLocks.remove(.dragDrop) }
+        }
         .onAppear { items = TrayPersistence.load() }
     }
 

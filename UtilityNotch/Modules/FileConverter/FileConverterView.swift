@@ -61,10 +61,10 @@ struct FileConverterView: View {
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .onAppear { appState.isInteracting = false }
+        .onAppear { appState.dismissalLocks.remove(.activeEditing) }
         .onDisappear {
-            appState.isDraggingOver = false
-            if conversionStatus != .converting { appState.hasActiveTask = false }
+            appState.dismissalLocks.remove(.dragDrop)
+            if conversionStatus != .converting { appState.dismissalLocks.remove(.activeConvert) }
         }
     }
 
@@ -155,7 +155,8 @@ struct FileConverterView: View {
             handleDrop(providers)
         }
         .onChange(of: isDragTargeted) { _, targeted in
-            appState.isDraggingOver = targeted
+            if targeted { appState.dismissalLocks.insert(.dragDrop) }
+            else { appState.dismissalLocks.remove(.dragDrop) }
         }
     }
 
@@ -190,11 +191,11 @@ struct FileConverterView: View {
     // MARK: - Actions
 
     private func mockSelectFile() {
-        appState.isInteracting = true
+        appState.dismissalLocks.insert(.activeEditing)
         selectedFile = "example_image.\(inputFormat.ext)"
         conversionStatus = .idle
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-            appState.isInteracting = false
+            appState.dismissalLocks.remove(.activeEditing)
         }
     }
 
@@ -213,13 +214,13 @@ struct FileConverterView: View {
 
     private func mockConvert() {
         conversionStatus = .converting
-        appState.hasActiveTask = true
+        appState.dismissalLocks.insert(.activeConvert)
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
             withAnimation(.easeOut(duration: 0.2)) {
                 self.conversionStatus = .done("\(self.inputFormat.label) → \(self.outputFormat.label)")
             }
-            self.appState.hasActiveTask = false
+            self.appState.dismissalLocks.remove(.activeConvert)
         }
     }
 }

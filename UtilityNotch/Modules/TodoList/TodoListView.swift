@@ -30,7 +30,10 @@ struct TodoListView: View {
                     .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
                     .focused($isInputFocused)
                     .onSubmit { addItem() }
-                    .onChange(of: isInputFocused) { _, focused in appState.isInteracting = focused }
+                    .onChange(of: isInputFocused) { _, focused in
+                        if focused { appState.dismissalLocks.insert(.activeEditing) }
+                        else { appState.dismissalLocks.remove(.activeEditing) }
+                    }
 
                 Button(action: addItem) {
                     Image(systemName: "plus.circle.fill")
@@ -52,12 +55,12 @@ struct TodoListView: View {
                         onBeginEdit: {
                             editingID = item.id
                             draftTitle = item.title
-                            appState.isInteracting = true
+                            appState.dismissalLocks.insert(.activeEditing)
                         },
                         onCommit: { title in saveEdit(id: item.id, newTitle: title) },
                         onCancel: {
                             editingID = nil
-                            appState.isInteracting = false
+                            appState.dismissalLocks.remove(.activeEditing)
                         },
                         onToggle: { toggleItem(item.id) },
                         onDelete: { deleteItem(item.id) }
@@ -88,7 +91,7 @@ struct TodoListView: View {
             appState.todoItems.insert(TodoItem(title: text), at: 0)
         }
         newItemText = ""
-        appState.isInteracting = false
+        appState.dismissalLocks.remove(.activeEditing)
     }
 
     private func toggleItem(_ id: UUID) {
@@ -122,12 +125,12 @@ struct TodoListView: View {
         let title = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty, let idx = appState.todoItems.firstIndex(where: { $0.id == id }) else {
             editingID = nil
-            appState.isInteracting = false
+            appState.dismissalLocks.remove(.activeEditing)
             return
         }
         appState.todoItems[idx].title = title
         editingID = nil
-        appState.isInteracting = false
+        appState.dismissalLocks.remove(.activeEditing)
     }
 }
 

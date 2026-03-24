@@ -22,7 +22,7 @@ final class EventTriggerManager {
     private var lastKnownVisibility: Bool = false
 
     /// Grace period before closing after mouse leaves the panel area
-    private let mouseLeaveGracePeriod: TimeInterval = 0.5
+    private let mouseLeaveGracePeriod: TimeInterval = 0.4
 
     init(appState: AppState, panelController: NotchPanelController) {
         self.appState = appState

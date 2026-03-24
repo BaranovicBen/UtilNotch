@@ -56,27 +56,18 @@ final class AppState {
     /// True when the cursor is inside the panel bounds (used to defer close while hovering within UI)
     var isPointerInsidePanel: Bool = false
 
-    /// True when the user is actively interacting with module UI (controls, text fields, drag, etc.)
-    /// While true, mouse-leave auto-close is suppressed.
-    /// NOTE: click-outside is NOT blocked by this flag — only drag and active tasks block it.
-    var isInteracting: Bool = false
+    /// Composable lock set — modules insert/remove specific locks instead of toggling bool flags.
+    var dismissalLocks: DismissalLock = []
 
-    /// True when a module is performing an active task (e.g. file conversion in progress).
-    /// While true, all auto-close signals are suppressed.
-    var hasActiveTask: Bool = false
-
-    /// True during an active drag session targeting the panel.
-    var isDraggingOver: Bool = false
-
-    /// Whether the panel should resist auto-close right now (for mouse-leave and inactivity).
+    /// Whether the panel should resist auto-close right now (mouse-leave and inactivity).
     var shouldSuppressClose: Bool {
-        isPointerInsidePanel || isInteracting || hasActiveTask || isDraggingOver
+        isPointerInsidePanel || !dismissalLocks.isEmpty
     }
 
     /// Whether active work should block an explicit outside-click dismiss.
-    /// Only drag and active tasks block click-outside — NOT pointer or isInteracting.
+    /// `.activeEditing` does NOT block click-outside — clicking outside naturally unfocuses text fields.
     var shouldSuppressClickOutside: Bool {
-        hasActiveTask || isDraggingOver
+        !dismissalLocks.subtracting(.activeEditing).isEmpty
     }
 
     // MARK: - Module State
@@ -198,24 +189,22 @@ final class AppState {
     func hidePanel() {
         guard !shouldSuppressClose else { return }
         isPanelVisible = false
-        isInteracting = false
+        dismissalLocks.remove(.activeEditing)
         isPointerInsidePanel = false
     }
 
     /// Force-hide even when interacting (e.g. user pressed Escape or hotkey).
     func forceHidePanel() {
         isPanelVisible = false
-        isInteracting = false
-        hasActiveTask = false
-        isDraggingOver = false
+        dismissalLocks = []
         isPointerInsidePanel = false
     }
 
-    /// Select a module; only if it's enabled. Resets isInteracting.
+    /// Select a module; only if it's enabled. Clears activeEditing lock.
     func selectModule(_ id: String) {
         guard enabledModuleIDs.contains(id) else { return }
         if _activeModuleID != id {
-            isInteracting = false
+            dismissalLocks.remove(.activeEditing)
         }
         _activeModuleID = id
         saveSettings()
@@ -248,6 +237,26 @@ final class AppState {
         )
         persistence.save(snapshot, key: .settings)
     }
+}
+
+// MARK: - Dismissal Lock
+
+/// Composable OptionSet controlling when the panel should resist being dismissed.
+/// Insert/remove specific locks from modules; the panel only auto-closes when the set is empty.
+struct DismissalLock: OptionSet {
+    let rawValue: Int
+
+    /// A drag-and-drop session is targeting the panel.
+    static let dragDrop      = DismissalLock(rawValue: 1 << 0)
+    /// A system or custom picker (color, file, date) is open in a module.
+    static let pickerOpen    = DismissalLock(rawValue: 1 << 1)
+    /// A long-running task is in progress (e.g. file conversion).
+    static let activeConvert = DismissalLock(rawValue: 1 << 2)
+    /// A text field inside a module has focus / the user is typing.
+    /// NOTE: does NOT block click-outside — clicking outside naturally unfocuses the field.
+    static let activeEditing = DismissalLock(rawValue: 1 << 3)
+    /// A drag or gesture within module UI (list reorder, scroll momentum, etc.).
+    static let moduleGesture = DismissalLock(rawValue: 1 << 4)
 }
 
 // MARK: - Models / Settings

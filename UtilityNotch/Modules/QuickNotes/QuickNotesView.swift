@@ -20,7 +20,7 @@ struct QuickNotesView: View {
             notesList
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .onAppear { appState.isInteracting = false }
+        .onAppear { appState.dismissalLocks.remove(.activeEditing) }
     }
 
     // MARK: - Header
@@ -50,7 +50,10 @@ struct QuickNotesView: View {
                     .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
                     .focused($isTitleFocused)
                     .onSubmit(addNote)
-                    .onChange(of: isTitleFocused) { _, focused in appState.isInteracting = focused }
+                    .onChange(of: isTitleFocused) { _, focused in
+                        if focused { appState.dismissalLocks.insert(.activeEditing) }
+                        else { appState.dismissalLocks.remove(.activeEditing) }
+                    }
                     .onChange(of: newTitle) { _, val in
                         if val.count > titleLimit { newTitle = String(val.prefix(titleLimit)) }
                     }
@@ -61,7 +64,7 @@ struct QuickNotesView: View {
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 6))
-                    .onTapGesture { appState.isInteracting = true }
+                    .onTapGesture { appState.dismissalLocks.insert(.activeEditing) }
                     .onChange(of: newBody) { _, val in
                         if val.count > bodyLimit { newBody = String(val.prefix(bodyLimit)) }
                     }
@@ -90,7 +93,7 @@ struct QuickNotesView: View {
                         onToggleExpand: { toggleExpand(note.id) },
                         onBeginEdit: { beginEdit(note.id) },
                         onCommitEdit: { newTitle, newBody in commitEdit(note.id, title: newTitle, body: newBody) },
-                        onCancelEdit: { editingNoteID = nil; appState.isInteracting = false },
+                        onCancelEdit: { editingNoteID = nil; appState.dismissalLocks.remove(.activeEditing) },
                         onCopy: { copyNote(note) },
                         onConvertToTodo: { convertToTodo(note) },
                         onDelete: { delete(note.id) }
@@ -111,7 +114,7 @@ struct QuickNotesView: View {
         }
         newTitle = ""
         newBody = ""
-        appState.isInteracting = false
+        appState.dismissalLocks.remove(.activeEditing)
     }
 
     private func toggleExpand(_ id: UUID) {
@@ -124,7 +127,7 @@ struct QuickNotesView: View {
     private func beginEdit(_ id: UUID) {
         expandedNoteID = id
         editingNoteID = id
-        appState.isInteracting = true
+        appState.dismissalLocks.insert(.activeEditing)
     }
 
     private func commitEdit(_ id: UUID, title: String, body: String) {
@@ -132,13 +135,13 @@ struct QuickNotesView: View {
         guard !trimmedTitle.isEmpty,
               let idx = appState.quickNotes.firstIndex(where: { $0.id == id }) else {
             editingNoteID = nil
-            appState.isInteracting = false
+            appState.dismissalLocks.remove(.activeEditing)
             return
         }
         appState.quickNotes[idx].title = trimmedTitle
         appState.quickNotes[idx].body = body.trimmingCharacters(in: .whitespacesAndNewlines)
         editingNoteID = nil
-        appState.isInteracting = false
+        appState.dismissalLocks.remove(.activeEditing)
     }
 
     private func delete(_ id: UUID) {
@@ -146,7 +149,7 @@ struct QuickNotesView: View {
             appState.quickNotes.removeAll { $0.id == id }
         }
         if expandedNoteID == id { expandedNoteID = nil }
-        if editingNoteID == id { editingNoteID = nil; appState.isInteracting = false }
+        if editingNoteID == id { editingNoteID = nil; appState.dismissalLocks.remove(.activeEditing) }
     }
 
     private func copyNote(_ note: QuickNote) {
