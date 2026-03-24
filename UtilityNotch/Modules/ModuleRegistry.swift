@@ -12,7 +12,8 @@ enum ModuleRegistry {
         ClipboardHistoryModule(),
         MusicControlModule(),
         FileConverterModule(),
-        TimerModule()
+        TimerModule(),
+        ActiveAppsModule()
     ]
 
     /// Look up a module by ID
