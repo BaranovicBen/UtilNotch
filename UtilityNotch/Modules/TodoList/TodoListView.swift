@@ -8,6 +8,13 @@ struct TodoListView: View {
     @State private var editingID: UUID?
     @State private var draftTitle: String = ""
 
+    // Demo items shown on first launch — not persisted
+    private static let demoItems: [TodoItem] = [
+        TodoItem(title: "Fix parser bug"),
+        TodoItem(title: "Write unit tests"),
+        TodoItem(title: "Ship v1.0", isDone: true)
+    ]
+
     var body: some View {
         VStack(spacing: 0) {
             // Header
@@ -46,38 +53,58 @@ struct TodoListView: View {
             .padding(.bottom, 10)
 
             // List with native onMove drag reordering
-            List {
-                ForEach(appState.todoItems) { item in
-                    TodoRow(
-                        item: item,
-                        isEditing: editingID == item.id,
-                        draftTitle: editingID == item.id ? $draftTitle : .constant(item.title),
-                        onBeginEdit: {
-                            editingID = item.id
-                            draftTitle = item.title
-                            appState.dismissalLocks.insert(.activeEditing)
-                        },
-                        onCommit: { title in saveEdit(id: item.id, newTitle: title) },
-                        onCancel: {
-                            editingID = nil
-                            appState.dismissalLocks.remove(.activeEditing)
-                        },
-                        onToggle: { toggleItem(item.id) },
-                        onDelete: { deleteItem(item.id) }
-                    )
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-                    .listRowInsets(EdgeInsets(top: 2, leading: 0, bottom: 2, trailing: 0))
+            if appState.todoItems.isEmpty {
+                // Demo placeholder — not persisted, read-only
+                List {
+                    ForEach(Self.demoItems) { item in
+                        TodoRow(
+                            item: item,
+                            isEditing: false,
+                            draftTitle: .constant(item.title),
+                            onBeginEdit: {}, onCommit: { _ in }, onCancel: {},
+                            onToggle: {}, onDelete: {}
+                        )
+                        .opacity(0.5)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets(top: 2, leading: 0, bottom: 2, trailing: 0))
+                    }
                 }
-                .onMove { source, destination in
-                    // Direct mutation via the backing property to persist correctly
-                    var items = appState.todoItems
-                    items.move(fromOffsets: source, toOffset: destination)
-                    appState.todoItems = items
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+            } else {
+                List {
+                    ForEach(appState.todoItems) { item in
+                        TodoRow(
+                            item: item,
+                            isEditing: editingID == item.id,
+                            draftTitle: editingID == item.id ? $draftTitle : .constant(item.title),
+                            onBeginEdit: {
+                                editingID = item.id
+                                draftTitle = item.title
+                                appState.dismissalLocks.insert(.activeEditing)
+                            },
+                            onCommit: { title in saveEdit(id: item.id, newTitle: title) },
+                            onCancel: {
+                                editingID = nil
+                                appState.dismissalLocks.remove(.activeEditing)
+                            },
+                            onToggle: { toggleItem(item.id) },
+                            onDelete: { deleteItem(item.id) }
+                        )
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets(top: 2, leading: 0, bottom: 2, trailing: 0))
+                    }
+                    .onMove { source, destination in
+                        var items = appState.todoItems
+                        items.move(fromOffsets: source, toOffset: destination)
+                        appState.todoItems = items
+                    }
                 }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
             }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }

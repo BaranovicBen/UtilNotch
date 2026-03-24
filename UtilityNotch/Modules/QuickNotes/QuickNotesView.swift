@@ -12,6 +12,12 @@ struct QuickNotesView: View {
     private let titleLimit = 60
     private let bodyLimit = 280
 
+    // Demo notes shown on first launch — not persisted
+    private static let demoNotes: [QuickNote] = [
+        QuickNote(title: "Project Ideas", body: "Dark mode, widgets, keyboard nav…"),
+        QuickNote(title: "Meeting Notes", body: "Discuss roadmap Q3, assign owners"),
+    ]
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             header
@@ -83,21 +89,24 @@ struct QuickNotesView: View {
     // MARK: - Notes List
 
     private var notesList: some View {
-        ScrollView {
+        let isDemo = appState.quickNotes.isEmpty
+        let displayNotes = isDemo ? Self.demoNotes : appState.quickNotes
+        return ScrollView {
             LazyVStack(spacing: 6) {
-                ForEach(appState.quickNotes) { note in
+                ForEach(displayNotes) { note in
                     NoteCard(
                         note: note,
-                        isExpanded: expandedNoteID == note.id,
-                        isEditing: editingNoteID == note.id,
-                        onToggleExpand: { toggleExpand(note.id) },
-                        onBeginEdit: { beginEdit(note.id) },
-                        onCommitEdit: { newTitle, newBody in commitEdit(note.id, title: newTitle, body: newBody) },
-                        onCancelEdit: { editingNoteID = nil; appState.dismissalLocks.remove(.activeEditing) },
-                        onCopy: { copyNote(note) },
-                        onConvertToTodo: { convertToTodo(note) },
-                        onDelete: { delete(note.id) }
+                        isExpanded: !isDemo && expandedNoteID == note.id,
+                        isEditing: !isDemo && editingNoteID == note.id,
+                        onToggleExpand: isDemo ? {} : { toggleExpand(note.id) },
+                        onBeginEdit: isDemo ? {} : { beginEdit(note.id) },
+                        onCommitEdit: isDemo ? { _, _ in } : { t, b in commitEdit(note.id, title: t, body: b) },
+                        onCancelEdit: isDemo ? {} : { editingNoteID = nil; appState.dismissalLocks.remove(.activeEditing) },
+                        onCopy: isDemo ? {} : { copyNote(note) },
+                        onConvertToTodo: isDemo ? {} : { convertToTodo(note) },
+                        onDelete: isDemo ? {} : { delete(note.id) }
                     )
+                    .opacity(isDemo ? 0.5 : 1.0)
                 }
             }
         }
