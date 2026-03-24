@@ -12,37 +12,21 @@ struct MusicControlView: View {
     @State private var progress: Double = 0.35
     @State private var simulatedPlayTimer: Timer?
 
+    // Fixed gradient colors — consistent across all tracks
+    private let progressGradient = LinearGradient(
+        colors: [
+            Color(red: 0.55, green: 0.35, blue: 0.95),
+            Color(red: 0.35, green: 0.55, blue: 1.0)
+        ],
+        startPoint: .leading,
+        endPoint: .trailing
+    )
+
     var body: some View {
         VStack(spacing: 0) {
-            // ── Header ────────────────────────────────────────────
-            HStack {
-                Label("Music", systemImage: "music.note")
-                    .font(.headline)
-                    .foregroundStyle(.white)
-                Spacer()
-                // Waveform toggle lives here in the main view header
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        appState.showMusicWaveform.toggle()
-                    }
-                } label: {
-                    Image(systemName: appState.showMusicWaveform ? "waveform" : "waveform.slash")
-                        .font(.caption)
-                        .foregroundStyle(appState.showMusicWaveform ? .white.opacity(0.7) : .secondary)
-                        .frame(width: 28, height: 22)
-                        .background(
-                            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                .fill(Color.white.opacity(appState.showMusicWaveform ? 0.1 : 0.04))
-                        )
-                }
-                .buttonStyle(.plain)
-                .help("Toggle waveform")
-            }
-            .padding(.bottom, 10)
-
             // ── Main player row ────────────────────────────────────
             HStack(spacing: 12) {
-                // Album art — compact 52×52 pill
+                // Album art — compact 52×52
                 albumArt
                     .frame(width: 52, height: 52)
 
@@ -59,7 +43,7 @@ struct MusicControlView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                // Sound wave — shown between info and controls, fills notch gutter
+                // Sound wave — shown between info and controls
                 if appState.showMusicWaveform {
                     SoundWaveView(isPlaying: isPlaying, colors: currentTrack.gradientColors)
                         .frame(width: 26, height: 32)
@@ -69,52 +53,28 @@ struct MusicControlView: View {
                         ))
                 }
 
-                // Playback controls — compact pill trio
-                HStack(spacing: 18) {
-                    Button(action: previousTrack) {
-                        Image(systemName: "backward.fill")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.7))
-                    }
-                    .buttonStyle(.plain)
-
-                    Button(action: togglePlayPause) {
-                        Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                            .font(.system(size: 34))
-                            .foregroundStyle(.white)
-                            .symbolRenderingMode(.hierarchical)
-                    }
-                    .buttonStyle(.plain)
-
-                    Button(action: nextTrack) {
-                        Image(systemName: "forward.fill")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.7))
-                    }
-                    .buttonStyle(.plain)
+                // Playback controls — circular buttons right-aligned
+                HStack(spacing: 8) {
+                    CircularControlButton(icon: "backward.fill", iconSize: 14) { previousTrack() }
+                    CircularControlButton(
+                        icon: isPlaying ? "pause.fill" : "play.fill",
+                        iconSize: 16,
+                        diameter: 36
+                    ) { togglePlayPause() }
+                    CircularControlButton(icon: "forward.fill", iconSize: 14) { nextTrack() }
                 }
             }
-            .padding(.vertical, 6)
+            .padding(.bottom, 12)
 
-            Spacer(minLength: 8)
-
-            // ── Progress bar — pinned to bottom, full width ────────
+            // ── Progress bar — full width, no Spacer above ─────────
             VStack(spacing: 4) {
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
-                        // Track
                         Capsule()
                             .fill(Color.white.opacity(0.08))
                             .frame(height: 2.5)
-                        // Fill — coloured with track gradient
                         Capsule()
-                            .fill(
-                                LinearGradient(
-                                    colors: currentTrack.gradientColors.map { $0.opacity(0.85) },
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
+                            .fill(progressGradient)
                             .frame(width: max(0, geo.size.width * progress), height: 2.5)
                             .animation(.linear(duration: 0.5), value: progress)
                     }
@@ -133,7 +93,6 @@ struct MusicControlView: View {
                         .monospacedDigit()
                 }
             }
-            .padding(.bottom, 2)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onAppear { startProgressSimulation() }
@@ -203,6 +162,32 @@ struct MusicControlView: View {
                 if progress >= 1.0 { nextTrack() }
             }
         }
+    }
+}
+
+// MARK: - Circular Control Button
+
+private struct CircularControlButton: View {
+    let icon: String
+    var iconSize: CGFloat = 14
+    var diameter: CGFloat = 32
+    let action: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                Circle()
+                    .fill(Color.white.opacity(isHovering ? 0.14 : 0.08))
+                Image(systemName: icon)
+                    .font(.system(size: iconSize, weight: .medium))
+                    .foregroundStyle(.white.opacity(isHovering ? 1.0 : 0.85))
+            }
+            .frame(width: diameter, height: diameter)
+        }
+        .buttonStyle(.plain)
+        .onHover { h in withAnimation(.easeOut(duration: 0.12)) { isHovering = h } }
     }
 }
 
