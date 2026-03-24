@@ -340,6 +340,16 @@ struct QuickNote: Identifiable, Codable, Equatable {
 
 // MARK: - Live Activities Models
 
+/// Categorises an activity for ambient pill priority selection.
+/// Lower rawValue = higher ambient display priority.
+enum LiveActivityType: Int, Codable, CaseIterable {
+    case focus    = 0   // Highest priority — shown in ambient pill first
+    case work     = 1
+    case meeting  = 2
+    case breakTime = 3
+    case custom   = 4   // Lowest priority
+}
+
 /// A user-created timed activity tracked in the Live Activities module.
 /// Activities are session-scoped (not persisted across relaunch) by design —
 /// they represent active in-progress work, not a history log.
@@ -350,11 +360,15 @@ struct LiveActivity: Identifiable, Codable {
     var colorHex: String    // 6-char hex, e.g. "FF6B6B"
     var startDate: Date
     var endDate: Date?      // nil = open-ended stopwatch
+    var type: LiveActivityType
+    var isDemo: Bool        // true for placeholder entries shown on first launch
 
     init(id: UUID = UUID(), name: String, icon: String, colorHex: String,
-         startDate: Date = .init(), endDate: Date? = nil) {
+         startDate: Date = .init(), endDate: Date? = nil,
+         type: LiveActivityType = .custom, isDemo: Bool = false) {
         self.id = id; self.name = name; self.icon = icon
         self.colorHex = colorHex; self.startDate = startDate; self.endDate = endDate
+        self.type = type; self.isDemo = isDemo
     }
 }
 

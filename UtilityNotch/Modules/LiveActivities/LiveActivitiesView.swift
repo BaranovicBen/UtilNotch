@@ -7,6 +7,7 @@ struct LiveActivitiesView: View {
     @Environment(AppState.self) private var appState
     @State private var showAdd = false
     @State private var now: Date = .init()
+    @State private var isLoaded = false
 
     private let ticker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
@@ -27,7 +28,9 @@ struct LiveActivitiesView: View {
             }
             .padding(.bottom, 10)
 
-            if appState.liveActivities.isEmpty {
+            if !isLoaded {
+                Spacer()
+            } else if appState.liveActivities.isEmpty {
                 emptyState
             } else {
                 activitiesList
@@ -35,10 +38,43 @@ struct LiveActivitiesView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onReceive(ticker) { now = $0 }
+        .onAppear {
+            // Deferred 0.1s load to let the panel settle before animating cards in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                isLoaded = true
+                if appState.liveActivities.isEmpty {
+                    loadDemoActivities()
+                }
+            }
+        }
         .sheet(isPresented: $showAdd) {
             AddActivitySheet(isPresented: $showAdd)
                 .environment(appState)
         }
+    }
+
+    private func loadDemoActivities() {
+        let now = Date()
+        appState.liveActivities = [
+            LiveActivity(
+                name: "Focus Session",
+                icon: "brain.head.profile",
+                colorHex: "6C63FF",
+                startDate: now.addingTimeInterval(-720),
+                endDate: now.addingTimeInterval(780),
+                type: .focus,
+                isDemo: true
+            ),
+            LiveActivity(
+                name: "Team Meeting",
+                icon: "person.2.fill",
+                colorHex: "4EBF7A",
+                startDate: now.addingTimeInterval(-300),
+                endDate: now.addingTimeInterval(1500),
+                type: .meeting,
+                isDemo: true
+            ),
+        ]
     }
 
     // MARK: - Empty State
@@ -65,13 +101,17 @@ struct LiveActivitiesView: View {
             VStack(spacing: 8) {
                 ForEach(appState.liveActivities) { activity in
                     ActivityCard(activity: activity, now: now, onStop: { stop(activity) })
-                        // LIVEACTIVITY_NOTE: Spring entry animation implies "split from notch" continuity.
-                        // True matchedGeometryEffect across NSWindow boundaries is unsupported on macOS —
-                        // the AmbientPillController fades the pill out as the panel fades in, and cards
-                        // spring-scale in from a smaller anchor to imply the pill expanded into this view.
-                        .transition(.scale(scale: 0.88, anchor: .top).combined(with: .opacity))
+                        // LIVEACTIVITY_NOTE: asymmetric transition — spring-scale in from top (implies
+                        // "split from notch pill"), fade-scale out. animation(nil) on the container
+                        // prevents the ForEach from re-running the insertion animation on each tick.
+                        .transition(.asymmetric(
+                            insertion: .scale(scale: 0.88, anchor: .top).combined(with: .opacity),
+                            removal: .scale(scale: 0.92, anchor: .top).combined(with: .opacity)
+                        ))
                 }
             }
+            // Prevent container-level animations from fighting card transitions
+            .animation(nil, value: now)
         }
     }
 
@@ -121,10 +161,23 @@ private struct ActivityCard: View {
 
                 // Name + time
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(activity.name)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
+                    HStack(spacing: 5) {
+                        Text(activity.name)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                        if activity.isDemo {
+                            Text("DEMO")
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundStyle(.white.opacity(0.5))
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 1.5)
+                                .background(
+                                    Capsule()
+                                        .fill(Color.white.opacity(0.1))
+                                )
+                        }
+                    }
                     Text(timeLabel)
                         .font(.system(size: 11, design: .monospaced))
                         .foregroundStyle(.secondary)
@@ -141,7 +194,8 @@ private struct ActivityCard: View {
                 .buttonStyle(.plain)
             }
             .padding(.horizontal, 10)
-            .padding(.vertical, 9)
+            .padding(.top, 9)
+            .padding(.bottom, progress != nil ? 6 : 9)
 
             // Progress bar (only when endDate is set)
             if let p = progress {
@@ -156,8 +210,11 @@ private struct ActivityCard: View {
                     }
                 }
                 .frame(height: 3)
+                .padding(.horizontal, 10)
+                .padding(.bottom, 6)
             }
         }
+        .frame(height: 64)
         .background(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(Color.white.opacity(isHovering ? 0.08 : 0.05))
@@ -287,6 +344,7 @@ private struct AddActivitySheet: View {
                 guard !name.isEmpty else { return }
                 let mins: Int? = customDurationMinutes == 0 ? nil : customDurationMinutes
                 addActivity(name: name, icon: "star.fill", hex: "5AC8FA", minutes: mins)
+                // type defaults to .custom via addActivity
             } label: {
                 Text("Start")
                     .font(.system(size: 13, weight: .semibold))
@@ -302,7 +360,7 @@ private struct AddActivitySheet: View {
 
     private func addActivity(name: String, icon: String, hex: String, minutes: Int?) {
         let end = minutes.map { Date().addingTimeInterval(Double($0) * 60) }
-        let activity = LiveActivity(name: name, icon: icon, colorHex: hex, endDate: end)
+        let activity = LiveActivity(name: name, icon: icon, colorHex: hex, endDate: end, type: .custom, isDemo: false)
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
             appState.liveActivities.append(activity)
         }
