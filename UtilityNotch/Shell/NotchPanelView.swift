@@ -26,9 +26,9 @@ struct NotchPanelView: View {
                     .frame(width: 0.5)
                     .padding(.vertical, 14)
                 
-                // Right rail: utility icons (~1/5 width)
+                // Right rail: utility icons (40pt fixed width)
                 UtilityRailView()
-                    .frame(width: UNConstants.panelWidth * UNConstants.railWidthFraction)
+                    .frame(width: UNConstants.railWidth)
                     .padding(.vertical, 8)
             }
         }

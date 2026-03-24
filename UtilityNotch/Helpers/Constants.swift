@@ -11,8 +11,11 @@ enum UNConstants {
     /// Total expanded panel height
     static let panelHeight: CGFloat = 380
     
-    /// Width fraction for the utility rail (right side)
+    /// Width fraction for the utility rail (right side) — kept for legacy reference
     static let railWidthFraction: CGFloat = 0.18
+
+    /// Fixed pixel width for the utility rail
+    static let railWidth: CGFloat = 40
     
     /// Corner radius for the main panel
     static let panelCornerRadius: CGFloat = 20

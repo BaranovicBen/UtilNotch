@@ -172,7 +172,7 @@ struct DynamicIslandView: View {
 
                 // Utility rail — horizontal icon row at right edge
                 UtilityRailView()
-                    .frame(width: UNConstants.panelWidth * UNConstants.railWidthFraction)
+                    .frame(width: UNConstants.railWidth)
                     .padding(.vertical, 8)
             }
         }
