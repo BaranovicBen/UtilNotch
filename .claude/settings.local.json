@@ -19,7 +19,10 @@
       "Bash(mkdir ~/.claude/skills/ios-simulator-skill)",
       "Bash(cp /tmp/ios-sim-skill.md ~/.claude/skills/ios-simulator-skill/SKILL.md)",
       "Bash(git pull:*)",
-      "Bash(gem list:*)"
+      "Bash(gem list:*)",
+      "Bash(xcodebuild -scheme UtilityNotch -configuration Debug -destination 'platform=macOS' build)",
+      "Bash(xcodebuild -scheme UtilityNotch -configuration Debug -destination platform=macOS build)",
+      "Bash(DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -scheme UtilityNotch -configuration Debug -destination 'platform=macOS' build)"
     ]
   }
 }

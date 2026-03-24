@@ -309,7 +309,7 @@ struct TimerView: View {
         Button(action: action) {
             Image(systemName: icon)
                 .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(dim ? .secondary : .white)
+                .foregroundStyle(Color.white.opacity(dim ? 0.4 : 1.0))
                 .frame(width: 36, height: 36)
                 .background(
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
