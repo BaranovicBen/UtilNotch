@@ -43,6 +43,11 @@ struct GeneralSettingsView: View {
                 Text("Dynamic Island: hovers expand from a compact pill. Expanded Panel: always shows the full panel.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                Toggle("Show Live Activities in notch", isOn: $state.showAmbientPill)
+                Text("Displays a compact ambient pill in the notch area when an activity is running.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("About") {

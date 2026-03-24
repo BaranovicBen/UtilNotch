@@ -12,7 +12,9 @@ enum ModuleRegistry {
         ClipboardHistoryModule(),
         MusicControlModule(),
         FileConverterModule(),
-        TimerModule(),
+        LiveActivitiesModule(),
+        CalendarModule(),
+        FilesTrayModule(),
         ActiveAppsModule()
     ]
 

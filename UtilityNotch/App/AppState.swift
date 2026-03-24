@@ -28,7 +28,7 @@ final class AppState {
         _quickNotes = savedNotes ?? []
 
         // Apply module order
-        let defaultOrder = ["todoList", "quickNotes", "clipboardHistory", "musicControl", "fileConverter", "timer", "activeApps"]
+        let defaultOrder = ["todoList", "quickNotes", "clipboardHistory", "musicControl", "fileConverter", "liveActivities", "calendar", "filesTray", "activeApps"]
         _enabledModuleIDs = savedOrder ?? defaultOrder
 
         // Apply settings
@@ -88,7 +88,7 @@ final class AppState {
         set { _activeModuleID = newValue; saveSettings() }
     }
 
-    private var _enabledModuleIDs: [String] = ["todoList", "quickNotes", "clipboardHistory", "musicControl", "fileConverter", "timer", "activeApps"]
+    private var _enabledModuleIDs: [String] = ["todoList", "quickNotes", "clipboardHistory", "musicControl", "fileConverter", "liveActivities", "calendar", "filesTray", "activeApps"]
     /// Ordered list of enabled module IDs (also defines rail order)
     var enabledModuleIDs: [String] {
         get { _enabledModuleIDs }
