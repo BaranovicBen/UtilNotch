@@ -265,7 +265,7 @@ private struct TrayThumbnail: View {
                 .transition(.scale(scale: 0.6).combined(with: .opacity))
             }
         }
-        .onHover { withAnimation(.easeInOut(duration: 0.15)) { isHovering = $0 } }
+        .onHover { h in withAnimation(.easeInOut(duration: 0.15)) { isHovering = h } }
         .onAppear { loadIcon() }
     }
 

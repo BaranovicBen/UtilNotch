@@ -40,6 +40,8 @@ final class AppState {
             _activeModuleID = s.activeModuleID
             _showMusicWaveform = s.showMusicWaveform
             _panelStyle = PanelStyle(rawValue: s.panelStyle ?? "") ?? .expandedPanel
+            _showAmbientPill = s.showAmbientPill ?? true
+            _ambientPillDisplay = AmbientPillDisplay(rawValue: s.ambientPillDisplay ?? "") ?? .remainingTime
         } else if let raw = defaults.string(forKey: "menuBarSummaryMode"),
                   let mode = TodoSummaryMode(rawValue: raw) {
             // Migrate from old UserDefaults
@@ -142,6 +144,22 @@ final class AppState {
         set { _panelStyle = newValue; saveSettings() }
     }
 
+    private var _showAmbientPill: Bool = true
+    /// Whether to show the always-on Live Activity ambient pill in the notch area.
+    var showAmbientPill: Bool {
+        get { _showAmbientPill }
+        set { _showAmbientPill = newValue; saveSettings() }
+    }
+
+    private var _ambientPillDisplay: AmbientPillDisplay = .remainingTime
+    var ambientPillDisplay: AmbientPillDisplay {
+        get { _ambientPillDisplay }
+        set { _ambientPillDisplay = newValue; saveSettings() }
+    }
+
+    /// Runtime live activities — not persisted (session-scoped custom activities).
+    var liveActivities: [LiveActivity] = []
+
     // MARK: - Todo State (shared for menu bar)
 
     private var _todoItems: [TodoItem] = []
@@ -224,7 +242,9 @@ final class AppState {
             defaultModuleID: _defaultModuleID,
             activeModuleID: _activeModuleID,
             showMusicWaveform: _showMusicWaveform,
-            panelStyle: _panelStyle.rawValue
+            panelStyle: _panelStyle.rawValue,
+            showAmbientPill: _showAmbientPill,
+            ambientPillDisplay: _ambientPillDisplay.rawValue
         )
         persistence.save(snapshot, key: .settings)
     }
@@ -306,5 +326,40 @@ struct QuickNote: Identifiable, Codable, Equatable {
         self.title = title
         self.body = body
         self.createdAt = createdAt
+    }
+}
+
+// MARK: - Live Activities Models
+
+/// A user-created timed activity tracked in the Live Activities module.
+/// Activities are session-scoped (not persisted across relaunch) by design —
+/// they represent active in-progress work, not a history log.
+struct LiveActivity: Identifiable, Codable {
+    let id: UUID
+    var name: String
+    var icon: String        // SF Symbol name
+    var colorHex: String    // 6-char hex, e.g. "FF6B6B"
+    var startDate: Date
+    var endDate: Date?      // nil = open-ended stopwatch
+
+    init(id: UUID = UUID(), name: String, icon: String, colorHex: String,
+         startDate: Date = .init(), endDate: Date? = nil) {
+        self.id = id; self.name = name; self.icon = icon
+        self.colorHex = colorHex; self.startDate = startDate; self.endDate = endDate
+    }
+}
+
+enum AmbientPillDisplay: String, CaseIterable, Identifiable {
+    case name          = "name"
+    case elapsedTime   = "elapsedTime"
+    case remainingTime = "remainingTime"
+
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .name:          return "Activity Name"
+        case .elapsedTime:   return "Elapsed Time"
+        case .remainingTime: return "Remaining Time"
+        }
     }
 }
