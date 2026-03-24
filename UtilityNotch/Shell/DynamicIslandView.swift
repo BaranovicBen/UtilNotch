@@ -6,6 +6,7 @@ import SwiftUI
 struct DynamicIslandView: View {
     @Environment(AppState.self) private var appState
     @State private var isExpanded: Bool = false
+    @State private var showContent: Bool = false
     @State private var isPanelDropTargeted = false
 
     // Collapsed pill geometry
@@ -45,13 +46,22 @@ struct DynamicIslandView: View {
                     .transition(.opacity)
             }
 
-            // ── Expanded module content ─────────────────────────────
+            // ── Expanded module content (delayed fade-in so shape morphs first) ─
             if isExpanded {
                 expandedContent
                     .frame(width: expandedWidth, height: expandedHeight)
+                    .opacity(showContent ? 1 : 0)
+                    .animation(.easeIn(duration: 0.12), value: showContent)
                     .transition(.opacity)
             }
         }
+        // Clip to the current pill/panel shape so content never overflows during morph
+        .clipShape(
+            RoundedRectangle(
+                cornerRadius: isExpanded ? UNConstants.panelCornerRadius : collapsedHeight / 2,
+                style: .continuous
+            )
+        )
         // Size the frame to the larger of the two states so the animation has room
         .frame(
             width:  isExpanded ? expandedWidth  : collapsedWidth,
@@ -75,10 +85,22 @@ struct DynamicIslandView: View {
         }
         .onAppear {
             isExpanded = false
+            showContent = false
+        }
+        .onChange(of: isExpanded) { _, expanded in
+            if expanded {
+                // Delay content fade-in until shape is ~80% through its morph
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+                    showContent = true
+                }
+            } else {
+                showContent = false
+            }
         }
         .onChange(of: appState.isPanelVisible) { _, visible in
             if visible {
                 isExpanded = false
+                showContent = false
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                     withAnimation(.spring(response: 0.38, dampingFraction: 0.78)) {
                         isExpanded = true
@@ -86,6 +108,7 @@ struct DynamicIslandView: View {
                 }
             } else {
                 isExpanded = false
+                showContent = false
             }
         }
         .environment(\.colorScheme, .dark)
