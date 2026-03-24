@@ -93,8 +93,21 @@ struct TodoListView: View {
 
     private func toggleItem(_ id: UUID) {
         guard let idx = appState.todoItems.firstIndex(where: { $0.id == id }) else { return }
-        withAnimation(.easeInOut(duration: 0.2)) {
+        let wasAlreadyDone = appState.todoItems[idx].isDone
+
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
             appState.todoItems[idx].isDone.toggle()
+            // When marking done, slide item to the bottom so incomplete tasks float to top.
+            // Un-checking moves it back to just before the first done item (natural slot).
+            if !wasAlreadyDone {
+                let item = appState.todoItems.remove(at: idx)
+                appState.todoItems.append(item)
+            } else {
+                // Move un-checked item back before first done item
+                let item = appState.todoItems.remove(at: idx)
+                let insertIdx = appState.todoItems.firstIndex(where: { $0.isDone }) ?? appState.todoItems.count
+                appState.todoItems.insert(item, at: insertIdx)
+            }
         }
     }
 
