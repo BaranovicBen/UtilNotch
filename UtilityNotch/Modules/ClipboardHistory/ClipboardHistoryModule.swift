@@ -19,7 +19,7 @@ struct ClipboardHistoryModule: UtilityModule {
     }
     
     func makeMainView() -> AnyView {
-        AnyView(ClipboardHistoryView())
+        AnyView(ClipboardModuleView())
     }
     
     func makeSettingsView() -> AnyView? {
