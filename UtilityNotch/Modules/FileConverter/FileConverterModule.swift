@@ -9,7 +9,7 @@ struct FileConverterModule: UtilityModule {
     var isEnabled = true
     
     func makeMainView() -> AnyView {
-        AnyView(FileConverterView())
+        AnyView(ConverterModuleView())
     }
     
     func makeSettingsView() -> AnyView? {
