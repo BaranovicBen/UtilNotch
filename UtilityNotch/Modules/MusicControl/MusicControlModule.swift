@@ -19,7 +19,7 @@ struct MusicControlModule: UtilityModule {
     }
     
     func makeMainView() -> AnyView {
-        AnyView(MusicControlView())
+        AnyView(MusicModuleView())
     }
     
     func makeSettingsView() -> AnyView? {
