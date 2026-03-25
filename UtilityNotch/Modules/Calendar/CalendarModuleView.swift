@@ -91,7 +91,7 @@ struct CalendarModuleView: View {
             }
         }
         .frame(height: 40)
-        .padding(.top, 0)
+        .padding(.top, 8)
     }
 
     @ViewBuilder
