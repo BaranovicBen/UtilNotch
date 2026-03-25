@@ -8,7 +8,7 @@ struct TodoListModule: UtilityModule {
     var isEnabled = true
     
     func makeMainView() -> AnyView {
-        AnyView(TodoListView())
+        AnyView(TodoModuleView())
     }
     
     func makeSettingsView() -> AnyView? {
