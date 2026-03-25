@@ -24,6 +24,6 @@ struct CalendarModule: UtilityModule {
         )]
     }
 
-    func makeMainView() -> AnyView { AnyView(CalendarView()) }
+    func makeMainView() -> AnyView { AnyView(CalendarModuleView()) }
     func makeSettingsView() -> AnyView? { AnyView(CalendarSettingsView()) }
 }
