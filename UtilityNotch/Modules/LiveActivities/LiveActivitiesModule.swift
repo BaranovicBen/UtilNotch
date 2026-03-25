@@ -9,6 +9,6 @@ struct LiveActivitiesModule: UtilityModule {
     var supportsNotifications: Bool = false
     var requiredPermissions: [PermissionInfo] { [] }
 
-    func makeMainView() -> AnyView     { AnyView(LiveActivitiesView()) }
+    func makeMainView() -> AnyView     { AnyView(LiveActivitiesModuleView()) }
     func makeSettingsView() -> AnyView? { AnyView(LiveActivitiesSettingsView()) }
 }
