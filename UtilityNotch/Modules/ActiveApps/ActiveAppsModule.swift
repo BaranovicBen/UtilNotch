@@ -11,7 +11,7 @@ struct ActiveAppsModule: UtilityModule {
     var requiredPermissions: [PermissionInfo] { [] }
 
     func makeMainView() -> AnyView {
-        AnyView(ActiveAppsView())
+        AnyView(ActiveAppsModuleView())
     }
 
     func makeSettingsView() -> AnyView? {
