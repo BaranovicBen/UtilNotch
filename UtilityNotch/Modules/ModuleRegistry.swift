@@ -15,7 +15,9 @@ enum ModuleRegistry {
         LiveActivitiesModule(),
         CalendarModule(),
         FilesTrayModule(),
-        ActiveAppsModule()
+        ActiveAppsModule(),
+        RecentFilesModule(),
+        DownloadsModule()
     ]
 
     /// Look up a module by ID
