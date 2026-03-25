@@ -6,7 +6,7 @@ struct CalendarModuleView: View {
     @Environment(AppState.self) private var appState
 
     private struct WeekDay {
-        let abbrev: String  // "MON", "TUE", etc.
+        let abbrev: String
         let day: Int
         let isToday: Bool
     }
@@ -16,9 +16,9 @@ struct CalendarModuleView: View {
         let time: String
         let title: String
         let accentColor: Color
+        let hasVideo: Bool
     }
 
-    // Dummy week data centered on today (Wed 25 March 2026)
     private let weekDays: [WeekDay] = [
         WeekDay(abbrev: "MON", day: 23, isToday: false),
         WeekDay(abbrev: "TUE", day: 24, isToday: false),
@@ -30,9 +30,9 @@ struct CalendarModuleView: View {
     ]
 
     private let events: [CalEvent] = [
-        CalEvent(time: "09:00", title: "Team Standup",      accentColor: Color(hex: "42E355")),
-        CalEvent(time: "14:00", title: "Design Review",     accentColor: Color(hex: "0A84FF")),
-        CalEvent(time: "16:30", title: "1:1 with Manager",  accentColor: Color(hex: "A259FF")),
+        CalEvent(time: "09:00", title: "Team Standup",     accentColor: Color(hex: "42E355"), hasVideo: true),
+        CalEvent(time: "14:00", title: "Design Review",    accentColor: Color(hex: "0A84FF"), hasVideo: true),
+        CalEvent(time: "16:30", title: "1:1 with Manager", accentColor: Color(hex: "A259FF"), hasVideo: false),
     ]
 
     var body: some View {
@@ -51,64 +51,64 @@ struct CalendarModuleView: View {
             statusRight: "3 UPCOMING",
             actionButton: nil
         ) {
+            // STEP 1: Hard cap the content area to 296pt
+            // 380 panel − 44 header − 28 footer − 8 top gap − 4 bottom gap = 296
             VStack(alignment: .leading, spacing: 0) {
-                // Date Section
-                // CSS: Inter 700 48px letter-spacing -2.4px; Inter 500 20px letter-spacing -0.5px rgba(0.5)
-                dateSection
-                    .padding(.bottom, 16)
-
-                // Week Strip
-                // CSS: 7 columns, each padding 8px 0px gap 6px; active bg #0A84FF radius 12px
+                dateRow
                 weekStrip
-                    .padding(.bottom, 16)
-
-                // Upcoming Events
-                upcomingSection
+                upcomingLabel
+                eventRows
             }
+            .frame(maxWidth: .infinity, maxHeight: 296, alignment: .top)
+            .clipped()
         }
     }
 
-    // MARK: - Date Section
+    // MARK: - Date Row
+    // Total height: 40pt. Top padding: 12pt.
+    // Running total after: 12 + 40 = 52pt
 
-    private var dateSection: some View {
-        HStack(alignment: .bottom, spacing: 12) {
-            // Day number — CSS: Inter 700 48px letter-spacing -2.4px #FFFFFF
+    private var dateRow: some View {
+        HStack(alignment: .bottom, spacing: 0) {
+            // Date number — 28pt bold
             Text("25")
-                .font(.system(size: 48, weight: .bold))
+                .font(.system(size: 28, weight: .bold))
                 .foregroundStyle(Color.white)
-                .tracking(-2.4)
 
-            // Month + year — CSS: Inter 500 20px letter-spacing -0.5px rgba(255,255,255,0.5)
-            Text("March")
-                .font(.system(size: 20, weight: .medium))
+            // Month + year — 13pt regular, bottom-aligned, 8pt left offset
+            Text("March 2026")
+                .font(.system(size: 13, weight: .regular))
                 .foregroundStyle(Color.white.opacity(0.5))
-                .tracking(-0.5)
-                .padding(.bottom, 6)  // align to baseline of day number
+                .padding(.leading, 8)
+                .padding(.bottom, 3)  // align to bottom of "25"
 
             Spacer()
 
-            // Nav buttons — CSS: 32×32 bg rgba(255,255,255,0.05) radius 8px
+            // Prev/next buttons — 24×24, subtle
             HStack(spacing: 8) {
                 navButton(icon: "chevron.left")
                 navButton(icon: "chevron.right")
             }
-            .padding(.bottom, 4)
         }
+        .frame(height: 40)
+        .padding(.top, 12)
     }
 
     @ViewBuilder
     private func navButton(icon: String) -> some View {
         Image(systemName: icon)
-            .font(.system(size: 11, weight: .medium))
-            .foregroundStyle(Color.white.opacity(0.7))
-            .frame(width: 32, height: 32)
+            .font(.system(size: 10, weight: .medium))
+            .foregroundStyle(Color.white.opacity(0.5))
+            .frame(width: 24, height: 24)
             .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.white.opacity(0.05))
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color.white.opacity(0.10))
             )
     }
 
     // MARK: - Week Strip
+    // Top gap: 8pt. Height: 52pt.
+    // Running total after: 52 + 8 + 52 = 112pt
 
     private var weekStrip: some View {
         HStack(spacing: 0) {
@@ -117,83 +117,97 @@ struct CalendarModuleView: View {
             }
         }
         .frame(maxWidth: .infinity)
+        .frame(height: 52)
+        .padding(.top, 8)
     }
 
     @ViewBuilder
     private func weekDayCell(_ day: WeekDay) -> some View {
-        VStack(spacing: 6) {
-            // Day abbrev — CSS: JetBrains Mono 400 10px letter-spacing 1px uppercase
-            Text(day.abbrev)
-                .font(.system(size: 10, design: .monospaced))
-                .foregroundStyle(day.isToday ? Color.white.opacity(0.9) : Color.white.opacity(0.3))
-                .kerning(1.0)
+        ZStack {
+            if day.isToday {
+                // Fixed 44pt capsule — do not stretch to column width
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color(hex: "0A84FF"))
+                    .frame(width: 44, height: 40)
+            }
 
-            // Day number — CSS: Inter 500 14px; active: Inter 700 14px #FFFFFF
-            Text("\(day.day)")
-                .font(.system(size: 14, weight: day.isToday ? .bold : .medium))
-                .foregroundStyle(day.isToday ? Color.white : Color.white.opacity(0.4))
+            VStack(spacing: 3) {
+                Text(day.abbrev)
+                    .font(.system(size: 10, weight: day.isToday ? .medium : .regular))
+                    .foregroundStyle(day.isToday ? Color.white : Color.white.opacity(0.30))
+
+                Text("\(day.day)")
+                    .font(.system(size: 13, weight: day.isToday ? .semibold : .regular))
+                    .foregroundStyle(day.isToday ? Color.white : Color.white.opacity(0.35))
+            }
         }
-        .padding(.vertical, 8)
         .frame(maxWidth: .infinity)
-        .background(
-            Group {
-                if day.isToday {
-                    // CSS: bg #0A84FF radius 12px
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color(hex: "0A84FF"))
-                }
-            }
-        )
+        .frame(height: 40)
     }
 
-    // MARK: - Upcoming Section
+    // MARK: - Upcoming Label
+    // Top gap: 8pt. Height: 16pt. Bottom gap: 6pt.
+    // Running total after: 112 + 8 + 16 + 6 = 142pt
 
-    private var upcomingSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Section header — CSS: JetBrains Mono 400 11px letter-spacing 0.55px uppercase rgba(0.35)
-            Text("UPCOMING")
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(Color.white.opacity(0.35))
-                .kerning(0.55)
+    private var upcomingLabel: some View {
+        Text("UPCOMING")
+            .font(.system(size: 10, design: .monospaced))
+            .foregroundStyle(Color.white.opacity(0.25))
+            .frame(height: 16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 8)
+            .padding(.bottom, 6)
+    }
 
-            // Event rows gap: 8px
-            VStack(spacing: 8) {
-                ForEach(events) { event in
-                    eventRow(event)
-                }
+    // MARK: - Event Rows
+    // 3 rows × 44pt + 2 gaps × 6pt = 132 + 12 = 144pt
+    // Running total: 142 + 144 = 286pt ✓ fits in 296pt
+
+    private var eventRows: some View {
+        VStack(spacing: 6) {
+            ForEach(events) { event in
+                eventRow(event)
+                    .frame(height: 44)
             }
         }
     }
-
-    // MARK: - Event Row
-    // CSS: padding 12px, gap 16px, height 48px, bg rgba(255,255,255,0.05), radius 12px
 
     @ViewBuilder
     private func eventRow(_ event: CalEvent) -> some View {
-        HStack(spacing: 16) {
-            // Accent bar — CSS: 4×24px radius 9999px
-            RoundedRectangle(cornerRadius: 9999, style: .continuous)
-                .fill(event.accentColor)
-                .frame(width: 4, height: 24)
+        ZStack(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.white.opacity(0.03))
+                .frame(height: 44)
 
-            // Time — CSS: JetBrains Mono 400 12px rgba(255,255,255,0.6)
-            Text(event.time)
-                .font(.system(size: 12, design: .monospaced))
-                .foregroundStyle(Color.white.opacity(0.6))
+            HStack(spacing: 0) {
+                // Color bar — 3×20pt
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    .fill(event.accentColor)
+                    .frame(width: 3, height: 20)
+                    .padding(.leading, 12)
 
-            // Title — CSS: Inter 500 14px #E5E2E1
-            Text(event.title)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(Color(hex: "E5E2E1"))
-                .lineLimit(1)
+                // Time
+                Text(event.time)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(Color.white.opacity(0.45))
+                    .padding(.leading, 10)
 
-            Spacer()
+                // Title
+                Text(event.title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.85))
+                    .lineLimit(1)
+                    .padding(.leading, 10)
+
+                Spacer()
+
+                if event.hasVideo {
+                    Image(systemName: "video.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.white.opacity(0.35))
+                        .padding(.trailing, 12)
+                }
+            }
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.white.opacity(0.05))
-        )
     }
 }
