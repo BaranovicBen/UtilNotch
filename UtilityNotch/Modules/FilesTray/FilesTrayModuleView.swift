@@ -57,7 +57,8 @@ struct FilesTrayModuleView: View {
                 }
                 .padding(12)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(maxWidth: .infinity)
+            .frame(height: 208)
         }
     }
 

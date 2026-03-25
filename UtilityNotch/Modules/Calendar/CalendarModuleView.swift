@@ -59,8 +59,7 @@ struct CalendarModuleView: View {
                 upcomingLabel
                 eventRows
             }
-            .frame(maxWidth: .infinity, maxHeight: 296, alignment: .top)
-            .clipped()
+            .frame(maxWidth: .infinity)
         }
     }
 
@@ -70,6 +69,7 @@ struct CalendarModuleView: View {
 
     private var dateRow: some View {
         HStack(alignment: .bottom, spacing: 0) {
+
             // Date number — 28pt bold
             Text("25")
                 .font(.system(size: 28, weight: .bold))
