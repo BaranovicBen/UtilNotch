@@ -9,6 +9,6 @@ struct FilesTrayModule: UtilityModule {
     var supportsNotifications: Bool = false
     var requiredPermissions: [PermissionInfo] { [] }
 
-    func makeMainView() -> AnyView { AnyView(FilesTrayView()) }
+    func makeMainView() -> AnyView { AnyView(FilesTrayModuleView()) }
     func makeSettingsView() -> AnyView? { AnyView(FilesTraySettingsView()) }
 }
