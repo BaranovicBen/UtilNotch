@@ -1,0 +1,467 @@
+{
+  "_meta": {
+    "project": "Utility Notch",
+    "platform": "macOS (SwiftUI + AppKit)",
+    "exportedAt": "2026-03-24",
+    "sourceFiles": "UtilityNotch/",
+    "figmaPages": [
+      "0 · Cover",
+      "1 · Tokens",
+      "2 · Shell",
+      "3 · Module — Todo List",
+      "4 · Module — Quick Notes",
+      "5 · Module — Music Control",
+      "6 · Module — Live Activities",
+      "7 · Module — File Converter",
+      "8 · Module — Clipboard History",
+      "9 · Module — Calendar",
+      "10 · Module — Files Tray",
+      "11 · Module — Active Apps",
+      "12 · States & Interactions"
+    ]
+  },
+
+  "tokens": {
+
+    "colors": {
+      "surface": {
+        "panel":        { "value": "#141414", "opacity": 1.0,  "note": "Color(white: 0.08) — main panel background" },
+        "rail":         { "value": "#1E1E1E", "opacity": 1.0,  "note": "Color(white: 0.12) — right utility rail" },
+        "panelMaterial":{ "value": "ultraThinMaterial", "note": "DI collapsed pill background" }
+      },
+      "overlay": {
+        "card/default":  { "value": "#FFFFFF", "opacity": 0.03, "note": "NoteCard resting" },
+        "card/hover":    { "value": "#FFFFFF", "opacity": 0.05, "note": "NoteCard hover / ActivityCard hover" },
+        "card/editing":  { "value": "#FFFFFF", "opacity": 0.07, "note": "NoteCard while editing" },
+        "accent":        { "value": "#FFFFFF", "opacity": 0.12, "note": "accentHighlight — rail active button bg" },
+        "inputBg":       { "value": "#FFFFFF", "opacity": 0.06, "note": "TextField backgrounds (title inputs)" },
+        "inputBgAlt":    { "value": "#FFFFFF", "opacity": 0.04, "note": "Optional body TextFields" },
+        "buttonCircle":  { "value": "#FFFFFF", "opacity": 0.08, "note": "CircularControlButton resting" },
+        "buttonCircleHover": { "value": "#FFFFFF", "opacity": 0.14, "note": "CircularControlButton hover" },
+        "progressTrack": { "value": "#FFFFFF", "opacity": 0.08, "note": "Progress bar unfilled track" },
+        "border":        { "value": "#FFFFFF", "opacity": 0.07, "note": "Panel stroke (DI, outer panel)" },
+        "borderCard":    { "value": "#FFFFFF", "opacity": 0.12, "note": "NoteCard editing border (0.5pt)" },
+        "divider":       { "value": "#FFFFFF", "opacity": 0.06, "note": "Section dividers" },
+        "demoTag":       { "value": "#FFFFFF", "opacity": 0.10, "note": "DEMO badge capsule fill" }
+      },
+      "text": {
+        "primary":       { "value": "#FFFFFF", "opacity": 1.0,  "note": "Headers, titles, active labels" },
+        "secondary":     { "value": "system .secondary", "note": "≈ #FFFFFF @ 0.55 on dark — subtitles, body" },
+        "tertiary":      { "value": "system .tertiary",  "note": "≈ #FFFFFF @ 0.35 on dark — timestamps, hints" },
+        "iconDefault":   { "value": "#FFFFFF", "opacity": 0.70, "note": "iconTint — rail icons resting" },
+        "iconHover":     { "value": "#FFFFFF", "opacity": 0.85, "note": "Rail icons hover" },
+        "iconActive":    { "value": "#FFFFFF", "opacity": 1.0,  "note": "iconActiveTint — selected rail item" },
+        "diLabel":       { "value": "#FFFFFF", "opacity": 0.65, "note": "DI collapsed 'Utility Notch' label" },
+        "diIcon":        { "value": "#FFFFFF", "opacity": 0.50, "note": "DI collapsed expand icon" }
+      },
+      "semantic": {
+        "destructive":   { "value": "#FF3B30", "opacity": 0.70, "note": ".red.opacity(0.7) — delete actions" },
+        "confirm":       { "value": "#007AFF", "opacity": 1.0,  "note": ".blue — save / convert-to-todo" },
+        "done":          { "value": "#34C759", "opacity": 1.0,  "note": ".green — completed todo checkbox" },
+        "musicPurple":   { "value": "#9B59B6", "opacity": 0.80, "note": "Ambient music indicator" }
+      },
+      "liveActivity": {
+        "focus":   { "value": "#6C63FF", "note": "Focus Session" },
+        "deepWork":{ "value": "#FF6B6B", "note": "Deep Work" },
+        "meeting": { "value": "#4EBF7A", "note": "Meeting" },
+        "break":   { "value": "#FF9500", "note": "Break" },
+        "openEnded":{ "value": "#8E8E93", "note": "Open Ended / generic" },
+        "custom":  { "value": "#5AC8FA", "note": "User-created custom" }
+      },
+      "musicProgress": {
+        "from": { "value": "rgb(140, 89, 242)",  "note": "Color(red:0.55,green:0.35,blue:0.95)" },
+        "to":   { "value": "rgb(89, 140, 255)",  "note": "Color(red:0.35,green:0.55,blue:1.0)" }
+      }
+    },
+
+    "typography": {
+      "note": "All fonts use SF Pro (system default on macOS). Monospaced variants use SF Mono.",
+      "scale": [
+        { "name": "headline",         "size": 17, "weight": "semibold", "usage": "Module headers (Label views)" },
+        { "name": "subheadline",      "size": 15, "weight": "regular",  "usage": "Subheadings" },
+        { "name": "callout",          "size": 16, "weight": "regular",  "usage": "Note titles, track titles, input fields" },
+        { "name": "callout/medium",   "size": 16, "weight": "medium",   "usage": "DI collapsed text" },
+        { "name": "callout/semibold", "size": 16, "weight": "semibold", "usage": "Track title in music player" },
+        { "name": "body",             "size": 17, "weight": "regular",  "usage": "Todo toggle checkbox icons" },
+        { "name": "caption",          "size": 12, "weight": "regular",  "usage": "Note body, artist names, secondary info" },
+        { "name": "caption2",         "size": 11, "weight": "regular",  "usage": "Timestamps, time labels, action buttons" },
+        { "name": "caption2/medium",  "size": 11, "weight": "medium",   "usage": "Save button in NoteCard" },
+        { "name": "system/8",         "size": 8,  "weight": "bold",     "usage": "DEMO badge" },
+        { "name": "system/10",        "size": 10, "weight": "medium",   "usage": "DI ambient icon" },
+        { "name": "system/11/mono",   "size": 11, "weight": "regular",  "usage": "Activity time label (monospaced)" },
+        { "name": "system/12/medium", "size": 12, "weight": "medium",   "usage": "DI collapsed 'Utility Notch' label" },
+        { "name": "system/13",        "size": 13, "weight": "regular",  "usage": "Preset rows, custom activity form" },
+        { "name": "system/13/semibold",{"size": 13, "weight": "semibold", "usage": "Activity name, sheet start button" }},
+        { "name": "system/16",        "size": 16, "weight": "medium",   "usage": "Activity icon in card" },
+        { "name": "system/18",        "size": 18, "weight": "regular",  "usage": "Header + buttons (plus.circle, xmark.circle)" },
+        { "name": "system/28",        "size": 28, "weight": "regular",  "usage": "Empty state icons" }
+      ]
+    },
+
+    "spacing": {
+      "base": 4,
+      "scale": [2, 4, 6, 8, 10, 12, 14, 16, 20],
+      "named": {
+        "xs":            2,
+        "sm":            4,
+        "md":            8,
+        "lg":            12,
+        "xl":            16,
+        "module/padH":   16,
+        "module/padV":   14,
+        "card/padH":     10,
+        "card/padV":     8,
+        "composer/gap":  6,
+        "controls/gap":  8,
+        "list/rowTop":   2,
+        "list/rowBottom":2
+      }
+    },
+
+    "radii": {
+      "xs":    4,
+      "sm":    6,
+      "md":    8,
+      "lg":    10,
+      "inner": 12,
+      "panel": 20,
+      "pill":  9999
+    },
+
+    "shadows": {
+      "panel/expanded":  { "color": "#000000", "opacity": 0.40, "radius": 28, "y": 8 },
+      "panel/collapsed": { "color": "#000000", "opacity": 0.25, "radius": 12, "y": 4 },
+      "albumArt":        { "color": "track accent", "opacity": 0.45, "radius": 10, "y": 3 }
+    },
+
+    "motion": {
+      "springs": {
+        "diMorph":     { "response": 0.38, "dampingFraction": 0.78, "usage": "DI pill ↔ panel morph, hover expand" },
+        "todoToggle":  { "response": 0.38, "dampingFraction": 0.82, "usage": "Todo item check / reorder" },
+        "sheetReveal": { "response": 0.30, "dampingFraction": 0.80, "usage": "AddActivity sheet, custom section" }
+      },
+      "easings": {
+        "stateChange":   { "curve": "easeOut",    "duration": 0.20, "usage": "Add/delete items, card fade" },
+        "expandCollapse":{ "curve": "easeInOut",  "duration": 0.20, "usage": "NoteCard expand, track skip" },
+        "contentFade":   { "curve": "easeIn",     "duration": 0.12, "usage": "DI expanded content delayed fade-in" },
+        "hoverFade":     { "curve": "easeInOut",  "duration": 0.12, "usage": "All hover state changes" },
+        "progressBar":   { "curve": "linear",     "duration": 0.50, "usage": "Music progress bar" },
+        "activityBar":   { "curve": "linear",     "duration": 0.90, "usage": "Live activity progress bar" }
+      },
+      "delays": {
+        "diContentFade":  { "ms": 180, "note": "Shape morphs first, then content fades in" },
+        "diAutoExpand":   { "ms": 50,  "note": "Small delay before auto-expanding when panel shows" },
+        "loadDefer":      { "ms": 100, "note": "LiveActivities defers render until panel settles" }
+      }
+    },
+
+    "dimensions": {
+      "panel": {
+        "width":        620,
+        "height":       380,
+        "cornerRadius": 20
+      },
+      "dynamicIsland": {
+        "collapsedWidth":  180,
+        "collapsedHeight": 36,
+        "expandedWidth":   620,
+        "expandedHeight":  380
+      },
+      "rail": {
+        "width":        40,
+        "buttonSize":   32,
+        "buttonRadius": 8,
+        "iconSize":     18,
+        "gearIconSize": 16,
+        "padV":         8
+      },
+      "triggerZone": {
+        "width":  200,
+        "height": 12
+      },
+      "musicControls": {
+        "prevNextDiameter": 32,
+        "playPauseDiameter": 36,
+        "albumArtSize":     52,
+        "albumArtRadius":   10,
+        "progressHeight":   2.5,
+        "waveBarWidth":     2.5,
+        "waveBarSpacing":   2.5,
+        "waveContainerW":   26,
+        "waveContainerH":   32
+      },
+      "activityCard": {
+        "height":       64,
+        "iconBgSize":   36,
+        "iconBgRadius": 8,
+        "iconSize":     16,
+        "progressH":    3
+      },
+      "addActivitySheet": {
+        "width": 280,
+        "presetIconBgSize": 28,
+        "presetIconBgRadius": 6
+      }
+    }
+  },
+
+  "components": [
+
+    {
+      "name": "Shell / NotchPanelView",
+      "file": "UtilityNotch/Shell/NotchPanelView.swift",
+      "description": "Main expanded panel. Anchors to bottom of menu bar. Contains: notch pill handle, ActiveModuleContainerView (left), UtilityRailView (right).",
+      "dimensions": { "width": 620, "height": 380 },
+      "layout": "VStack — handle pill (36×5) + HStack(ActiveModule + divider + Rail)",
+      "props": [],
+      "states": ["default (visible)", "drop-targeted (dragDrop lock active)"],
+      "tokens": ["surface/panel", "overlay/border", "shadows/panel/expanded"]
+    },
+
+    {
+      "name": "Shell / DynamicIslandView",
+      "file": "UtilityNotch/Shell/DynamicIslandView.swift",
+      "description": "Alternative panel style. Idles as a 180×36 pill. On hover/trigger morphs via spring to 620×380 panel. Content fades in 180ms after morph starts.",
+      "variants": [
+        {
+          "name": "Collapsed",
+          "dimensions": { "width": 180, "height": 36 },
+          "content": "expand icon + 'Utility Notch' label + ambient indicator"
+        },
+        {
+          "name": "Expanded",
+          "dimensions": { "width": 620, "height": 380 },
+          "content": "same layout as NotchPanelView"
+        }
+      ],
+      "props": [],
+      "states": ["collapsed", "expanded", "morphing"],
+      "tokens": ["surface/panelMaterial", "overlay/border", "shadows/panel/collapsed", "shadows/panel/expanded", "motion/springs/diMorph", "motion/delays/diContentFade"]
+    },
+
+    {
+      "name": "Shell / UtilityRailView",
+      "file": "UtilityNotch/Shell/UtilityRailView.swift",
+      "description": "Vertical icon rail (40pt wide). Top section is a scrollable list of module icons with gradient fade mask. Bottom is a gear settings button.",
+      "layout": "VStack — ZStack(ScrollView + gradient mask) + Divider + SettingsGearButton",
+      "dimensions": { "width": 40, "height": "fills panel" },
+      "tokens": ["surface/rail", "overlay/accent", "text/iconDefault", "text/iconHover", "text/iconActive"]
+    },
+
+    {
+      "name": "Shell / RailButton",
+      "file": "UtilityNotch/Shell/UtilityRailView.swift",
+      "description": "Single module icon button in the rail. 32×32 rounded square. Shows tooltip to the left on hover.",
+      "dimensions": { "width": 32, "height": 32, "cornerRadius": 8 },
+      "props": [
+        { "name": "icon", "type": "String (SF Symbol)" },
+        { "name": "isActive", "type": "Bool" },
+        { "name": "label", "type": "String (tooltip)" }
+      ],
+      "states": ["inactive", "hover (shows tooltip)", "active"],
+      "tokens": ["overlay/accent", "text/iconDefault", "text/iconHover", "text/iconActive"],
+      "tooltip": {
+        "offset": "-40pt left",
+        "transition": "opacity + scale(0.92, anchor: trailing)"
+      }
+    },
+
+    {
+      "name": "Module / TodoListView",
+      "file": "UtilityNotch/Modules/TodoList/TodoListView.swift",
+      "description": "Reorderable (drag .onMove) todo list with inline editing. Shows demo items at 50% opacity when list is empty.",
+      "layout": "VStack — header + input row + List(ForEach)",
+      "subcomponents": ["TodoRow"],
+      "demoData": ["Fix parser bug", "Write unit tests", "Ship v1.0 (done)"]
+    },
+
+    {
+      "name": "Module / TodoRow",
+      "file": "UtilityNotch/Modules/TodoList/TodoListView.swift",
+      "description": "Single todo row. Circle checkbox left, strikethrough text, trash icon on hover-right.",
+      "dimensions": { "height": "auto", "padH": 6, "padV": 6 },
+      "props": [
+        { "name": "isDone", "type": "Bool" },
+        { "name": "title", "type": "String" },
+        { "name": "isEditing", "type": "Bool" }
+      ],
+      "states": ["default", "done (strikethrough + secondary color)", "editing (inline TextField)", "hover (trash visible, row bg 4%)"],
+      "tokens": ["overlay/card/hover", "semantic/destructive", "semantic/done"]
+    },
+
+    {
+      "name": "Module / QuickNotesView",
+      "file": "UtilityNotch/Modules/QuickNotes/QuickNotesView.swift",
+      "description": "Note capture with title + optional body. Notes shown as NoteCard list. Demo notes at 50% opacity when empty.",
+      "layout": "VStack — header + composer (HStack of 2 TextFields + plus button) + Divider + ScrollView(NoteCards)",
+      "demoData": ["Project Ideas", "Meeting Notes"]
+    },
+
+    {
+      "name": "Module / NoteCard",
+      "file": "UtilityNotch/Modules/QuickNotes/QuickNotesView.swift",
+      "description": "Note display card. Single-tap expands, double-tap enters edit mode. Hover reveals copy/convert-to-todo/trash actions top-right.",
+      "dimensions": { "padH": 10, "padV": 8, "cornerRadius": 8 },
+      "props": [
+        { "name": "isExpanded", "type": "Bool" },
+        { "name": "isEditing", "type": "Bool" }
+      ],
+      "states": [
+        "default (opacity 3%, title 1-line, body 2-line)",
+        "hover (opacity 5%, action buttons appear)",
+        "expanded (no line limits)",
+        "editing (opacity 7%, border 0.5pt, TextFields + Cancel/Save)"
+      ],
+      "tokens": ["overlay/card/default", "overlay/card/hover", "overlay/card/editing", "overlay/borderCard", "semantic/destructive", "semantic/confirm"]
+    },
+
+    {
+      "name": "Module / MusicControlView",
+      "file": "UtilityNotch/Modules/MusicControl/MusicControlView.swift",
+      "description": "Compact music player. Single row: 52×52 album art + track info + optional animated waveform + circular controls. Full-width gradient progress bar at bottom.",
+      "layout": "VStack(spacing:0) — HStack(albumArt + trackInfo + [waveform] + controls) + progress VStack",
+      "subcomponents": ["CircularControlButton", "SoundWaveView"]
+    },
+
+    {
+      "name": "Module / CircularControlButton",
+      "file": "UtilityNotch/Modules/MusicControl/MusicControlView.swift",
+      "description": "Circular music control. Prev/Next: 32pt diameter. Play/Pause: 36pt diameter.",
+      "variants": [
+        { "name": "Prev/Next",  "diameter": 32, "iconSize": 14 },
+        { "name": "Play/Pause", "diameter": 36, "iconSize": 16 }
+      ],
+      "states": ["resting (white 8%)", "hover (white 14%)"],
+      "tokens": ["overlay/buttonCircle", "overlay/buttonCircleHover"]
+    },
+
+    {
+      "name": "Module / SoundWaveView",
+      "file": "UtilityNotch/Modules/MusicControl/MusicControlView.swift",
+      "description": "4-bar animated sound wave. Bars are gradient capsules, heights randomise every 0.28s while playing. Collapsed to 4pt height when paused.",
+      "dimensions": { "width": 26, "height": 32, "barWidth": 2.5, "barSpacing": 2.5 },
+      "states": ["playing (bars animate)", "paused (bars flat at 4pt)"]
+    },
+
+    {
+      "name": "Module / LiveActivitiesView",
+      "file": "UtilityNotch/Modules/LiveActivities/LiveActivitiesView.swift",
+      "description": "Session tracking. Header with + button opens AddActivitySheet. Cards show elapsed/remaining time with optional progress bar.",
+      "subcomponents": ["ActivityCard", "AddActivitySheet", "PresetRow"],
+      "demoData": ["Focus Session (6C63FF, 12min elapsed, 13min remaining)", "Team Meeting (4EBF7A, 5min elapsed, 25min remaining)"]
+    },
+
+    {
+      "name": "Module / ActivityCard",
+      "file": "UtilityNotch/Modules/LiveActivities/LiveActivitiesView.swift",
+      "description": "Fixed-height 64pt live activity card. Colored icon bg + name + time label. Optional progress bar (3pt height) at bottom. xmark stop button right.",
+      "dimensions": { "height": 64, "cornerRadius": 10, "padH": 10, "padTop": 9 },
+      "props": [
+        { "name": "name", "type": "String" },
+        { "name": "icon", "type": "String (SF Symbol)" },
+        { "name": "colorHex", "type": "String (6-char hex)" },
+        { "name": "isDemo", "type": "Bool — shows DEMO badge" },
+        { "name": "hasEndDate", "type": "Bool — controls progress bar visibility" }
+      ],
+      "states": ["default (bg 5%)", "hover (bg 8%, xmark brightens)"],
+      "tokens": ["overlay/card/hover", "liveActivity/*", "motion/easings/activityBar"]
+    },
+
+    {
+      "name": "Module / AddActivitySheet",
+      "file": "UtilityNotch/Modules/LiveActivities/LiveActivitiesView.swift",
+      "description": "280pt wide modal sheet. Lists 5 preset rows + expandable custom section (name TextField + duration Picker + Start button).",
+      "dimensions": { "width": 280, "pad": 16 },
+      "presets": [
+        { "name": "Focus Session", "icon": "brain.head.profile", "hex": "6C63FF", "minutes": 25 },
+        { "name": "Deep Work",     "icon": "bolt.fill",           "hex": "FF6B6B", "minutes": 90 },
+        { "name": "Meeting",       "icon": "person.2.fill",       "hex": "4EBF7A", "minutes": 30 },
+        { "name": "Break",         "icon": "cup.and.saucer.fill", "hex": "FF9500", "minutes": 15 },
+        { "name": "Open Ended",    "icon": "clock",               "hex": "8E8E93", "minutes": null }
+      ]
+    },
+
+    {
+      "name": "Module / FileConverterView",
+      "file": "UtilityNotch/Modules/FileConverter/FileConverterView.swift",
+      "description": "Drag-and-drop file conversion module. Format pill selectors + drop zone + convert button.",
+      "locks": ["dragDrop (while file dragged over)", "activeConvert (during conversion)", "activeEditing (format picker open)"]
+    },
+
+    {
+      "name": "Module / ClipboardHistoryView",
+      "file": "UtilityNotch/Modules/ClipboardHistory/ClipboardHistoryView.swift",
+      "description": "Clipboard history list with copy-back and clear actions."
+    },
+
+    {
+      "name": "Module / CalendarView",
+      "file": "UtilityNotch/Modules/Calendar/CalendarView.swift",
+      "description": "Compact calendar and upcoming events display."
+    },
+
+    {
+      "name": "Module / FilesTrayView",
+      "file": "UtilityNotch/Modules/FilesTray/FilesTrayView.swift",
+      "description": "Drag-and-drop file tray. Accepts file drops (.dragDrop lock while targeted)."
+    },
+
+    {
+      "name": "Module / ActiveAppsView",
+      "file": "UtilityNotch/Modules/ActiveApps/ActiveAppsView.swift",
+      "description": "Grid/list of currently running applications with quick-switch."
+    }
+  ],
+
+  "stateSystem": {
+    "name": "DismissalLock",
+    "type": "OptionSet (Swift)",
+    "description": "Composable lock set — modules insert/remove specific locks. Panel resists auto-close when non-empty.",
+    "locks": [
+      { "name": "dragDrop",      "rawValue": 1,  "blocksAutoClose": true,  "blocksClickOutside": true,  "triggers": "Any module during file drag-over" },
+      { "name": "pickerOpen",    "rawValue": 2,  "blocksAutoClose": true,  "blocksClickOutside": true,  "triggers": "System picker (color, file, date) open" },
+      { "name": "activeConvert", "rawValue": 4,  "blocksAutoClose": true,  "blocksClickOutside": true,  "triggers": "FileConverter conversion in progress" },
+      { "name": "activeEditing", "rawValue": 8,  "blocksAutoClose": true,  "blocksClickOutside": false, "note": "Does NOT block click-outside — clicking outside unfocuses text field naturally", "triggers": "Any text field focused in any module" },
+      { "name": "moduleGesture", "rawValue": 16, "blocksAutoClose": true,  "blocksClickOutside": true,  "triggers": "Drag reorder, scroll momentum" }
+    ],
+    "computed": {
+      "shouldSuppressClose":        "isPointerInsidePanel || !dismissalLocks.isEmpty",
+      "shouldSuppressClickOutside": "!dismissalLocks.subtracting(.activeEditing).isEmpty"
+    }
+  },
+
+  "moduleRegistry": {
+    "description": "All modules registered in ModuleRegistry.swift. The ordered array is persisted as enabledModuleIDs in AppState.",
+    "defaultOrder": ["todoList", "quickNotes", "clipboardHistory", "musicControl", "fileConverter", "liveActivities", "calendar", "filesTray", "activeApps"],
+    "modules": [
+      { "id": "todoList",        "label": "Todo List",         "icon": "checklist",                "file": "Modules/TodoList" },
+      { "id": "quickNotes",      "label": "Quick Notes",       "icon": "note.text",                "file": "Modules/QuickNotes" },
+      { "id": "clipboardHistory","label": "Clipboard History", "icon": "doc.on.clipboard",         "file": "Modules/ClipboardHistory" },
+      { "id": "musicControl",    "label": "Music Control",     "icon": "music.note",               "file": "Modules/MusicControl" },
+      { "id": "fileConverter",   "label": "File Converter",    "icon": "arrow.2.squarepath",       "file": "Modules/FileConverter" },
+      { "id": "liveActivities",  "label": "Live Activities",   "icon": "clock.badge.checkmark",    "file": "Modules/LiveActivities" },
+      { "id": "calendar",        "label": "Calendar",          "icon": "calendar",                 "file": "Modules/Calendar" },
+      { "id": "filesTray",       "label": "Files Tray",        "icon": "tray",                     "file": "Modules/FilesTray" },
+      { "id": "activeApps",      "label": "Active Apps",       "icon": "square.grid.2x2",          "file": "Modules/ActiveApps" }
+    ]
+  },
+
+  "namingConventions": {
+    "figmaPages":       "N · Name (number-prefixed for sort order)",
+    "components":       "Shell / ComponentName  or  Module / ComponentName",
+    "variants":         "State=default/hover/active/editing/expanded — match Swift @State names",
+    "tokens":           "category/subcategory (e.g. overlay/card/hover)",
+    "colorStyles":      "UN/{category}/{name}  (e.g. UN/surface/panel, UN/semantic/destructive)",
+    "textStyles":       "UN/type/{name}  (e.g. UN/type/headline, UN/type/system/13/semibold)",
+    "effectStyles":     "UN/shadow/{name}  (e.g. UN/shadow/panel/expanded)",
+    "layerNaming":      "Use Swift view/subview names as Figma layer names for 1-to-1 traceability"
+  },
+
+  "figmaPageGuide": {
+    "0_Cover": "App name, version, branch, export date, short description",
+    "1_Tokens": "Color swatches grid / typography ramp / spacing scale / radii showcase / shadow showcase / motion reference (static annotation)",
+    "2_Shell": "NotchPanelView frame (620×380) + DynamicIslandView collapsed (180×36) + DI expanded (620×380) + UtilityRailView isolated + RailButton variants",
+    "3_9_Modules": "For each module: empty/demo state frame + populated state frame + all interactive sub-component variants (cards, rows, buttons)",
+    "12_StatesInteractions": "DismissalLock state diagram (reference FigJam), panel show/hide flow, module switching, demo→real data transition"
+  }
+}
