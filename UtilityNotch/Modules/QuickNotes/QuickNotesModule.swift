@@ -8,6 +8,6 @@ struct QuickNotesModule: UtilityModule {
     var isEnabled: Bool = true
     
     func makeMainView() -> AnyView {
-        AnyView(QuickNotesView())
+        AnyView(QuickNotesModuleView())
     }
 }
