@@ -27,145 +27,182 @@ struct MusicModuleView: View {
         }
     }
 
-    // MARK: - Content Slot
-
-    // Layout from Music.css:
-    //   Top: Track Info Row (album art 151×148 + track info column)
-    //   Middle: intentional empty void
-    //   Bottom: progress bar (4px height) + timestamps (11px Liberation Mono)
+    // MARK: - Content
 
     private var musicContent: some View {
         VStack(spacing: 0) {
-            // ── Track info row ────────────────────────────────────────
-            // CSS: flex-direction row, gap 24px, height 148px
-            HStack(alignment: .top, spacing: 24) {
-                // Album art
-                // CSS: 151×148px, border-radius 12px
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+            // ── ROW 1: Artwork + track info ───────────────────────────
+            HStack(alignment: .center, spacing: 12) {
+                // Artwork 52×52
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(
                         LinearGradient(
-                            colors: [Color(hex: "1a1a2e"), Color(hex: "16213e"), Color(hex: "0f3460")],
+                            colors: [Color(hex: "1A0533"), Color(hex: "3D1A6E")],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
                     .overlay(
                         Image(systemName: "music.note")
-                            .font(.system(size: 32))
+                            .font(.system(size: 20))
                             .foregroundStyle(Color.white.opacity(0.25))
                     )
-                    .frame(width: 151, height: 148)
+                    .frame(width: 52, height: 52)
 
-                // Track info column
-                // CSS: padding 8px 0 0, container 135.42×128px
-                VStack(alignment: .leading, spacing: 8) {
-                    // Track title
-                    // CSS: Inter weight 700, size 24px, line-height 30px, #FFFFFF
+                // Track info
+                VStack(alignment: .leading, spacing: 3) {
                     Text("Midnight City")
-                        .font(.system(size: 24, weight: .bold))
-                        .foregroundStyle(Color.white)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Color.white.opacity(0.85))
                         .lineLimit(1)
-
-                    // Artist
-                    // CSS: Inter weight 400, size 14px, line-height 21px, rgba(255,255,255,0.5)
-                    Text("M83 — Hurry Up, We're Dreaming")
-                        .font(.system(size: 14, weight: .regular))
-                        .foregroundStyle(Color.white.opacity(0.5))
-                        .lineLimit(2)
-
-                    // ── Sound wave visualiser ─────────────────────────
-                    SoundWaveView(isPlaying: isPlaying, colors: [Color.white.opacity(0.5), Color.white])
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .clipped()
+                    Text("M83")
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundStyle(Color.white.opacity(0.50))
+                        .lineLimit(1)
                 }
-                .frame(height: 148)
-                .padding(.top, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
 
-            Spacer()
+            Spacer().frame(height: 12)
 
-            // ── Progress bar + timestamps + controls ──────────────────
-            // CSS: Full-width Progress Bar, 4px height, radius 9999, margin bottom 24px
+            // ── WAVE: full width, 30 bars growing upward ──────────────
+            MusicWaveView(isPlaying: isPlaying)
+                .frame(maxWidth: .infinity)
 
-            VStack(spacing: 0) {
-                // Playback controls row
-                // CSS: flex-direction row, justify-content space-between, height 57px
-                // play button: 40×40 white circle, prev/next: icon only rgba(255,255,255,0.4)
-                HStack(spacing: 0) {
-                    // Left timestamp
-                    // CSS: Liberation Mono 11px, rgba(255,255,255,0.4)
-                    Text("1:38")
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(Color.white.opacity(0.4))
+            Spacer().frame(height: 8)
 
-                    Spacer()
+            // ── ROW 2: timestamps + controls ──────────────────────────
+            HStack(spacing: 0) {
+                Text("1:38")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(Color.white.opacity(0.35))
 
-                    // Controls: prev, play, next
-                    // CSS: gap 24px between buttons
-                    HStack(spacing: 24) {
-                        // Backward
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.15)) { isPlaying = true }
-                        } label: {
+                Spacer()
+
+                HStack(spacing: 20) {
+                    // Backward
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) { isPlaying = true }
+                    } label: {
+                        ZStack {
+                            Circle()
+                                .fill(Color.white.opacity(0.15))
+                                .frame(width: 36, height: 36)
                             Image(systemName: "backward.fill")
                                 .font(.system(size: 16, weight: .medium))
-                                .foregroundStyle(Color.white.opacity(0.4))
+                                .foregroundStyle(Color.white)
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    // Play / Pause
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) { isPlaying.toggle() }
+                    } label: {
+                        ZStack {
+                            Circle()
+                                .fill(Color.white.opacity(0.20))
                                 .frame(width: 36, height: 36)
+                            Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                                .font(.system(size: 20, weight: .bold))
+                                .foregroundStyle(Color.white)
                         }
-                        .buttonStyle(.plain)
+                    }
+                    .buttonStyle(.plain)
 
-                        // Play/pause: 36×36 white circle, icon #000000
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.15)) { isPlaying.toggle() }
-                        } label: {
-                            ZStack {
-                                Circle()
-                                    .fill(Color.white)
-                                    .frame(width: 36, height: 36)
-                                Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                                    .font(.system(size: 20, weight: .bold))
-                                    .foregroundStyle(Color.black)
-                            }
-                        }
-                        .buttonStyle(.plain)
-
-                        // Forward
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.15)) { isPlaying = true }
-                        } label: {
+                    // Forward
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) { isPlaying = true }
+                    } label: {
+                        ZStack {
+                            Circle()
+                                .fill(Color.white.opacity(0.15))
+                                .frame(width: 36, height: 36)
                             Image(systemName: "forward.fill")
                                 .font(.system(size: 16, weight: .medium))
-                                .foregroundStyle(Color.white.opacity(0.4))
-                                .frame(width: 36, height: 36)
+                                .foregroundStyle(Color.white)
                         }
-                        .buttonStyle(.plain)
                     }
-
-                    Spacer()
-
-                    // Right timestamp
-                    Text("4:03")
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(Color.white.opacity(0.4))
+                    .buttonStyle(.plain)
                 }
-                .frame(height: 40)
 
-                Spacer().frame(height: 12)
+                Spacer()
 
-                // Progress bar — 3pt height
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Capsule()
-                            .fill(Color.white.opacity(0.1))
-                            .frame(height: 3)
-                        Capsule()
-                            .fill(Color.white)
-                            .frame(width: max(0, geo.size.width * progress), height: 3)
-                    }
-                }
-                .frame(height: 3)
+                Text("4:03")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(Color.white.opacity(0.35))
             }
+
+            Spacer().frame(height: 8)
+
+            // ── PROGRESS BAR ──────────────────────────────────────────
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(Color.white.opacity(0.12))
+                        .frame(height: 3)
+                    Capsule()
+                        .fill(
+                            LinearGradient(
+                                colors: [Color(hex: "8B5CF6"), Color(hex: "3B82F6")],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(width: max(0, geo.size.width * progress), height: 3)
+                }
+            }
+            .frame(height: 3)
+        }
+    }
+}
+
+// MARK: - Music Wave View
+
+private struct MusicWaveView: View {
+    let isPlaying: Bool
+
+    @State private var barHeights: [CGFloat] = Array(repeating: 4, count: 30)
+    @State private var waveTimer: Timer? = nil
+
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(0..<30, id: \.self) { i in
+                Capsule()
+                    .fill(Color.white.opacity(0.30))
+                    .frame(width: 3, height: barHeights[i])
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 32)
+        .clipped()
+        .onAppear {
+            if isPlaying { startAnimating() }
+        }
+        .onDisappear { stopAnimating() }
+        .onChange(of: isPlaying) { _, playing in
+            playing ? startAnimating() : stopAnimating()
+        }
+    }
+
+    private func startAnimating() {
+        stopAnimating()
+        let t = Timer.scheduledTimer(withTimeInterval: 0.12, repeats: true) { _ in
+            DispatchQueue.main.async {
+                withAnimation(.easeInOut(duration: 0.12)) {
+                    barHeights = (0..<30).map { _ in CGFloat.random(in: 4...32) }
+                }
+            }
+        }
+        waveTimer = t
+    }
+
+    private func stopAnimating() {
+        waveTimer?.invalidate()
+        waveTimer = nil
+        withAnimation(.easeInOut(duration: 0.25)) {
+            barHeights = Array(repeating: 6, count: 30)
         }
     }
 }
