@@ -42,7 +42,7 @@ struct TrayItem: Identifiable, Codable {
 
 // MARK: - Persistence helper
 
-private enum TrayPersistence {
+enum TrayPersistence {
     static private var fileURL: URL {
         let support = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)
