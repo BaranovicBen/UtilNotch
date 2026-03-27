@@ -82,7 +82,11 @@ struct MusicModuleView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            // ── Empty void (intentional) ──────────────────────────────
+            // ── Sound wave visualiser ─────────────────────────────────
+            SoundWaveView(isPlaying: isPlaying, colors: [Color.white.opacity(0.5), Color.white])
+                .frame(height: 44)
+                .frame(maxWidth: .infinity)
+
             Spacer()
 
             // ── Progress bar + timestamps + controls ──────────────────
@@ -104,38 +108,40 @@ struct MusicModuleView: View {
                     // Controls: prev, play, next
                     // CSS: gap 24px between buttons
                     HStack(spacing: 24) {
-                        // Backward: rgba(255,255,255,0.4)
+                        // Backward
                         Button {
                             withAnimation(.easeInOut(duration: 0.15)) { isPlaying = true }
                         } label: {
                             Image(systemName: "backward.fill")
-                                .font(.system(size: 14, weight: .medium))
+                                .font(.system(size: 16, weight: .medium))
                                 .foregroundStyle(Color.white.opacity(0.4))
+                                .frame(width: 36, height: 36)
                         }
                         .buttonStyle(.plain)
 
-                        // Play/pause: 40×40 white circle, icon #000000
+                        // Play/pause: 36×36 white circle, icon #000000
                         Button {
                             withAnimation(.easeInOut(duration: 0.15)) { isPlaying.toggle() }
                         } label: {
                             ZStack {
                                 Circle()
                                     .fill(Color.white)
-                                    .frame(width: 40, height: 40)
+                                    .frame(width: 36, height: 36)
                                 Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                                    .font(.system(size: 14, weight: .bold))
+                                    .font(.system(size: 20, weight: .bold))
                                     .foregroundStyle(Color.black)
                             }
                         }
                         .buttonStyle(.plain)
 
-                        // Forward: rgba(255,255,255,0.4)
+                        // Forward
                         Button {
                             withAnimation(.easeInOut(duration: 0.15)) { isPlaying = true }
                         } label: {
                             Image(systemName: "forward.fill")
-                                .font(.system(size: 14, weight: .medium))
+                                .font(.system(size: 16, weight: .medium))
                                 .foregroundStyle(Color.white.opacity(0.4))
+                                .frame(width: 36, height: 36)
                         }
                         .buttonStyle(.plain)
                     }
@@ -151,19 +157,18 @@ struct MusicModuleView: View {
 
                 Spacer().frame(height: 12)
 
-                // Progress bar
-                // CSS: height 4px, bg rgba(255,255,255,0.1), filled #FFFFFF, radius 9999px
+                // Progress bar — 3pt height
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
                         Capsule()
                             .fill(Color.white.opacity(0.1))
-                            .frame(height: 4)
+                            .frame(height: 3)
                         Capsule()
                             .fill(Color.white)
-                            .frame(width: max(0, geo.size.width * progress), height: 4)
+                            .frame(width: max(0, geo.size.width * progress), height: 3)
                     }
                 }
-                .frame(height: 4)
+                .frame(height: 3)
             }
         }
     }
