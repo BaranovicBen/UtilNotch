@@ -5,6 +5,7 @@ import SwiftUI
 struct QuickNotesModuleView: View {
     @Environment(AppState.self) private var appState
     @State private var newNoteText: String = ""
+    @State private var newNoteBody: String = ""
     @FocusState private var isInputFocused: Bool
     @State private var expandedNoteID: UUID?
 
@@ -35,34 +36,60 @@ struct QuickNotesModuleView: View {
             actionButton: { makeAddActionButton(icon: "plus", label: "NEW NOTE") }
         ) {
             VStack(spacing: 8) {
-                // Input field
-                // CSS: height 36px, padding 9.5px 16px, bg rgba(255,255,255,0.05), radius 12px
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color.white.opacity(0.05))
-                        .frame(height: 36)
+                // Input area: title field + body TextEditor
+                VStack(spacing: 6) {
+                    // Title field
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(Color.white.opacity(0.05))
+                            .frame(height: 36)
 
-                    if newNoteText.isEmpty {
-                        Text("New note…")
-                            .font(.system(size: 14, weight: .regular))
-                            .foregroundStyle(Color.white.opacity(0.25))
-                            .padding(.horizontal, 16)
-                            .allowsHitTesting(false)
-                    }
-
-                    TextField("", text: $newNoteText)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 14, weight: .regular))
-                        .foregroundStyle(Color.white.opacity(0.85))
-                        .focused($isInputFocused)
-                        .padding(.horizontal, 16)
-                        .onSubmit { submitNote() }
-                        .onChange(of: isInputFocused) { _, focused in
-                            if focused { appState.dismissalLocks.insert(.activeEditing) }
-                            else { appState.dismissalLocks.remove(.activeEditing) }
+                        if newNoteText.isEmpty {
+                            Text("Note title…")
+                                .font(.system(size: 14, weight: .regular))
+                                .foregroundStyle(Color.white.opacity(0.25))
+                                .padding(.horizontal, 16)
+                                .allowsHitTesting(false)
                         }
+
+                        TextField("", text: $newNoteText)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 14, weight: .regular))
+                            .foregroundStyle(Color.white.opacity(0.85))
+                            .focused($isInputFocused)
+                            .padding(.horizontal, 16)
+                            .onSubmit { submitNote() }
+                            .onChange(of: isInputFocused) { _, focused in
+                                if focused { appState.dismissalLocks.insert(.activeEditing) }
+                                else { appState.dismissalLocks.remove(.activeEditing) }
+                            }
+                    }
+                    .frame(height: 36)
+
+                    // Body TextEditor (min 2 lines)
+                    ZStack(alignment: .topLeading) {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color.white.opacity(0.06))
+
+                        if newNoteBody.isEmpty {
+                            Text("Add details…")
+                                .font(.system(size: 13, weight: .regular))
+                                .foregroundStyle(Color.white.opacity(0.2))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 8)
+                                .allowsHitTesting(false)
+                        }
+
+                        TextEditor(text: $newNoteBody)
+                            .font(.system(size: 13, weight: .regular))
+                            .foregroundStyle(Color.white.opacity(0.75))
+                            .scrollContentBackground(.hidden)
+                            .background(Color.clear)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 4)
+                    }
+                    .frame(minHeight: 48)
                 }
-                .frame(height: 36)
 
                 // Notes list
                 ScrollView(.vertical, showsIndicators: false) {
@@ -145,10 +172,12 @@ struct QuickNotesModuleView: View {
     private func submitNote() {
         let text = newNoteText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
+        let body = newNoteBody.trimmingCharacters(in: .whitespacesAndNewlines)
         withAnimation(.easeOut(duration: 0.2)) {
-            appState.quickNotes.insert(QuickNote(title: text, body: ""), at: 0)
+            appState.quickNotes.insert(QuickNote(title: text, body: body), at: 0)
         }
         newNoteText = ""
+        newNoteBody = ""
         appState.dismissalLocks.remove(.activeEditing)
     }
 }
