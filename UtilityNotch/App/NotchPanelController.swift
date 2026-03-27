@@ -128,7 +128,7 @@ final class NotchPanelController {
         if appState.panelStyle == .dynamicIsland {
             y = screenFrame.maxY - UNConstants.panelHeight
         } else {
-            y = visibleFrame.maxY - UNConstants.panelHeight
+            y = screenFrame.maxY - UNConstants.panelHeight
         }
 
         panel.setFrameOrigin(NSPoint(x: x, y: y))
