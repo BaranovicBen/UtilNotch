@@ -32,9 +32,9 @@ struct MusicModuleView: View {
     private var musicContent: some View {
         VStack(spacing: 0) {
             // ── ROW 1: Artwork + track info ───────────────────────────
-            HStack(alignment: .center, spacing: 12) {
-                // Artwork 52×52
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+            HStack(alignment: .center, spacing: 14) {
+                // Artwork 88×88
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(
                         LinearGradient(
                             colors: [Color(hex: "1A0533"), Color(hex: "3D1A6E")],
@@ -44,26 +44,27 @@ struct MusicModuleView: View {
                     )
                     .overlay(
                         Image(systemName: "music.note")
-                            .font(.system(size: 20))
+                            .font(.system(size: 28))
                             .foregroundStyle(Color.white.opacity(0.25))
                     )
-                    .frame(width: 52, height: 52)
+                    .frame(width: 88, height: 88)
 
                 // Track info
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 6) {
                     Text("Midnight City")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Color.white.opacity(0.85))
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundStyle(Color.white)
                         .lineLimit(1)
                     Text("M83")
-                        .font(.system(size: 12, weight: .regular))
+                        .font(.system(size: 14, weight: .regular))
                         .foregroundStyle(Color.white.opacity(0.50))
                         .lineLimit(1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .frame(height: 88)
 
-            Spacer().frame(height: 12)
+            Spacer().frame(height: 10)
 
             // ── WAVE: full width, 30 bars growing upward ──────────────
             MusicWaveView(isPlaying: isPlaying)
