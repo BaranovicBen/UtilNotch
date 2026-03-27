@@ -18,6 +18,7 @@ struct DynamicIslandView: View {
     private let expandedHeight:  CGFloat = UNConstants.panelHeight
 
     var body: some View {
+        VStack(spacing: 0) {
         ZStack(alignment: .top) {
             // ── Morphing capsule background ─────────────────────────
             RoundedRectangle(cornerRadius: isExpanded ? UNConstants.panelCornerRadius : collapsedHeight / 2,
@@ -113,6 +114,10 @@ struct DynamicIslandView: View {
             }
         }
         .environment(\.colorScheme, .dark)
+
+        Spacer(minLength: 0)
+        } // VStack
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     // MARK: - Collapsed Pill
