@@ -1,5 +1,20 @@
 import SwiftUI
 
+// MARK: - ShowModuleSidebar Environment Key
+
+private struct ShowModuleSidebarKey: EnvironmentKey {
+    static let defaultValue = true
+}
+
+extension EnvironmentValues {
+    /// Set to false in Dynamic Island mode to suppress the inner sidebar rail
+    /// (the outer UtilityRailView is the canonical sidebar there).
+    var showModuleSidebar: Bool {
+        get { self[ShowModuleSidebarKey.self] }
+        set { self[ShowModuleSidebarKey.self] = newValue }
+    }
+}
+
 // MARK: - Color hex extension
 
 extension Color {
@@ -40,6 +55,8 @@ struct ModuleShellView<Content: View>: View {
     let actionButton: (() -> AnyView)?
     @ViewBuilder let content: () -> Content
 
+    @Environment(\.showModuleSidebar) private var showSidebar
+
     var body: some View {
         HStack(spacing: 0) {
             // ── LEFT COLUMN: main content (fills all width minus 40px sidebar) ──
@@ -52,8 +69,11 @@ struct ModuleShellView<Content: View>: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             // ── RIGHT COLUMN: sidebar (40px fixed) ──
-            sidebarRail
-                .frame(width: 40)
+            // Suppressed in Dynamic Island mode (outer UtilityRailView is used instead).
+            if showSidebar {
+                sidebarRail
+                    .frame(width: 40)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

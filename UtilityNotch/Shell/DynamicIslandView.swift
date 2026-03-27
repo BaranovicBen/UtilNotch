@@ -160,8 +160,9 @@ struct DynamicIslandView: View {
                 .padding(.bottom, 4)
 
             HStack(spacing: 0) {
-                // Active module — reuses the same container
+                // Active module — inner sidebar suppressed; outer UtilityRailView is the sidebar
                 ActiveModuleContainerView()
+                    .environment(\.showModuleSidebar, false)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 14)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
