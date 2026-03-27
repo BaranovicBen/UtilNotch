@@ -31,7 +31,16 @@
       "Bash(DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -scheme UtilityNotch -configuration Debug build)",
       "mcp__claude_ai_Figma__whoami",
       "mcp__claude_ai_Figma__create_design_system_rules",
-      "mcp__claude_ai_Figma__generate_diagram"
+      "mcp__claude_ai_Figma__generate_diagram",
+      "Bash(DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -scheme UtilityNotch -configuration Debug -destination 'platform=macOS' build)",
+      "Bash(xcodebuild -project UtilityNotch.xcodeproj -scheme UtilityNotch -destination 'platform=macOS' build)",
+      "Bash(xcode-select -p)",
+      "Bash(DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project UtilityNotch.xcodeproj -scheme UtilityNotch -destination 'platform=macOS' build)",
+      "Bash(xcodebuild -scheme UtilityNotch -configuration Debug -quiet)",
+      "Bash(DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -scheme UtilityNotch -configuration Debug -quiet)",
+      "Bash(git tag:*)",
+      "Bash(DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project /Users/benjaminbaranovic/Dev/UtilityNotch/UtilityNotch.xcodeproj -scheme UtilityNotch -destination 'platform=macOS' build)",
+      "Bash(grep -v \"^$\")"
     ]
   }
 }
