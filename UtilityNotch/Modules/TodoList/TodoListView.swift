@@ -228,11 +228,13 @@ private struct TodoRow: View {
 struct TodoItem: Identifiable, Codable, Equatable {
     let id: UUID
     var title: String
+    var description: String?
     var isDone: Bool
 
-    init(id: UUID = UUID(), title: String, isDone: Bool = false) {
+    init(id: UUID = UUID(), title: String, description: String? = nil, isDone: Bool = false) {
         self.id = id
         self.title = title
+        self.description = description
         self.isDone = isDone
     }
 }
