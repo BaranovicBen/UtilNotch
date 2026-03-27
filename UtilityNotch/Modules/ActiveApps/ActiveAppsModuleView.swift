@@ -1,26 +1,38 @@
 import SwiftUI
+import AppKit
 
-/// Active Apps module — full-shell Figma implementation.
+/// Active Apps module — full-shell Figma implementation, wired to NSWorkspace.
+/// Polls running apps every 3 seconds; falls back to 6 dummy rows when list is empty.
 /// CSS source: /DesignReference/Css/ActiveApps.css
 struct ActiveAppsModuleView: View {
     @Environment(AppState.self) private var appState
 
-    private struct AppEntry: Identifiable {
-        let id = UUID()
+    // MARK: - Real app data from NSWorkspace
+
+    struct RunningEntry: Identifiable {
+        let id: pid_t
         let name: String
         let category: String
         let color: Color
         let memory: String
+        let pid: pid_t
     }
 
-    private let apps: [AppEntry] = [
-        AppEntry(name: "Xcode",          category: "Developer Tools", color: Color(hex: "0A84FF"), memory: "1.2 GB"),
-        AppEntry(name: "Figma",          category: "Design Tools",    color: Color(hex: "A259FF"), memory: "487 MB"),
-        AppEntry(name: "Safari",         category: "Web Browser",     color: Color(hex: "0A84FF"), memory: "312 MB"),
-        AppEntry(name: "Simulator",      category: "Developer Tools", color: Color(hex: "FF9F0A"), memory: "891 MB"),
-        AppEntry(name: "Terminal",       category: "Developer Tools", color: Color(hex: "30D158"), memory: "48 MB"),
-        AppEntry(name: "Utility Notch",  category: "Utilities",       color: Color(hex: "636366"), memory: "22 MB"),
+    @State private var runningApps: [RunningEntry] = []
+    @State private var refreshTimer: Timer? = nil
+
+    // MARK: - Dummy fallback (6 rows, shown when NSWorkspace returns empty)
+
+    private let dummyApps: [(name: String, category: String, color: Color, memory: String)] = [
+        ("Xcode",          "Developer Tools", Color(hex: "0A84FF"), "1.2 GB"),
+        ("Figma",          "Design Tools",    Color(hex: "A259FF"), "487 MB"),
+        ("Safari",         "Web Browser",     Color(hex: "0A84FF"), "312 MB"),
+        ("Simulator",      "Developer Tools", Color(hex: "FF9F0A"), "891 MB"),
+        ("Terminal",       "Developer Tools", Color(hex: "30D158"), "48 MB"),
+        ("Utility Notch",  "Utilities",       Color(hex: "636366"), "22 MB"),
     ]
+
+    private var isUsingDummy: Bool { runningApps.isEmpty }
 
     var body: some View {
         ModuleShellView(
@@ -34,42 +46,50 @@ struct ActiveAppsModuleView: View {
                 }
             },
             statusDotColor: Color(hex: "32D74B"),
-            statusLeft: "8 APPS RUNNING",
-            statusRight: "CLICK ROW TO FORCE QUIT",
+            statusLeft: isUsingDummy ? "8 APPS RUNNING" : "\(runningApps.count) APPS RUNNING",
+            statusRight: "CLICK QUIT TO FORCE QUIT",
             actionButton: nil
         ) {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 6) {
-                    ForEach(apps) { app in
-                        appRow(app)
+                    if isUsingDummy {
+                        ForEach(dummyApps, id: \.name) { app in
+                            dummyAppRow(app)
+                        }
+                    } else {
+                        ForEach(runningApps) { app in
+                            liveAppRow(app)
+                        }
                     }
                 }
             }
         }
+        .onAppear {
+            refreshApps()
+            startPolling()
+        }
+        .onDisappear {
+            refreshTimer?.invalidate()
+            refreshTimer = nil
+        }
     }
 
-    // MARK: - App Row
+    // MARK: - Dummy App Row (non-interactive, visual demo)
     // CSS: padding 10px 12px, height 56px, bg rgba(255,255,255,0.03), radius 8px
 
     @ViewBuilder
-    private func appRow(_ app: AppEntry) -> some View {
+    private func dummyAppRow(_ app: (name: String, category: String, color: Color, memory: String)) -> some View {
         HStack(spacing: 0) {
-            // App icon placeholder — 28×28 colored RoundedRect, right margin 12px
-            // CSS: background <color>, border-radius 8px, width 28px, height 28px
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(app.color)
                 .frame(width: 28, height: 28)
                 .padding(.trailing, 12)
 
-            // App name + category label
             VStack(alignment: .leading, spacing: 0) {
-                // CSS: Inter 600 14px rgba(255,255,255,0.85)
                 Text(app.name)
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(Color.white.opacity(0.85))
                     .lineLimit(1)
-
-                // CSS: JetBrains Mono 400 10px letter-spacing 0.5px uppercase rgba(255,255,255,0.4)
                 Text(app.category.uppercased())
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(Color.white.opacity(0.4))
@@ -79,22 +99,143 @@ struct ActiveAppsModuleView: View {
 
             Spacer()
 
-            // Memory badge — CSS: JetBrains Mono 400 12px rgba(255,255,255,0.7) right-padded 16px
             Text(app.memory)
                 .font(.system(size: 12, design: .monospaced))
                 .foregroundStyle(Color.white.opacity(0.7))
                 .padding(.trailing, 16)
 
-            // QUIT button — CSS: padding 4px 12px, radius 9999px, JetBrains Mono bold 10px, color #FF453A
             Text("QUIT")
                 .font(.system(size: 10, weight: .bold, design: .monospaced))
                 .foregroundStyle(Color(hex: "FF453A"))
                 .padding(.vertical, 4)
                 .padding(.horizontal, 12)
-                .background(
-                    Capsule()
-                        .fill(Color(hex: "FF453A").opacity(0.1))
-                )
+                .background(Capsule().fill(Color(hex: "FF453A").opacity(0.1)))
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.white.opacity(0.03))
+        )
+        .opacity(0.5)
+    }
+
+    // MARK: - Live App Row (wired QUIT button)
+
+    @ViewBuilder
+    private func liveAppRow(_ app: RunningEntry) -> some View {
+        LiveAppRowView(app: app) {
+            forceQuit(app)
+        }
+    }
+
+    // MARK: - NSWorkspace
+
+    private func refreshApps() {
+        let selfBundleID = Bundle.main.bundleIdentifier ?? "com.utilitynotch"
+        let raw = NSWorkspace.shared.runningApplications.filter { app in
+            guard app.activationPolicy == .regular else { return false }
+            guard app.bundleIdentifier != selfBundleID else { return false }
+            return true
+        }
+        let entries = raw.map { app -> RunningEntry in
+            // Rough memory heuristic for display; real memory query needs privilege escalation
+            RunningEntry(
+                id: app.processIdentifier,
+                name: app.localizedName ?? "Unknown",
+                category: categoryForApp(app),
+                color: colorForApp(app),
+                memory: "— MB",
+                pid: app.processIdentifier
+            )
+        }
+        .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        withAnimation(.easeOut(duration: 0.2)) { runningApps = entries }
+    }
+
+    private func startPolling() {
+        refreshTimer?.invalidate()
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { _ in
+            Task { @MainActor in refreshApps() }
+        }
+    }
+
+    private func forceQuit(_ app: RunningEntry) {
+        guard let running = NSWorkspace.shared.runningApplications.first(where: { $0.processIdentifier == app.pid })
+        else { return }
+        _ = running.forceTerminate()
+        // Optimistic remove — next poll will also clean up
+        withAnimation(.easeOut(duration: 0.2)) {
+            runningApps.removeAll { $0.pid == app.pid }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { refreshApps() }
+    }
+
+    // MARK: - Category / Color helpers
+
+    private func categoryForApp(_ app: NSRunningApplication) -> String {
+        let id = app.bundleIdentifier?.lowercased() ?? ""
+        if id.contains("xcode") || id.contains("terminal") || id.contains("instruments") { return "Developer Tools" }
+        if id.contains("figma") || id.contains("sketch") || id.contains("pixelmator") { return "Design Tools" }
+        if id.contains("safari") || id.contains("chrome") || id.contains("firefox") { return "Web Browser" }
+        if id.contains("simulator") { return "Developer Tools" }
+        return "Utilities"
+    }
+
+    private func colorForApp(_ app: NSRunningApplication) -> Color {
+        let id = app.bundleIdentifier?.lowercased() ?? ""
+        if id.contains("xcode") || id.contains("safari") { return Color(hex: "0A84FF") }
+        if id.contains("figma") { return Color(hex: "A259FF") }
+        if id.contains("simulator") { return Color(hex: "FF9F0A") }
+        if id.contains("terminal") { return Color(hex: "30D158") }
+        return Color(hex: "636366")
+    }
+}
+
+// MARK: - Live App Row View
+
+private struct LiveAppRowView: View {
+    let app: ActiveAppsModuleView.RunningEntry
+    let onQuit: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        HStack(spacing: 0) {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(app.color)
+                .frame(width: 28, height: 28)
+                .padding(.trailing, 12)
+
+            VStack(alignment: .leading, spacing: 0) {
+                Text(app.name)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.85))
+                    .lineLimit(1)
+                Text(app.category.uppercased())
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(Color.white.opacity(0.4))
+                    .kerning(0.5)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            // QUIT button — wired to forceTerminate
+            Button(action: onQuit) {
+                Text("QUIT")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Color(hex: "FF453A"))
+                    .padding(.vertical, 4)
+                    .padding(.horizontal, 12)
+                    .background(
+                        Capsule()
+                            .fill(Color(hex: "FF453A").opacity(isHovering ? 0.2 : 0.1))
+                    )
+            }
+            .buttonStyle(.plain)
+            .onHover { h in withAnimation(.easeOut(duration: 0.12)) { isHovering = h } }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)

@@ -19,8 +19,8 @@ struct MusicModuleView: View {
                 }
             },
             statusDotColor: Color.white.opacity(0.2),
-            statusLeft: "NOW PLAYING VIA MEDIAPLAYER",
-            statusRight: "1:38 / 4:03",
+            statusLeft: "CONNECT A PLAYER",
+            statusRight: "DEMO",
             actionButton: nil
         ) {
             musicContent
@@ -61,7 +61,7 @@ struct MusicModuleView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     // Track title
                     // CSS: Inter weight 700, size 24px, line-height 30px, #FFFFFF
-                    Text("Blinding Lights")
+                    Text("Midnight City")
                         .font(.system(size: 24, weight: .bold))
                         .foregroundStyle(Color.white)
                         .lineLimit(1)
@@ -70,7 +70,7 @@ struct MusicModuleView: View {
 
                     // Artist
                     // CSS: Inter weight 400, size 14px, line-height 21px, rgba(255,255,255,0.5)
-                    Text("The Weeknd — After Hours")
+                    Text("M83 — Hurry Up, We're Dreaming")
                         .font(.system(size: 14, weight: .regular))
                         .foregroundStyle(Color.white.opacity(0.5))
                         .lineLimit(2)

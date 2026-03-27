@@ -1,9 +1,22 @@
 import SwiftUI
+import EventKit
 
-/// Calendar module — full-shell Figma implementation.
+/// Calendar module — full-shell Figma implementation with EventKit integration.
+/// Shows real events when authorized; falls back to dummy data with PERMISSION REQUIRED footer.
 /// CSS source: /DesignReference/Css/calendar.css
 struct CalendarModuleView: View {
     @Environment(AppState.self) private var appState
+
+    // MARK: - Auth state
+    @State private var authStatus: EKAuthorizationStatus = EKEventStore.authorizationStatus(for: .event)
+    @State private var ekEvents: [EKEvent] = []
+
+    private var isAuthorized: Bool {
+        if #available(macOS 14.0, *) { return authStatus == .fullAccess }
+        return authStatus == .authorized
+    }
+
+    // MARK: - Display models
 
     private struct WeekDay {
         let abbrev: String
@@ -19,21 +32,57 @@ struct CalendarModuleView: View {
         let hasVideo: Bool
     }
 
-    private let weekDays: [WeekDay] = [
-        WeekDay(abbrev: "MON", day: 23, isToday: false),
-        WeekDay(abbrev: "TUE", day: 24, isToday: false),
-        WeekDay(abbrev: "WED", day: 25, isToday: true),
-        WeekDay(abbrev: "THU", day: 26, isToday: false),
-        WeekDay(abbrev: "FRI", day: 27, isToday: false),
-        WeekDay(abbrev: "SAT", day: 28, isToday: false),
-        WeekDay(abbrev: "SUN", day: 29, isToday: false),
-    ]
-
-    private let events: [CalEvent] = [
+    // Dummy events shown when permission is not yet granted
+    private let dummyEvents: [CalEvent] = [
         CalEvent(time: "09:00", title: "Team Standup",     accentColor: Color(hex: "42E355"), hasVideo: true),
         CalEvent(time: "14:00", title: "Design Review",    accentColor: Color(hex: "0A84FF"), hasVideo: true),
         CalEvent(time: "16:30", title: "1:1 with Manager", accentColor: Color(hex: "A259FF"), hasVideo: false),
     ]
+
+    // MARK: - Computed real-date values
+
+    private var currentWeekDays: [WeekDay] {
+        let cal = Calendar.current
+        let today = Date()
+        let weekday = cal.component(.weekday, from: today)
+        let firstWeekday = cal.firstWeekday
+        let offset = (weekday - firstWeekday + 7) % 7
+        guard let startOfWeek = cal.date(byAdding: .day, value: -offset, to: today) else { return [] }
+        let abbrevs = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"]
+        return (0..<7).compactMap { i -> WeekDay? in
+            guard let date = cal.date(byAdding: .day, value: i, to: startOfWeek) else { return nil }
+            let dayNum = cal.component(.day, from: date)
+            let wdIndex = cal.component(.weekday, from: date) - 1
+            return WeekDay(abbrev: abbrevs[wdIndex], day: dayNum, isToday: cal.isDateInToday(date))
+        }
+    }
+
+    private var currentDayNumber: String {
+        let f = DateFormatter(); f.dateFormat = "d"
+        return f.string(from: Date())
+    }
+
+    private var currentMonthYear: String {
+        let f = DateFormatter(); f.dateFormat = "MMMM yyyy"
+        return f.string(from: Date())
+    }
+
+    private var displayEvents: [CalEvent] {
+        if isAuthorized {
+            let formatter = DateFormatter(); formatter.dateFormat = "HH:mm"
+            return ekEvents.prefix(3).map { event in
+                CalEvent(
+                    time: event.isAllDay ? "All day" : formatter.string(from: event.startDate),
+                    title: event.title ?? "Untitled",
+                    accentColor: Color(nsColor: event.calendar.color ?? .systemBlue),
+                    hasVideo: false
+                )
+            }
+        }
+        return dummyEvents
+    }
+
+    // MARK: - Body
 
     var body: some View {
         ModuleShellView(
@@ -46,9 +95,9 @@ struct CalendarModuleView: View {
                     appState.selectModule(id)
                 }
             },
-            statusDotColor: Color.white.opacity(0.2),
-            statusLeft: "MARCH 2026",
-            statusRight: "3 UPCOMING",
+            statusDotColor: isAuthorized ? Color(hex: "32D74B") : Color.white.opacity(0.2),
+            statusLeft: isAuthorized ? currentMonthYear.uppercased() : "PERMISSION REQUIRED",
+            statusRight: isAuthorized ? "\(displayEvents.count) UPCOMING" : "DEMO DATA",
             actionButton: nil
         ) {
             // STEP 1: Hard cap the content area to 296pt
@@ -61,6 +110,10 @@ struct CalendarModuleView: View {
             }
             .frame(maxWidth: .infinity)
         }
+        .onAppear {
+            authStatus = EKEventStore.authorizationStatus(for: .event)
+            if isAuthorized { loadEvents() }
+        }
     }
 
     // MARK: - Date Row
@@ -69,22 +122,18 @@ struct CalendarModuleView: View {
 
     private var dateRow: some View {
         HStack(alignment: .bottom, spacing: 0) {
-
-            // Date number — 28pt bold
-            Text("25")
+            Text(currentDayNumber)
                 .font(.system(size: 28, weight: .bold))
                 .foregroundStyle(Color.white)
 
-            // Month + year — 13pt regular, bottom-aligned, 8pt left offset
-            Text("March 2026")
+            Text(currentMonthYear)
                 .font(.system(size: 13, weight: .regular))
                 .foregroundStyle(Color.white.opacity(0.5))
                 .padding(.leading, 8)
-                .padding(.bottom, 3)  // align to bottom of "25"
+                .padding(.bottom, 3)
 
             Spacer()
 
-            // Prev/next buttons — 24×24, subtle
             HStack(spacing: 8) {
                 navButton(icon: "chevron.left")
                 navButton(icon: "chevron.right")
@@ -111,7 +160,7 @@ struct CalendarModuleView: View {
 
     private var weekStrip: some View {
         HStack(spacing: 0) {
-            ForEach(weekDays, id: \.day) { day in
+            ForEach(currentWeekDays, id: \.day) { day in
                 weekDayCell(day)
             }
         }
@@ -124,7 +173,6 @@ struct CalendarModuleView: View {
     private func weekDayCell(_ day: WeekDay) -> some View {
         ZStack {
             if day.isToday {
-                // Fixed 44pt capsule — do not stretch to column width
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(Color(hex: "0A84FF"))
                     .frame(width: 44, height: 40)
@@ -164,7 +212,7 @@ struct CalendarModuleView: View {
 
     private var eventRows: some View {
         VStack(spacing: 6) {
-            ForEach(events) { event in
+            ForEach(displayEvents) { event in
                 eventRow(event)
                     .frame(height: 44)
             }
@@ -179,19 +227,16 @@ struct CalendarModuleView: View {
                 .frame(height: 44)
 
             HStack(spacing: 0) {
-                // Color bar — 3×20pt
                 RoundedRectangle(cornerRadius: 2, style: .continuous)
                     .fill(event.accentColor)
                     .frame(width: 3, height: 20)
                     .padding(.leading, 12)
 
-                // Time
                 Text(event.time)
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(Color.white.opacity(0.45))
                     .padding(.leading, 10)
 
-                // Title
                 Text(event.title)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Color.white.opacity(0.85))
@@ -208,5 +253,20 @@ struct CalendarModuleView: View {
                 }
             }
         }
+    }
+
+    // MARK: - Data Loading
+
+    private func loadEvents() {
+        guard isAuthorized else { return }
+        let cal = Calendar.current
+        let start = cal.startOfDay(for: Date())
+        let end = cal.date(byAdding: .day, value: 7, to: start) ?? start
+        let predicate = sharedEventStore.predicateForEvents(withStart: start, end: end, calendars: nil)
+        ekEvents = sharedEventStore.events(matching: predicate)
+            .filter { !$0.isAllDay }
+            .sorted { $0.startDate < $1.startDate }
+            .prefix(3)
+            .map { $0 }
     }
 }
