@@ -33,7 +33,17 @@ struct QuickNotesModuleView: View {
             statusDotColor: Color.white.opacity(0.2),
             statusLeft: "SAVED LOCALLY",
             statusRight: isUsingDummy ? "4 NOTES" : "\(appState.quickNotes.count) NOTES",
-            actionButton: { makeAddActionButton(icon: "plus", label: "NEW NOTE") }
+            actionButton: {
+                AnyView(
+                    Button {
+                        isInputFocused = true
+                        appState.dismissalLocks.insert(.activeEditing)
+                    } label: {
+                        makeAddActionButton(icon: "plus", label: "NEW NOTE")
+                    }
+                    .buttonStyle(.plain)
+                )
+            }
         ) {
             VStack(spacing: 8) {
                 // Input area: title field + body TextEditor
