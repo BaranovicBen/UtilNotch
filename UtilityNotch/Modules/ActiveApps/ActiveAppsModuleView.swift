@@ -16,6 +16,7 @@ struct ActiveAppsModuleView: View {
         let color: Color
         let memory: String
         let pid: pid_t
+        let icon: NSImage?
     }
 
     @State private var runningApps: [RunningEntry] = []
@@ -80,10 +81,15 @@ struct ActiveAppsModuleView: View {
     @ViewBuilder
     private func dummyAppRow(_ app: (name: String, category: String, color: Color, memory: String)) -> some View {
         HStack(spacing: 0) {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(app.color)
-                .frame(width: 28, height: 28)
-                .padding(.trailing, 12)
+            ZStack {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color.white.opacity(0.10))
+                    .frame(width: 28, height: 28)
+                Image(systemName: "app.fill")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(Color.white.opacity(0.4))
+            }
+            .padding(.trailing, 12)
 
             VStack(alignment: .leading, spacing: 0) {
                 Text(app.name)
@@ -140,14 +146,22 @@ struct ActiveAppsModuleView: View {
             return true
         }
         let entries = raw.map { app -> RunningEntry in
-            // Rough memory heuristic for display; real memory query needs privilege escalation
-            RunningEntry(
+            let iconImg: NSImage? = {
+                if let url = app.bundleURL {
+                    let img = NSWorkspace.shared.icon(forFile: url.path)
+                    img.size = NSSize(width: 28, height: 28)
+                    return img
+                }
+                return nil
+            }()
+            return RunningEntry(
                 id: app.processIdentifier,
                 name: app.localizedName ?? "Unknown",
                 category: categoryForApp(app),
                 color: colorForApp(app),
                 memory: "— MB",
-                pid: app.processIdentifier
+                pid: app.processIdentifier,
+                icon: iconImg
             )
         }
         .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
@@ -203,10 +217,21 @@ private struct LiveAppRowView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(app.color)
-                .frame(width: 28, height: 28)
-                .padding(.trailing, 12)
+            // App icon — real NSWorkspace icon, fallback to grey rect
+            Group {
+                if let icon = app.icon {
+                    Image(nsImage: icon)
+                        .resizable()
+                        .interpolation(.high)
+                        .frame(width: 28, height: 28)
+                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                } else {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(Color.white.opacity(0.10))
+                        .frame(width: 28, height: 28)
+                }
+            }
+            .padding(.trailing, 12)
 
             VStack(alignment: .leading, spacing: 0) {
                 Text(app.name)
