@@ -1,25 +1,48 @@
 import SwiftUI
 
-/// Todo module — full-shell Figma implementation.
+/// Todo module — full-shell Figma implementation, wired to AppState.
 /// CSS source: /DesignReference/Css/todo.css
 struct TodoModuleView: View {
     @Environment(AppState.self) private var appState
+    @State private var showAddInput: Bool = false
+    @State private var newTaskText: String = ""
+    @FocusState private var isNewTaskFocused: Bool
 
-    private struct Task: Identifiable {
-        let id = UUID()
+    // Dummy tasks for initial state (shown when appState.todoItems is empty)
+    private static let dummyTasks: [(text: String, timestamp: String, isDone: Bool)] = [
+        (text: "Fix parser bug",           timestamp: "09:41", isDone: false),
+        (text: "Write unit tests",          timestamp: "10:15", isDone: false),
+        (text: "Review pull request #42",   timestamp: "11:03", isDone: false),
+        (text: "Update dependencies",       timestamp: "08:30", isDone: true),
+        (text: "Ship v1.0 release notes",   timestamp: "08:00", isDone: true),
+    ]
+
+    private var isUsingDummy: Bool { appState.todoItems.isEmpty }
+
+    // Unified display model so dummy and real items render identically
+    private struct DisplayTask: Identifiable {
+        let id: UUID
         let text: String
         let timestamp: String
         let isComplete: Bool
+        let isInteractive: Bool
     }
 
-    // Dummy data: incomplete tasks first, complete at bottom.
-    private let tasks: [Task] = [
-        Task(text: "Fix parser bug",           timestamp: "09:41", isComplete: false),
-        Task(text: "Write unit tests",          timestamp: "10:15", isComplete: false),
-        Task(text: "Review pull request #42",   timestamp: "11:03", isComplete: false),
-        Task(text: "Update dependencies",       timestamp: "08:30", isComplete: true),
-        Task(text: "Ship v1.0 release notes",   timestamp: "08:00", isComplete: true),
-    ]
+    private var displayTasks: [DisplayTask] {
+        if isUsingDummy {
+            return Self.dummyTasks.map { t in
+                DisplayTask(id: UUID(), text: t.text, timestamp: t.timestamp,
+                            isComplete: t.isDone, isInteractive: false)
+            }
+        }
+        return appState.todoItems.map { item in
+            DisplayTask(id: item.id, text: item.title, timestamp: "—",
+                        isComplete: item.isDone, isInteractive: true)
+        }
+    }
+
+    private var completedCount: Int { isUsingDummy ? 2 : appState.completedCount }
+    private var remainingCount: Int { isUsingDummy ? 3 : appState.remainingCount }
 
     var body: some View {
         ModuleShellView(
@@ -33,13 +56,27 @@ struct TodoModuleView: View {
                 }
             },
             statusDotColor: Color.white.opacity(0.2),
-            statusLeft: "2 COMPLETED TODAY",
-            statusRight: "3 REMAINING",
-            actionButton: { makeAddActionButton(icon: "plus", label: "ADD TASK") }
+            statusLeft: "\(completedCount) COMPLETED TODAY",
+            statusRight: "\(remainingCount) REMAINING",
+            actionButton: {
+                AnyView(
+                    Button {
+                        showAddInput = true
+                        isNewTaskFocused = true
+                        appState.dismissalLocks.insert(.activeEditing)
+                    } label: {
+                        makeAddActionButton(icon: "plus", label: "ADD TASK")
+                    }
+                    .buttonStyle(.plain)
+                )
+            }
         ) {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 8) {
-                    ForEach(tasks) { task in
+                    if showAddInput {
+                        addInputRow
+                    }
+                    ForEach(displayTasks) { task in
                         taskRow(task)
                     }
                 }
@@ -47,15 +84,75 @@ struct TodoModuleView: View {
         }
     }
 
+    // MARK: - Add Input Row
+    // Same card style as task rows: bg rgba(255,255,255,0.03), radius 8px, padding 12px
+    // Text field: bg rgba(255,255,255,0.06), SF Pro Regular 14pt, placeholder white 25%
+
+    private var addInputRow: some View {
+        HStack(spacing: 8) {
+            TextField("", text: $newTaskText)
+                .textFieldStyle(.plain)
+                .font(.system(size: 14, weight: .regular))
+                .foregroundStyle(Color.white.opacity(0.85))
+                .focused($isNewTaskFocused)
+                .onSubmit { confirmAdd() }
+                .overlay(alignment: .leading) {
+                    if newTaskText.isEmpty {
+                        Text("New task…")
+                            .font(.system(size: 14, weight: .regular))
+                            .foregroundStyle(Color.white.opacity(0.25))
+                            .allowsHitTesting(false)
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(Color.white.opacity(0.06))
+                )
+
+            // Confirm button
+            Button { confirmAdd() } label: {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.8))
+                    .frame(width: 24, height: 24)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(Color.white.opacity(0.08))
+                    )
+            }
+            .buttonStyle(.plain)
+
+            // Cancel button
+            Button { cancelAdd() } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.5))
+                    .frame(width: 24, height: 24)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(Color.white.opacity(0.04))
+                    )
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(12)
+        .frame(minHeight: 45)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.white.opacity(0.03))
+        )
+        .onAppear { isNewTaskFocused = true }
+    }
+
     // MARK: - Task Row
     // CSS: padding 12px, bg rgba(255,255,255,0.03), radius 8px, height 45px
 
     @ViewBuilder
-    private func taskRow(_ task: Task) -> some View {
+    private func taskRow(_ task: DisplayTask) -> some View {
         HStack(spacing: 12) {
             // Checkbox
-            // Complete: bg #32D74B radius 9999px 20×20px with white checkmark
-            // Incomplete: border 1px rgba(255,255,255,0.3) radius 9999px 20×20px
             if task.isComplete {
                 ZStack {
                     Circle()
@@ -72,8 +169,6 @@ struct TodoModuleView: View {
             }
 
             // Task text
-            // Incomplete: Inter 400 14px rgba(255,255,255,0.85)
-            // Complete: same + text-decoration line-through, rgba(255,255,255,0.3)
             Text(task.text)
                 .font(.system(size: 14, weight: .regular))
                 .foregroundStyle(task.isComplete ? Color.white.opacity(0.3) : Color.white.opacity(0.85))
@@ -82,7 +177,6 @@ struct TodoModuleView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             // Timestamp
-            // CSS: JetBrains Mono 400 11px rgba(255,255,255,0.35)
             Text(task.timestamp)
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(Color.white.opacity(0.35))
@@ -93,5 +187,46 @@ struct TodoModuleView: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(Color.white.opacity(0.03))
         )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard task.isInteractive else { return }
+            toggleTask(task.id)
+        }
+    }
+
+    // MARK: - Actions
+
+    private func confirmAdd() {
+        let text = newTaskText.trimmingCharacters(in: .whitespaces)
+        guard !text.isEmpty else { cancelAdd(); return }
+        withAnimation(.easeOut(duration: 0.2)) {
+            appState.todoItems.insert(TodoItem(title: text), at: 0)
+        }
+        newTaskText = ""
+        showAddInput = false
+        appState.dismissalLocks.remove(.activeEditing)
+    }
+
+    private func cancelAdd() {
+        newTaskText = ""
+        showAddInput = false
+        appState.dismissalLocks.remove(.activeEditing)
+    }
+
+    private func toggleTask(_ id: UUID) {
+        guard let idx = appState.todoItems.firstIndex(where: { $0.id == id }) else { return }
+        let wasAlreadyDone = appState.todoItems[idx].isDone
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
+            appState.todoItems[idx].isDone.toggle()
+            // Completed tasks move to the bottom; un-checked tasks return before first done item
+            if !wasAlreadyDone {
+                let item = appState.todoItems.remove(at: idx)
+                appState.todoItems.append(item)
+            } else {
+                let item = appState.todoItems.remove(at: idx)
+                let insertIdx = appState.todoItems.firstIndex(where: { $0.isDone }) ?? appState.todoItems.count
+                appState.todoItems.insert(item, at: insertIdx)
+            }
+        }
     }
 }
