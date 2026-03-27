@@ -6,12 +6,34 @@ private struct ShowModuleSidebarKey: EnvironmentKey {
     static let defaultValue = true
 }
 
+private struct ShowDragHandleKey: EnvironmentKey {
+    static let defaultValue: Bool = true
+}
+
+private struct ShowModuleHeaderKey: EnvironmentKey {
+    static let defaultValue: Bool = true
+}
+
 extension EnvironmentValues {
     /// Set to false in Dynamic Island mode to suppress the inner sidebar rail
     /// (the outer UtilityRailView is the canonical sidebar there).
     var showModuleSidebar: Bool {
         get { self[ShowModuleSidebarKey.self] }
         set { self[ShowModuleSidebarKey.self] = newValue }
+    }
+
+    /// Set to false in Dynamic Island mode to suppress the module shell drag handle
+    /// (the DI wrapper renders its own capsule).
+    var showDragHandle: Bool {
+        get { self[ShowDragHandleKey.self] }
+        set { self[ShowDragHandleKey.self] = newValue }
+    }
+
+    /// Set to false in Dynamic Island mode to suppress the module shell header row
+    /// (the DI wrapper renders its own title area).
+    var showModuleHeader: Bool {
+        get { self[ShowModuleHeaderKey.self] }
+        set { self[ShowModuleHeaderKey.self] = newValue }
     }
 }
 
@@ -56,13 +78,15 @@ struct ModuleShellView<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     @Environment(\.showModuleSidebar) private var showSidebar
+    @Environment(\.showDragHandle) private var showDragHandle
+    @Environment(\.showModuleHeader) private var showModuleHeader
 
     var body: some View {
         HStack(spacing: 0) {
             // ── LEFT COLUMN: main content (fills all width minus 40px sidebar) ──
             VStack(spacing: 0) {
-                dragHandle
-                headerRow
+                if showDragHandle { dragHandle }
+                if showModuleHeader { headerRow }
                 contentSlot
                 footerBar
             }

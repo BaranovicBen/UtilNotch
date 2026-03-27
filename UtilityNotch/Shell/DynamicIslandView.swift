@@ -163,6 +163,8 @@ struct DynamicIslandView: View {
                 // Active module — inner sidebar suppressed; outer UtilityRailView is the sidebar
                 ActiveModuleContainerView()
                     .environment(\.showModuleSidebar, false)
+                    .environment(\.showDragHandle, false)
+                    .environment(\.showModuleHeader, false)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 14)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
