@@ -1,15 +1,5 @@
 import SwiftUI
 
-// MARK: - Display Task Model
-
-private struct TodoDisplayTask: Identifiable {
-    let id: UUID
-    let text: String
-    let timestamp: String
-    let isComplete: Bool
-    let isInteractive: Bool
-}
-
 /// Todo module — full-shell Figma implementation, wired to AppState.
 /// CSS source: /DesignReference/Css/todo.css
 struct TodoModuleView: View {
@@ -17,8 +7,10 @@ struct TodoModuleView: View {
     @State private var showAddInput: Bool = false
     @State private var newTaskText: String = ""
     @FocusState private var isNewTaskFocused: Bool
+    @State private var editingID: UUID? = nil
+    @State private var editDraft: String = ""
 
-    // Dummy tasks for initial state (shown when appState.todoItems is empty)
+    // Dummy tasks shown when data source is empty
     private static let dummyTasks: [(text: String, timestamp: String, isDone: Bool)] = [
         (text: "Fix parser bug",           timestamp: "09:41", isDone: false),
         (text: "Write unit tests",          timestamp: "10:15", isDone: false),
@@ -28,20 +20,6 @@ struct TodoModuleView: View {
     ]
 
     private var isUsingDummy: Bool { appState.todoItems.isEmpty }
-
-    private var displayTasks: [TodoDisplayTask] {
-        if isUsingDummy {
-            return Self.dummyTasks.map { t in
-                TodoDisplayTask(id: UUID(), text: t.text, timestamp: t.timestamp,
-                            isComplete: t.isDone, isInteractive: false)
-            }
-        }
-        return appState.todoItems.map { item in
-            TodoDisplayTask(id: item.id, text: item.title, timestamp: "—",
-                        isComplete: item.isDone, isInteractive: true)
-        }
-    }
-
     private var completedCount: Int { isUsingDummy ? 2 : appState.completedCount }
     private var remainingCount: Int { isUsingDummy ? 3 : appState.remainingCount }
 
@@ -72,22 +50,51 @@ struct TodoModuleView: View {
                 )
             }
         ) {
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 8) {
-                    if showAddInput {
-                        addInputRow
+            VStack(spacing: 0) {
+                if showAddInput {
+                    addInputRow
+                        .padding(.bottom, 8)
+                }
+
+                if isUsingDummy {
+                    // Non-interactive dummy list
+                    ScrollView(.vertical, showsIndicators: false) {
+                        VStack(spacing: 8) {
+                            ForEach(Self.dummyTasks, id: \.text) { t in
+                                dummyRow(text: t.text, timestamp: t.timestamp, isDone: t.isDone)
+                            }
+                        }
                     }
-                    ForEach(displayTasks) { task in
-                        taskRow(task)
+                } else {
+                    // Live list with drag-to-reorder
+                    List {
+                        ForEach(appState.todoItems) { item in
+                            liveRow(item)
+                                .padding(.bottom, 8)
+                                .listRowInsets(EdgeInsets())
+                                .listRowBackground(Color.clear)
+                                .listRowSeparator(.hidden)
+                        }
+                        .onMove { indices, newOffset in
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                                appState.todoItems.move(fromOffsets: indices, toOffset: newOffset)
+                                // Keep incomplete tasks above complete tasks
+                                let incomplete = appState.todoItems.filter { !$0.isDone }
+                                let complete = appState.todoItems.filter { $0.isDone }
+                                appState.todoItems = incomplete + complete
+                            }
+                            appState.dismissalLocks.remove(.moduleGesture)
+                        }
                     }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
+                    .background(Color.clear)
                 }
             }
         }
     }
 
     // MARK: - Add Input Row
-    // Same card style as task rows: bg rgba(255,255,255,0.03), radius 8px, padding 12px
-    // Text field: bg rgba(255,255,255,0.06), SF Pro Regular 14pt, placeholder white 25%
 
     private var addInputRow: some View {
         HStack(spacing: 8) {
@@ -112,7 +119,6 @@ struct TodoModuleView: View {
                         .fill(Color.white.opacity(0.06))
                 )
 
-            // Confirm button
             Button { confirmAdd() } label: {
                 Image(systemName: "checkmark")
                     .font(.system(size: 11, weight: .semibold))
@@ -125,7 +131,6 @@ struct TodoModuleView: View {
             }
             .buttonStyle(.plain)
 
-            // Cancel button
             Button { cancelAdd() } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 11, weight: .semibold))
@@ -147,18 +152,66 @@ struct TodoModuleView: View {
         .onAppear { isNewTaskFocused = true }
     }
 
-    // MARK: - Task Row
-    // CSS: padding 12px, bg rgba(255,255,255,0.03), radius 8px, height 45px
+    // MARK: - Dummy Row
 
     @ViewBuilder
-    private func taskRow(_ task: TodoDisplayTask) -> some View {
-        TaskRowView(task: task) {
-            guard task.isInteractive else { return }
-            toggleTask(task.id)
-        } onDelete: {
-            guard task.isInteractive else { return }
-            deleteTask(task.id)
+    private func dummyRow(text: String, timestamp: String, isDone: Bool) -> some View {
+        HStack(spacing: 12) {
+            if isDone {
+                ZStack {
+                    Circle().fill(Color(hex: "32D74B")).frame(width: 20, height: 20)
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(Color.white)
+                }
+            } else {
+                Circle()
+                    .strokeBorder(Color.white.opacity(0.3), lineWidth: 1)
+                    .frame(width: 20, height: 20)
+            }
+            Text(text)
+                .font(.system(size: 14, weight: .regular))
+                .foregroundStyle(isDone ? Color.white.opacity(0.3) : Color.white.opacity(0.85))
+                .strikethrough(isDone, color: Color.white.opacity(0.3))
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(timestamp)
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(Color.white.opacity(0.35))
         }
+        .padding(12)
+        .frame(minHeight: 45)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.white.opacity(0.03))
+        )
+        .opacity(0.5)
+    }
+
+    // MARK: - Live Row
+
+    @ViewBuilder
+    private func liveRow(_ item: TodoItem) -> some View {
+        LiveTaskRowView(
+            item: item,
+            isEditing: editingID == item.id,
+            editDraft: $editDraft,
+            onToggle: { toggleTask(item.id) },
+            onDelete: { deleteTask(item.id) },
+            onEdit: {
+                editingID = item.id
+                editDraft = item.title
+                appState.dismissalLocks.insert(.activeEditing)
+            },
+            onSaveEdit: { newTitle in
+                saveEdit(id: item.id, title: newTitle)
+            },
+            onCancelEdit: {
+                editingID = nil
+                editDraft = ""
+                appState.dismissalLocks.remove(.activeEditing)
+            }
+        )
     }
 
     // MARK: - Actions
@@ -186,12 +239,21 @@ struct TodoModuleView: View {
         }
     }
 
+    private func saveEdit(id: UUID, title: String) {
+        let trimmed = title.trimmingCharacters(in: .whitespaces)
+        if !trimmed.isEmpty, let idx = appState.todoItems.firstIndex(where: { $0.id == id }) {
+            appState.todoItems[idx].title = trimmed
+        }
+        editingID = nil
+        editDraft = ""
+        appState.dismissalLocks.remove(.activeEditing)
+    }
+
     private func toggleTask(_ id: UUID) {
         guard let idx = appState.todoItems.firstIndex(where: { $0.id == id }) else { return }
         let wasAlreadyDone = appState.todoItems[idx].isDone
-        withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
             appState.todoItems[idx].isDone.toggle()
-            // Completed tasks move to the bottom; un-checked tasks return before first done item
             if !wasAlreadyDone {
                 let item = appState.todoItems.remove(at: idx)
                 appState.todoItems.append(item)
@@ -204,20 +266,26 @@ struct TodoModuleView: View {
     }
 }
 
-// MARK: - Task Row View
+// MARK: - Live Task Row View
 
-private struct TaskRowView: View {
-    let task: TodoDisplayTask
+private struct LiveTaskRowView: View {
+    let item: TodoItem
+    let isEditing: Bool
+    @Binding var editDraft: String
     let onToggle: () -> Void
     let onDelete: () -> Void
+    let onEdit: () -> Void
+    let onSaveEdit: (String) -> Void
+    let onCancelEdit: () -> Void
 
     @State private var isHovering = false
+    @FocusState private var isEditFocused: Bool
 
     var body: some View {
         HStack(spacing: 12) {
-            // Checkbox
+            // Checkbox — also fires toggle
             Button(action: onToggle) {
-                if task.isComplete {
+                if item.isDone {
                     ZStack {
                         Circle()
                             .fill(Color(hex: "32D74B"))
@@ -233,33 +301,60 @@ private struct TaskRowView: View {
                 }
             }
             .buttonStyle(.plain)
-            .disabled(!task.isInteractive)
 
-            // Task text
-            Text(task.text)
-                .font(.system(size: 14, weight: .regular))
-                .foregroundStyle(task.isComplete ? Color.white.opacity(0.3) : Color.white.opacity(0.85))
-                .strikethrough(task.isComplete, color: Color.white.opacity(0.3))
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            // Inline edit field or task title
+            if isEditing {
+                TextField("", text: $editDraft)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 14, weight: .regular))
+                    .foregroundStyle(Color.white.opacity(0.85))
+                    .focused($isEditFocused)
+                    .onSubmit { onSaveEdit(editDraft) }
+                    .frame(maxWidth: .infinity)
+            } else {
+                Text(item.title)
+                    .font(.system(size: 14, weight: .regular))
+                    .foregroundStyle(item.isDone ? Color.white.opacity(0.3) : Color.white.opacity(0.85))
+                    .strikethrough(item.isDone, color: Color.white.opacity(0.3))
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
 
-            // Delete button (hover only)
-            if isHovering && task.isInteractive {
-                Button(action: onDelete) {
-                    Image(systemName: "trash")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Color.white.opacity(0.4))
-                        .frame(width: 24, height: 24)
+            // Right side: confirm (edit mode) / action buttons (hover) / timestamp
+            if isEditing {
+                Button { onSaveEdit(editDraft) } label: {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Color.white.opacity(0.8))
+                        .frame(width: 28, height: 28)
                         .background(
                             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(Color.white.opacity(0.04))
+                                .fill(Color.white.opacity(0.08))
                         )
                 }
                 .buttonStyle(.plain)
+            } else if isHovering {
+                HStack(spacing: 6) {
+                    Button(action: onEdit) {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 12))
+                            .foregroundStyle(Color.white.opacity(0.40))
+                            .frame(width: 28, height: 28)
+                    }
+                    .buttonStyle(.plain)
+
+                    Button(action: onDelete) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 12))
+                            .foregroundStyle(Color(hex: "FF453A"))
+                            .frame(width: 28, height: 28)
+                    }
+                    .buttonStyle(.plain)
+                    .transition(.opacity.combined(with: .move(edge: .trailing)))
+                }
                 .transition(.opacity)
             } else {
-                // Timestamp (hidden when hovering to make room for delete)
-                Text(task.timestamp)
+                Text("—")
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(Color.white.opacity(0.35))
             }
@@ -268,9 +363,22 @@ private struct TaskRowView: View {
         .frame(minHeight: 45)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.white.opacity(isHovering && task.isInteractive ? 0.05 : 0.03))
+                .fill(Color.white.opacity(isEditing ? 0.07 : (isHovering ? 0.05 : 0.03)))
         )
         .contentShape(Rectangle())
-        .onHover { h in withAnimation(.easeInOut(duration: 0.12)) { isHovering = h } }
+        .onTapGesture {
+            guard !isEditing else { return }
+            onToggle()
+        }
+        .onHover { h in withAnimation(.easeInOut(duration: 0.15)) { isHovering = h } }
+        .onChange(of: isEditing) { _, editing in
+            if editing {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    isEditFocused = true
+                }
+            } else {
+                isEditFocused = false
+            }
+        }
     }
 }
