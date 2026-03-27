@@ -58,15 +58,13 @@ struct MusicModuleView: View {
 
                 // Track info column
                 // CSS: padding 8px 0 0, container 135.42×128px
-                VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 8) {
                     // Track title
                     // CSS: Inter weight 700, size 24px, line-height 30px, #FFFFFF
                     Text("Midnight City")
                         .font(.system(size: 24, weight: .bold))
                         .foregroundStyle(Color.white)
                         .lineLimit(1)
-
-                    Spacer().frame(height: 16)
 
                     // Artist
                     // CSS: Inter weight 400, size 14px, line-height 21px, rgba(255,255,255,0.5)
@@ -75,17 +73,15 @@ struct MusicModuleView: View {
                         .foregroundStyle(Color.white.opacity(0.5))
                         .lineLimit(2)
 
-                    Spacer()
+                    // ── Sound wave visualiser ─────────────────────────
+                    SoundWaveView(isPlaying: isPlaying, colors: [Color.white.opacity(0.5), Color.white])
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .clipped()
                 }
                 .frame(height: 148)
                 .padding(.top, 8)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-
-            // ── Sound wave visualiser ─────────────────────────────────
-            SoundWaveView(isPlaying: isPlaying, colors: [Color.white.opacity(0.5), Color.white])
-                .frame(height: 44)
-                .frame(maxWidth: .infinity)
 
             Spacer()
 
