@@ -5,7 +5,6 @@ import SwiftUI
 private struct TodoDisplayTask: Identifiable {
     let id: UUID
     let text: String
-    let description: String?
     let timestamp: String
     let isComplete: Bool
     let isInteractive: Bool
@@ -17,7 +16,6 @@ struct TodoModuleView: View {
     @Environment(AppState.self) private var appState
     @State private var showAddInput: Bool = false
     @State private var newTaskText: String = ""
-    @State private var newTaskDesc: String = ""
     @FocusState private var isNewTaskFocused: Bool
 
     // Dummy tasks for initial state (shown when appState.todoItems is empty)
@@ -34,12 +32,12 @@ struct TodoModuleView: View {
     private var displayTasks: [TodoDisplayTask] {
         if isUsingDummy {
             return Self.dummyTasks.map { t in
-                TodoDisplayTask(id: UUID(), text: t.text, description: nil, timestamp: t.timestamp,
+                TodoDisplayTask(id: UUID(), text: t.text, timestamp: t.timestamp,
                             isComplete: t.isDone, isInteractive: false)
             }
         }
         return appState.todoItems.map { item in
-            TodoDisplayTask(id: item.id, text: item.title, description: item.description, timestamp: "—",
+            TodoDisplayTask(id: item.id, text: item.title, timestamp: "—",
                         isComplete: item.isDone, isInteractive: true)
         }
     }
@@ -92,51 +90,27 @@ struct TodoModuleView: View {
     // Text field: bg rgba(255,255,255,0.06), SF Pro Regular 14pt, placeholder white 25%
 
     private var addInputRow: some View {
-        HStack(alignment: .top, spacing: 8) {
-            VStack(spacing: 6) {
-                // Title field
-                TextField("", text: $newTaskText)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 14, weight: .regular))
-                    .foregroundStyle(Color.white.opacity(0.85))
-                    .focused($isNewTaskFocused)
-                    .onSubmit { confirmAdd() }
-                    .overlay(alignment: .leading) {
-                        if newTaskText.isEmpty {
-                            Text("New task…")
-                                .font(.system(size: 14, weight: .regular))
-                                .foregroundStyle(Color.white.opacity(0.25))
-                                .allowsHitTesting(false)
-                        }
+        HStack(spacing: 8) {
+            TextField("", text: $newTaskText)
+                .textFieldStyle(.plain)
+                .font(.system(size: 14, weight: .regular))
+                .foregroundStyle(Color.white.opacity(0.85))
+                .focused($isNewTaskFocused)
+                .onSubmit { confirmAdd() }
+                .overlay(alignment: .leading) {
+                    if newTaskText.isEmpty {
+                        Text("New task…")
+                            .font(.system(size: 14, weight: .regular))
+                            .foregroundStyle(Color.white.opacity(0.25))
+                            .allowsHitTesting(false)
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(Color.white.opacity(0.06))
-                    )
-
-                // Description field
-                TextField("", text: $newTaskDesc)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 12, weight: .regular))
-                    .foregroundStyle(Color.white.opacity(0.6))
-                    .onSubmit { confirmAdd() }
-                    .overlay(alignment: .leading) {
-                        if newTaskDesc.isEmpty {
-                            Text("Add description…")
-                                .font(.system(size: 12, weight: .regular))
-                                .foregroundStyle(Color.white.opacity(0.2))
-                                .allowsHitTesting(false)
-                        }
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(Color.white.opacity(0.04))
-                    )
-            }
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(Color.white.opacity(0.06))
+                )
 
             // Confirm button
             Button { confirmAdd() } label: {
@@ -165,6 +139,7 @@ struct TodoModuleView: View {
             .buttonStyle(.plain)
         }
         .padding(12)
+        .frame(minHeight: 45)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(Color.white.opacity(0.03))
@@ -191,22 +166,16 @@ struct TodoModuleView: View {
     private func confirmAdd() {
         let text = newTaskText.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty else { cancelAdd(); return }
-        let desc = newTaskDesc.trimmingCharacters(in: .whitespaces)
         withAnimation(.easeOut(duration: 0.2)) {
-            appState.todoItems.insert(
-                TodoItem(title: text, description: desc.isEmpty ? nil : desc),
-                at: 0
-            )
+            appState.todoItems.insert(TodoItem(title: text), at: 0)
         }
         newTaskText = ""
-        newTaskDesc = ""
         showAddInput = false
         appState.dismissalLocks.remove(.activeEditing)
     }
 
     private func cancelAdd() {
         newTaskText = ""
-        newTaskDesc = ""
         showAddInput = false
         appState.dismissalLocks.remove(.activeEditing)
     }
@@ -266,22 +235,13 @@ private struct TaskRowView: View {
             .buttonStyle(.plain)
             .disabled(!task.isInteractive)
 
-            // Task text + optional description
-            VStack(alignment: .leading, spacing: 2) {
-                Text(task.text)
-                    .font(.system(size: 14, weight: .regular))
-                    .foregroundStyle(task.isComplete ? Color.white.opacity(0.3) : Color.white.opacity(0.85))
-                    .strikethrough(task.isComplete, color: Color.white.opacity(0.3))
-                    .lineLimit(1)
-
-                if let desc = task.description, !desc.isEmpty {
-                    Text(desc)
-                        .font(.system(size: 12, weight: .regular))
-                        .foregroundStyle(Color.white.opacity(0.4))
-                        .lineLimit(1)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            // Task text
+            Text(task.text)
+                .font(.system(size: 14, weight: .regular))
+                .foregroundStyle(task.isComplete ? Color.white.opacity(0.3) : Color.white.opacity(0.85))
+                .strikethrough(task.isComplete, color: Color.white.opacity(0.3))
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
             // Delete button (hover only)
             if isHovering && task.isInteractive {
