@@ -21,42 +21,66 @@ struct DynamicIslandView: View {
         VStack(spacing: 0) {
         ZStack(alignment: .top) {
             // ── Morphing capsule background ─────────────────────────
-            RoundedRectangle(cornerRadius: isExpanded ? UNConstants.panelCornerRadius : collapsedHeight / 2,
-                             style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    RoundedRectangle(cornerRadius: isExpanded ? UNConstants.panelCornerRadius : collapsedHeight / 2,
-                                     style: .continuous)
-                        .fill(UNConstants.panelBackground)
+            // DI expanded: sharp top corners (flush with notch/bezel), rounded bottom.
+            // Collapsed pill: uniform corner radius.
+            UnevenRoundedRectangle(
+                topLeadingRadius:     isExpanded ? 0 : collapsedHeight / 2,
+                bottomLeadingRadius:  isExpanded ? UNConstants.panelCornerRadius : collapsedHeight / 2,
+                bottomTrailingRadius: isExpanded ? UNConstants.panelCornerRadius : collapsedHeight / 2,
+                topTrailingRadius:    isExpanded ? 0 : collapsedHeight / 2,
+                style: .continuous
+            )
+            .fill(.ultraThinMaterial)
+            .overlay(
+                UnevenRoundedRectangle(
+                    topLeadingRadius:     isExpanded ? 0 : collapsedHeight / 2,
+                    bottomLeadingRadius:  isExpanded ? UNConstants.panelCornerRadius : collapsedHeight / 2,
+                    bottomTrailingRadius: isExpanded ? UNConstants.panelCornerRadius : collapsedHeight / 2,
+                    topTrailingRadius:    isExpanded ? 0 : collapsedHeight / 2,
+                    style: .continuous
                 )
-                .overlay(
-                    RoundedRectangle(cornerRadius: isExpanded ? UNConstants.panelCornerRadius : collapsedHeight / 2,
-                                     style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                .fill(UNConstants.panelBackground)
+            )
+            .overlay(
+                // Ghost border (specular edge highlight). Top edge hidden by hardware notch.
+                UnevenRoundedRectangle(
+                    topLeadingRadius:     isExpanded ? 0 : collapsedHeight / 2,
+                    bottomLeadingRadius:  isExpanded ? UNConstants.panelCornerRadius : collapsedHeight / 2,
+                    bottomTrailingRadius: isExpanded ? UNConstants.panelCornerRadius : collapsedHeight / 2,
+                    topTrailingRadius:    isExpanded ? 0 : collapsedHeight / 2,
+                    style: .continuous
                 )
-                .overlay(
-                    Group {
-                        if isExpanded {
-                            RoundedRectangle(cornerRadius: UNConstants.panelCornerRadius, style: .continuous)
-                                .fill(
-                                    RadialGradient(
-                                        gradient: Gradient(colors: [
-                                            Color(hex: "0A84FF").opacity(UNConstants.panelGlowOpacity),
-                                            Color.clear
-                                        ]),
-                                        center: .topLeading,
-                                        startRadius: 0,
-                                        endRadius: 300
-                                    )
-                                )
-                        }
+                .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+            )
+            .overlay(
+                Group {
+                    if isExpanded {
+                        UnevenRoundedRectangle(
+                            topLeadingRadius: 0,
+                            bottomLeadingRadius: UNConstants.panelCornerRadius,
+                            bottomTrailingRadius: UNConstants.panelCornerRadius,
+                            topTrailingRadius: 0,
+                            style: .continuous
+                        )
+                        .fill(
+                            RadialGradient(
+                                gradient: Gradient(colors: [
+                                    Color(hex: "0A84FF").opacity(UNConstants.panelGlowOpacity),
+                                    Color.clear
+                                ]),
+                                center: .topLeading,
+                                startRadius: 0,
+                                endRadius: 300
+                            )
+                        )
                     }
-                )
-                .shadow(color: .black.opacity(isExpanded ? 0.4 : 0.25), radius: isExpanded ? 28 : 12, y: isExpanded ? 8 : 4)
-                .frame(
-                    width:  isExpanded ? expandedWidth  : collapsedWidth,
-                    height: isExpanded ? expandedHeight : collapsedHeight
-                )
+                }
+            )
+            .shadow(color: .black.opacity(isExpanded ? 0.4 : 0.25), radius: isExpanded ? 28 : 12, y: isExpanded ? 8 : 4)
+            .frame(
+                width:  isExpanded ? expandedWidth  : collapsedWidth,
+                height: isExpanded ? expandedHeight : collapsedHeight
+            )
 
             // ── Collapsed indicator (pill content) ──────────────────
             if !isExpanded {
@@ -76,8 +100,11 @@ struct DynamicIslandView: View {
         }
         // Clip to the current pill/panel shape so content never overflows during morph
         .clipShape(
-            RoundedRectangle(
-                cornerRadius: isExpanded ? UNConstants.panelCornerRadius : collapsedHeight / 2,
+            UnevenRoundedRectangle(
+                topLeadingRadius:     isExpanded ? 0 : collapsedHeight / 2,
+                bottomLeadingRadius:  isExpanded ? UNConstants.panelCornerRadius : collapsedHeight / 2,
+                bottomTrailingRadius: isExpanded ? UNConstants.panelCornerRadius : collapsedHeight / 2,
+                topTrailingRadius:    isExpanded ? 0 : collapsedHeight / 2,
                 style: .continuous
             )
         )
