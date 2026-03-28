@@ -1,13 +1,16 @@
 import SwiftUI
 
+/// The one canonical shell layout, shared by both DI and Extended Panel modes.
+///
+/// Lives ABOVE the module-switching layer (ActiveModuleContainerView) so SwiftUI
+/// never recreates it on module switch. Only the content slot (ActiveModuleContainerView)
+/// updates when the active module changes.
+///
+/// All header/footer metadata (title, footer strings, action button) is read
+/// reactively from AppState, where it is pushed by ModuleShellView on each
+/// module view's appear / onChange cycle.
 struct CanonicalShellView<Content: View>: View {
-
-    let moduleTitle: String
-    let moduleIcon: String
-    let statusDotColor: Color   // kept for API compat, not rendered
-    let statusLeft: String
-    let statusRight: String
-    let actionButton: (() -> AnyView)?
+    @Environment(AppState.self) private var appState
     @ViewBuilder let content: () -> Content
 
     var body: some View {
@@ -31,15 +34,20 @@ struct CanonicalShellView<Content: View>: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            Text(moduleTitle)
+            Text(appState.moduleTitle)
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(.white)
                 .lineLimit(1)
+                // Crossfade title text to match content area transition
+                .animation(.easeInOut(duration: 0.22), value: appState.activeModuleID)
 
             Spacer()
 
-            if let actionButton {
-                actionButton()
+            // Action button — re-read when moduleActionButtonRevision changes
+            if let builder = appState.moduleActionButtonBuilder {
+                let _ = appState.moduleActionButtonRevision
+                builder()
+                    .animation(.easeInOut(duration: 0.22), value: appState.moduleActionButtonRevision)
             }
         }
         .padding(.horizontal, UNConstants.headerPaddingH)
@@ -61,19 +69,21 @@ struct CanonicalShellView<Content: View>: View {
 
     private var footer: some View {
         HStack(spacing: 0) {
-            Text(statusLeft)
+            Text(appState.moduleFooterLeft)
                 .font(.system(size: 10, design: .monospaced))
                 .foregroundStyle(Color.white.opacity(0.60))
                 .textCase(.uppercase)
                 .kerning(0.08 * 10)
+                .animation(.easeInOut(duration: 0.22), value: appState.moduleFooterLeft)
 
             Spacer()
 
-            Text(statusRight)
+            Text(appState.moduleFooterRight)
                 .font(.system(size: 10, design: .monospaced))
                 .foregroundStyle(Color.white.opacity(0.60))
                 .textCase(.uppercase)
                 .kerning(0.08 * 10)
+                .animation(.easeInOut(duration: 0.22), value: appState.moduleFooterRight)
         }
         .padding(.horizontal, UNConstants.footerPaddingH)
         .frame(height: UNConstants.footerHeight)

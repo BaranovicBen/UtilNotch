@@ -148,6 +148,41 @@ final class AppState {
     var completedCount: Int { todoItems.filter { $0.isDone }.count }
     var remainingCount: Int { todoItems.count - completedCount }
 
+    // MARK: - Module UI Metadata
+    // Set by the active module view (via ModuleShellView) on appear/change.
+    // Read by CanonicalShellView, which lives above the module-switching layer.
+    // This is what allows the shell to be stable across module switches.
+
+    /// Module title shown in the shell header (e.g. "Todo", not "Todo List")
+    var moduleTitle: String = ""
+
+    /// Footer left text — dynamic (e.g. "3 REMAINING") — updated on appear and on change
+    var moduleFooterLeft: String = ""
+
+    /// Footer right text — dynamic
+    var moduleFooterRight: String = ""
+
+    /// Incremented each time the module action button changes.
+    /// CanonicalShellView observes this to know when to re-read the builder.
+    var moduleActionButtonRevision: Int = 0
+
+    /// Non-observable store for the current module's header action button builder.
+    /// Access via moduleActionButtonBuilder; trigger a re-render by bumping moduleActionButtonRevision.
+    @ObservationIgnored
+    private let _moduleActionButtonStore = _ModuleActionButtonStore()
+
+    /// The current module's action button factory closure, or nil if the module has none.
+    var moduleActionButtonBuilder: (() -> AnyView)? {
+        _moduleActionButtonStore.build
+    }
+
+    /// Call from a module view's onAppear to register its header action button.
+    /// Pass nil if the module has no action button.
+    func setModuleActionButton(_ build: (() -> AnyView)?) {
+        _moduleActionButtonStore.build = build
+        moduleActionButtonRevision &+= 1
+    }
+
     // MARK: - Quick Notes / Shared Drop Payloads
 
     private var _quickNotes: [QuickNote] = []
@@ -217,6 +252,15 @@ final class AppState {
         )
         persistence.save(snapshot, key: .settings)
     }
+}
+
+// MARK: - Internal helper (module action button store)
+
+/// Reference-type store for the current module's action button builder.
+/// Stored outside @Observable tracking so the closure is not diffed by the observation system.
+/// CanonicalShellView triggers re-reads via AppState.moduleActionButtonRevision instead.
+private final class _ModuleActionButtonStore {
+    var build: (() -> AnyView)?
 }
 
 // MARK: - Dismissal Lock

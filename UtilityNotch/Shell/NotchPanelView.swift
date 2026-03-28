@@ -8,10 +8,11 @@ struct NotchPanelView: View {
     @State private var isPanelDropTargeted = false
     
     var body: some View {
-        // ModuleShellView (inside each module view) handles drag handle,
-        // header, content, footer, and the 40px sidebar rail.
-        ActiveModuleContainerView()
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // CanonicalShellView is the stable shell — it never rebuilds on module switch.
+        // Only its content slot (ActiveModuleContainerView) updates when active module changes.
+        CanonicalShellView {
+            ActiveModuleContainerView()
+        }
         .frame(width: UNConstants.panelWidth, height: UNConstants.panelHeight)
         .background {
             ZStack {

@@ -223,12 +223,17 @@ struct DynamicIslandView: View {
         }
     }
 
-    // MARK: - Expanded Content (same module views as Expanded Panel)
+    // MARK: - Expanded Content
 
+    // CanonicalShellView is the stable shell that hosts the switching content slot.
+    // It lives here, above ActiveModuleContainerView, so switching modules only
+    // updates the content — never the shell, header, footer, or sidebar.
     @ViewBuilder
     private var expandedContent: some View {
-        ActiveModuleContainerView()
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        CanonicalShellView {
+            ActiveModuleContainerView()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - Drop Handling

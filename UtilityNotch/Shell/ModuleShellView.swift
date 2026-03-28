@@ -2,7 +2,7 @@ import SwiftUI
 
 // MARK: - Environment Keys
 // Kept for source compatibility with module views that set them.
-// They are no longer read by ModuleShellView — CanonicalShellView has no env-key branching.
+// They are no longer read by CanonicalShellView — the shell has no env-key branching.
 
 private struct ShowModuleSidebarKey: EnvironmentKey { static let defaultValue = true }
 private struct ShowDragHandleKey:    EnvironmentKey { static let defaultValue: Bool = true }
@@ -48,12 +48,15 @@ struct ModuleNavItem: Identifiable {
 
 // MARK: - ModuleShellView
 
-/// Backward-compatible shim over CanonicalShellView.
+/// Transparent pass-through that pushes module UI metadata into AppState.
 ///
-/// All 11 module views call this with the same signature they always have.
-/// The `modules`, `activeModuleID`, and `onModuleSelect` parameters are accepted
-/// but no longer forwarded — CanonicalShellView reads navigation state from AppState
-/// directly via SidebarRailView.
+/// Previously, this was a thin shim over CanonicalShellView. Now CanonicalShellView
+/// lives ABOVE the module-switching layer (in DynamicIslandView and NotchPanelView)
+/// and reads all metadata reactively from AppState. ModuleShellView's job is to
+/// push the module-specific title, footer strings, and action button into AppState
+/// on appear and whenever those values change.
+///
+/// All 7 module views call this with the same external API — no module changes needed.
 struct ModuleShellView<Content: View>: View {
     let moduleTitle: String
     let moduleIcon: String
@@ -61,22 +64,24 @@ struct ModuleShellView<Content: View>: View {
     let modules: [ModuleNavItem]
     let activeModuleID: String
     let onModuleSelect: (String) -> Void
-    let statusDotColor: Color
+    let statusDotColor: Color       // accepted for source compat, not rendered
     let statusLeft: String
     let statusRight: String
     let actionButton: (() -> AnyView)?
     @ViewBuilder let content: () -> Content
 
+    @Environment(AppState.self) private var appState
+
     var body: some View {
-        CanonicalShellView(
-            moduleTitle: moduleTitle,
-            moduleIcon: moduleIcon,
-            statusDotColor: statusDotColor,
-            statusLeft: statusLeft,
-            statusRight: statusRight,
-            actionButton: actionButton,
-            content: content
-        )
+        content()
+            .onAppear {
+                appState.moduleTitle = moduleTitle
+                appState.moduleFooterLeft = statusLeft
+                appState.moduleFooterRight = statusRight
+                appState.setModuleActionButton(actionButton)
+            }
+            .onChange(of: statusLeft)  { _, new in appState.moduleFooterLeft  = new }
+            .onChange(of: statusRight) { _, new in appState.moduleFooterRight = new }
     }
 }
 
@@ -93,12 +98,12 @@ func shellNavItems(appState: AppState) -> [ModuleNavItem] {
 
 // MARK: - Action Button Helpers
 
-/// Non-destructive pill button for use as actionButton in ModuleShellView / CanonicalShellView.
+/// Non-destructive pill button for use as actionButton in ModuleShellView.
 func makeAddActionButton(icon: String, label: String) -> AnyView {
     AnyView(ShellActionButton(icon: icon, label: label, isDestructive: false))
 }
 
-/// Destructive pill button for use as actionButton in ModuleShellView / CanonicalShellView.
+/// Destructive pill button for use as actionButton in ModuleShellView.
 func makeDestructiveActionButton(icon: String, label: String) -> AnyView {
     AnyView(ShellActionButton(icon: icon, label: label, isDestructive: true))
 }
