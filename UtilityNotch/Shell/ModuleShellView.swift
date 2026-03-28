@@ -224,13 +224,14 @@ struct ModuleShellView<Content: View>: View {
                     }
                     .padding(.vertical, 8)
                 }
+                // Fade mask — top and bottom edges fade to transparent
                 .mask(
                     LinearGradient(
                         stops: [
-                            .init(color: .clear, location: 0),
-                            .init(color: .black, location: 0.06),
-                            .init(color: .black, location: 0.94),
-                            .init(color: .clear, location: 1)
+                            .init(color: .clear,   location: 0),
+                            .init(color: .black,   location: 0.06),
+                            .init(color: .black,   location: 0.94),
+                            .init(color: .clear,   location: 1)
                         ],
                         startPoint: .top,
                         endPoint: .bottom
@@ -308,9 +309,9 @@ private struct ShellRailButton: View {
         }
     }
 
-    // CSS: active bg rgba(255,255,255,0.1); hover bg rgba(255,255,255,0.06); inactive: clear
+    // CSS: active bg rgba(255,255,255,0.12); hover bg rgba(255,255,255,0.06); inactive: clear
     private var backgroundColor: Color {
-        if isActive { return Color.white.opacity(0.1) }
+        if isActive { return UNConstants.accentHighlight }
         if isHovering { return Color.white.opacity(0.06) }
         return .clear
     }
