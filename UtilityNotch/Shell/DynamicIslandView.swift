@@ -27,12 +27,30 @@ struct DynamicIslandView: View {
                 .overlay(
                     RoundedRectangle(cornerRadius: isExpanded ? UNConstants.panelCornerRadius : collapsedHeight / 2,
                                      style: .continuous)
-                        .fill(UNConstants.panelBackground.opacity(isExpanded ? 0.85 : 0.92))
+                        .fill(UNConstants.panelBackground)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: isExpanded ? UNConstants.panelCornerRadius : collapsedHeight / 2,
                                      style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.07), lineWidth: 0.5)
+                        .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                )
+                .overlay(
+                    Group {
+                        if isExpanded {
+                            RoundedRectangle(cornerRadius: UNConstants.panelCornerRadius, style: .continuous)
+                                .fill(
+                                    RadialGradient(
+                                        gradient: Gradient(colors: [
+                                            Color(hex: "0A84FF").opacity(UNConstants.panelGlowOpacity),
+                                            Color.clear
+                                        ]),
+                                        center: .topLeading,
+                                        startRadius: 0,
+                                        endRadius: 300
+                                    )
+                                )
+                        }
+                    }
                 )
                 .shadow(color: .black.opacity(isExpanded ? 0.4 : 0.25), radius: isExpanded ? 28 : 12, y: isExpanded ? 8 : 4)
                 .frame(

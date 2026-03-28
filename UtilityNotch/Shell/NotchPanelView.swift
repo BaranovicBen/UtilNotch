@@ -15,20 +15,28 @@ struct NotchPanelView: View {
         .frame(width: UNConstants.panelWidth, height: UNConstants.panelHeight)
         .background {
             ZStack {
-                // Glass material — main visual layer
+                // Base: black glass
                 RoundedRectangle(cornerRadius: UNConstants.panelCornerRadius, style: .continuous)
                     .fill(.ultraThinMaterial)
-                
-                // Dark tint overlay for depth
                 RoundedRectangle(cornerRadius: UNConstants.panelCornerRadius, style: .continuous)
-                    .fill(UNConstants.panelBackground.opacity(0.85))
-                
-                // Subtle inner border
+                    .fill(UNConstants.panelBackground)
+                // Ambient blue glow at top-left (DESIGN.md §3)
                 RoundedRectangle(cornerRadius: UNConstants.panelCornerRadius, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.06), lineWidth: 0.5)
+                    .fill(
+                        RadialGradient(
+                            gradient: Gradient(colors: [
+                                Color(hex: "0A84FF").opacity(UNConstants.panelGlowOpacity),
+                                Color.clear
+                            ]),
+                            center: .topLeading,
+                            startRadius: 0,
+                            endRadius: 300
+                        )
+                    )
+                // Ghost border (outer container specular highlight)
+                RoundedRectangle(cornerRadius: UNConstants.panelCornerRadius, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
             }
-            .clipShape(RoundedRectangle(cornerRadius: UNConstants.panelCornerRadius, style: .continuous))
-            .shadow(color: .black.opacity(0.4), radius: 28, y: 8)
         }
         .clipShape(RoundedRectangle(cornerRadius: UNConstants.panelCornerRadius, style: .continuous))
         .contentShape(Rectangle())

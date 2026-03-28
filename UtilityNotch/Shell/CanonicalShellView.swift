@@ -1,29 +1,10 @@
 import SwiftUI
 
-/// The one canonical shell layout used by both Extended Panel and Dynamic Island expanded state.
-///
-/// Layout contract (design system dimensions):
-///
-///   ┌─────────────────────────────────────────┬──────────┐
-///   │  Header 60pt  icon · title · actionBtn  │  blank   │  ← top zone
-///   ├─────────────────────────────────────────┤  60pt    │
-///   │                                         ├──────────┤
-///   │  Content area  (fills: ~282pt at 380    │  icons   │  ← scrollable module buttons
-///   │   panel height with 60+38 consumed)     │  fills   │
-///   │                                         ├──────────┤
-///   ├─────────────────────────────────────────┤  gear    │  ← gear zone
-///   │  Footer 38pt   dot · left · right       │  38pt    │
-///   └─────────────────────────────────────────┴──────────┘
-///         maxWidth: .infinity               48pt fixed
-///
-/// Modules pass: title, icon, statusDotColor, statusLeft, statusRight, actionButton, content.
-/// Navigation state (module list, active ID, selection) is owned by SidebarRailView via AppState.
-/// This view has no background — the presenter wrapper (NotchPanelView / DynamicIslandView) supplies it.
 struct CanonicalShellView<Content: View>: View {
 
     let moduleTitle: String
     let moduleIcon: String
-    let statusDotColor: Color
+    let statusDotColor: Color   // kept for API compat, not rendered
     let statusLeft: String
     let statusRight: String
     let actionButton: (() -> AnyView)?
@@ -46,16 +27,12 @@ struct CanonicalShellView<Content: View>: View {
     }
 
     // MARK: - Header (60pt)
+    // Rule 8: title left-aligned at 24pt, action button right at 24pt, SF Pro Semibold 16pt
 
     private var header: some View {
         HStack(spacing: 8) {
-            Image(systemName: moduleIcon)
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(Color(red: 0.039, green: 0.518, blue: 1.0))  // #0A84FF
-
             Text(moduleTitle)
-                .font(.system(size: 17, weight: .semibold))
-                .tracking(-0.425)
+                .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(.white)
                 .lineLimit(1)
 
@@ -65,7 +42,7 @@ struct CanonicalShellView<Content: View>: View {
                 actionButton()
             }
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, UNConstants.headerPaddingH)
         .frame(height: UNConstants.headerHeight)
     }
 
@@ -80,30 +57,25 @@ struct CanonicalShellView<Content: View>: View {
     }
 
     // MARK: - Footer (38pt)
+    // Rule 9: SF Mono 10pt, uppercase, 60% white, 16pt padding, text only — no dot/icon
 
     private var footer: some View {
         HStack(spacing: 0) {
-            HStack(spacing: 8) {
-                Circle()
-                    .fill(statusDotColor)
-                    .frame(width: 6, height: 6)
-
-                Text(statusLeft)
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(Color.white.opacity(0.35))
-                    .textCase(.uppercase)
-                    .kerning(0.55)
-            }
+            Text(statusLeft)
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(Color.white.opacity(0.60))
+                .textCase(.uppercase)
+                .kerning(0.08 * 10)
 
             Spacer()
 
             Text(statusRight)
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(Color.white.opacity(0.35))
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(Color.white.opacity(0.60))
                 .textCase(.uppercase)
-                .kerning(0.55)
+                .kerning(0.08 * 10)
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, UNConstants.footerPaddingH)
         .frame(height: UNConstants.footerHeight)
     }
 }

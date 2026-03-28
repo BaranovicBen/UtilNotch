@@ -1,21 +1,15 @@
 import SwiftUI
 
 /// Canonical sidebar rail. 48pt wide, full panel height.
-///
-/// Internal zones align with CanonicalShellView's left column:
-///   Top blank zone  60pt — empty space that sits beside the header
-///   Icon scroll zone  fills remaining height (~282pt in 380pt panel)
-///   Gear zone       38pt — settings gear that sits beside the footer
-///
-/// Width (48pt) is set internally via frame. No external sizing needed.
-/// Reads module list, active ID, and hover-label preference from AppState directly.
-/// Command+drag reorders the module list.
+/// Zones align with CanonicalShellView:
+///   Top blank zone: 60pt (aligns with header)
+///   Icon scroll zone: fills remaining height
+///   Gear zone: 38pt (aligns with footer)
 struct SidebarRailView: View {
     @Environment(AppState.self) private var appState
     @State private var draggingID: String? = nil
-    @State private var isCommandHeld: Bool = false
     @State private var commandKeyMonitor: Any? = nil
-    @State private var hoveredModuleID: String? = nil
+    @State private var isCommandHeld: Bool = false
 
     private var enabledModuleIDsBinding: Binding<[String]> {
         Binding(
@@ -38,14 +32,11 @@ struct SidebarRailView: View {
                             SidebarButton(
                                 icon: module.icon,
                                 name: module.name,
-                                isActive: appState.activeModuleID == module.id,
-                                showTooltip: appState.showHoverLabels
+                                isActive: appState.activeModuleID == module.id
                             ) {
                                 withAnimation(.spring(duration: 0.28, bounce: 0.16)) {
                                     appState.selectModule(module.id)
                                 }
-                            } onHoverChange: { hovering in
-                                hoveredModuleID = hovering ? module.id : nil
                             }
                             .onDrag {
                                 draggingID = module.id
@@ -61,14 +52,13 @@ struct SidebarRailView: View {
                     }
                     .padding(.vertical, 4)
                 }
-                // Fade mask — top and bottom edges fade to transparent
                 .mask(
                     LinearGradient(
                         stops: [
-                            .init(color: .clear,   location: 0),
-                            .init(color: .black,   location: 0.06),
-                            .init(color: .black,   location: 0.94),
-                            .init(color: .clear,   location: 1)
+                            .init(color: .clear, location: 0),
+                            .init(color: .black,  location: 0.06),
+                            .init(color: .black,  location: 0.94),
+                            .init(color: .clear,  location: 1)
                         ],
                         startPoint: .top,
                         endPoint: .bottom
@@ -78,19 +68,15 @@ struct SidebarRailView: View {
             .frame(maxHeight: .infinity)
 
             // ── Gear zone (aligns with footer) ────────────────────────
-            Divider()
-                .opacity(0.08)
-                .padding(.horizontal, 4)
-
             SidebarGearButton()
                 .frame(height: UNConstants.footerHeight)
         }
         .frame(width: UNConstants.sidebarWidth)
-        // Only visible divider: left border separating sidebar from content
+        // Sidebar left border — the ONLY allowed structural divider in the app (Rule 7)
         .overlay(alignment: .leading) {
             Rectangle()
-                .fill(Color.white.opacity(0.05))
-                .frame(width: 0.5)
+                .fill(Color.white.opacity(0.15))
+                .frame(width: 1)
         }
         .onAppear  { installCommandKeyMonitor() }
         .onDisappear { removeCommandKeyMonitor() }
@@ -104,7 +90,7 @@ struct SidebarRailView: View {
 
     private func installCommandKeyMonitor() {
         commandKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
-            isCommandHeld = event.modifierFlags.contains(.command)
+            self.isCommandHeld = event.modifierFlags.contains(.command)
             return event
         }
     }
@@ -117,17 +103,17 @@ struct SidebarRailView: View {
     }
 }
 
-// MARK: - Sidebar Button
+// MARK: - Sidebar Button with 150ms tooltip delay
 
 private struct SidebarButton: View {
     let icon: String
     let name: String
     let isActive: Bool
-    let showTooltip: Bool
     let action: () -> Void
-    let onHoverChange: (Bool) -> Void
 
     @State private var isHovering = false
+    @State private var showTooltip = false
+    @State private var tooltipTask: Task<Void, Never>? = nil
 
     var body: some View {
         Button(action: action) {
@@ -136,7 +122,7 @@ private struct SidebarButton: View {
                     .fill(backgroundColor)
 
                 Image(systemName: icon)
-                    .font(.system(size: 18, weight: .medium))
+                    .font(.system(size: UNConstants.sidebarIconSize, weight: .medium))
                     .foregroundStyle(iconColor)
                     .scaleEffect(isHovering ? 1.07 : 1.0)
                     .animation(.easeOut(duration: 0.14), value: isHovering)
@@ -146,23 +132,34 @@ private struct SidebarButton: View {
         .buttonStyle(.plain)
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.12)) { isHovering = hovering }
-            onHoverChange(hovering)
+            if hovering {
+                // 150ms delay before showing tooltip (Rule 6 / DESIGN.md §6)
+                tooltipTask?.cancel()
+                tooltipTask = Task {
+                    try? await Task.sleep(for: .seconds(UNConstants.sidebarTooltipDelay))
+                    guard !Task.isCancelled else { return }
+                    await MainActor.run { showTooltip = true }
+                }
+            } else {
+                tooltipTask?.cancel()
+                tooltipTask = nil
+                showTooltip = false
+            }
         }
-        // Tooltip floats to the left of the rail
+        // Tooltip: left of icon, vertically centered (Rule 6 / DESIGN.md §6)
         .overlay(alignment: .trailing) {
-            if isHovering && showTooltip {
+            if showTooltip {
                 Text(name)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.9))
-                    .padding(.horizontal, 7)
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundStyle(Color.white.opacity(0.85))
+                    .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(Color(white: 0.18))
-                            .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color.black.opacity(0.60))
                     )
                     .fixedSize()
-                    .offset(x: -40)
+                    .offset(x: -44)
                     .transition(.opacity.combined(with: .scale(scale: 0.92, anchor: .trailing)))
                     .zIndex(100)
             }
@@ -170,19 +167,19 @@ private struct SidebarButton: View {
     }
 
     private var backgroundColor: Color {
-        if isActive   { return UNConstants.accentHighlight }
-        if isHovering { return Color.white.opacity(0.06) }
+        if isActive   { return UNConstants.accentHighlight }  // rgba(255,255,255,0.08)
+        if isHovering { return Color.white.opacity(UNConstants.hoverStateOpacity) }
         return .clear
     }
 
     private var iconColor: Color {
-        if isActive   { return UNConstants.iconActiveTint }
-        if isHovering { return Color.white.opacity(0.85) }
-        return Color.white.opacity(0.45)
+        if isActive   { return UNConstants.iconActiveTint }           // #0A84FF
+        if isHovering { return Color.white }                           // 100% on hover
+        return Color.white.opacity(UNConstants.sidebarInactiveOpacity) // 35% inactive
     }
 }
 
-// MARK: - Gear Button
+// MARK: - Gear Button (no tooltip per Rule 6)
 
 private struct SidebarGearButton: View {
     @State private var isHovering = false
@@ -193,11 +190,11 @@ private struct SidebarGearButton: View {
         } label: {
             ZStack {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(isHovering ? Color.white.opacity(0.06) : Color.clear)
+                    .fill(isHovering ? Color.white.opacity(UNConstants.hoverStateOpacity) : Color.clear)
 
                 Image(systemName: "gearshape")
-                    .font(.system(size: 16, weight: .regular))
-                    .foregroundStyle(isHovering ? Color.white.opacity(0.85) : Color.white.opacity(0.35))
+                    .font(.system(size: 18, weight: .regular))
+                    .foregroundStyle(isHovering ? Color.white : Color.white.opacity(0.50))
                     .scaleEffect(isHovering ? 1.07 : 1.0)
                     .animation(.easeOut(duration: 0.14), value: isHovering)
             }
