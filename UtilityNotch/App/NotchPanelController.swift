@@ -89,9 +89,22 @@ final class NotchPanelController {
 
     func repositionPanel() {
         guard let panel else { return }
-        let origin = CGPoint(x: ScreenGeometry.panelOriginX, y: ScreenGeometry.panelOriginY)
+        let origin = CGPoint(x: ScreenGeometry.panelOriginX, y: panelOriginY())
         let size = CGSize(width: UNConstants.panelWidth, height: UNConstants.panelHeight)
         panel.setFrame(CGRect(origin: origin, size: size), display: false)
+    }
+
+    /// Mode-aware Y origin for the panel window.
+    /// DI: top flush with physical screen top (overlaps notch).
+    /// EP: top at bottom of menu bar (fully visible below it).
+    private func panelOriginY() -> CGFloat {
+        let screen = ScreenGeometry.screen
+        switch appState.panelStyle {
+        case .dynamicIsland:
+            return screen.frame.maxY - UNConstants.panelHeight
+        case .expandedPanel:
+            return screen.visibleFrame.maxY - UNConstants.panelHeight
+        }
     }
 
     func repositionTriggerZone() {
@@ -104,7 +117,7 @@ final class NotchPanelController {
         let panel = NotchPanel(
             contentRect: NSRect(
                 x: ScreenGeometry.panelOriginX,
-                y: ScreenGeometry.panelOriginY,
+                y: panelOriginY(),
                 width: UNConstants.panelWidth,
                 height: UNConstants.panelHeight
             ),
