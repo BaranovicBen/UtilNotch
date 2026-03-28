@@ -100,15 +100,19 @@ struct CalendarModuleView: View {
             statusRight: isAuthorized ? "\(displayEvents.count) UPCOMING" : "DEMO DATA",
             actionButton: nil
         ) {
-            // STEP 1: Hard cap the content area to 296pt
-            // 380 panel − 44 header − 28 footer − 8 top gap − 4 bottom gap = 296
-            VStack(alignment: .leading, spacing: 0) {
-                dateRow
-                weekStrip
-                upcomingLabel
-                eventRows
+            // ScrollView ensures the content never pushes the footer out of position.
+            // The scroll view fills the content slot exactly (via maxHeight: .infinity).
+            // Content scrolls internally if it overflows — the shell never grows.
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 0) {
+                    dateRow
+                    weekStrip
+                    upcomingLabel
+                    eventRows
+                }
+                .frame(maxWidth: .infinity)
             }
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .onAppear {
             authStatus = EKEventStore.authorizationStatus(for: .event)
