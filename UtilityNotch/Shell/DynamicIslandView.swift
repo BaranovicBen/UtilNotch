@@ -156,35 +156,8 @@ struct DynamicIslandView: View {
 
     @ViewBuilder
     private var expandedContent: some View {
-        VStack(spacing: 0) {
-            // Notch pill at top (same as NotchPanelView)
-            Capsule()
-                .fill(Color.white.opacity(0.1))
-                .frame(width: 36, height: 5)
-                .padding(.top, 8)
-                .padding(.bottom, 4)
-
-            HStack(spacing: 0) {
-                // Active module — inner sidebar suppressed; outer UtilityRailView is the sidebar
-                ActiveModuleContainerView()
-                    .environment(\.showModuleSidebar, false)
-                    .environment(\.showDragHandle, false)
-                    .environment(\.showModuleHeader, false)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 14)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-
-                Rectangle()
-                    .fill(Color.white.opacity(0.05))
-                    .frame(width: 0.5)
-                    .padding(.vertical, 14)
-
-                // Utility rail — horizontal icon row at right edge
-                UtilityRailView()
-                    .frame(width: UNConstants.railWidth)
-                    .padding(.vertical, 8)
-            }
-        }
+        ActiveModuleContainerView()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - Drop Handling
