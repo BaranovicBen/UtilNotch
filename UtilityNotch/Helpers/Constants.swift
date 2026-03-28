@@ -59,69 +59,63 @@ struct ScreenGeometry {
 
 /// Shared design constants for the Utility Notch shell.
 enum UNConstants {
-    
-    // MARK: - Panel Dimensions
-    
-    /// Total expanded panel width
-    static let panelWidth: CGFloat = 620
-    
-    /// Total expanded panel height
-    static let panelHeight: CGFloat = 380
-    
-    /// Width fraction for the utility rail (right side) — kept for legacy reference
-    static let railWidthFraction: CGFloat = 0.18
 
-    /// Fixed pixel width for the utility rail
-    static let railWidth: CGFloat = 40
-    
-    /// Corner radius for the main panel
+    // MARK: - Panel Dimensions
+
+    static let panelWidth: CGFloat = 622
+    static let panelHeight: CGFloat = 382
     static let panelCornerRadius: CGFloat = 20
-    
-    /// Corner radius for inner cards / module containers
     static let innerCornerRadius: CGFloat = 12
-    
+
     // MARK: - Shell Layout
 
-    /// Sidebar (right rail) width — aligns icon zone with content, gear zone with footer
     static let sidebarWidth: CGFloat = 48
-
-    /// Header row height — shared by CanonicalShellView and SidebarRailView top blank zone
     static let headerHeight: CGFloat = 60
-
-    /// Footer bar height — shared by CanonicalShellView and SidebarRailView gear zone
     static let footerHeight: CGFloat = 38
+    static let contentHeight: CGFloat = 282
+
+    // MARK: - Header / Footer Padding
+
+    static let headerPaddingH: CGFloat = 24
+    static let footerPaddingH: CGFloat = 16
+
+    // MARK: - Sidebar
+
+    static let sidebarIconSize: CGFloat = 15
+    static let sidebarInactiveOpacity: Double = 0.35
+    static let sidebarTooltipDelay: Double = 0.15
 
     // MARK: - Timing
-    
-    /// Default animation duration
+
     static let animationDuration: Double = 0.28
-    
-    /// Hover delay before opening panel (seconds)
+    static let contentFadeDelay: Double = 0.08
     static let hoverOpenDelay: Double = 0.3
-    
-    /// Default inactivity timeout (seconds)
     static let defaultInactivityTimeout: Double = 8.0
-    
+
     // MARK: - Colors
-    
-    /// Panel background color
-    static let panelBackground = Color(white: 0.08)
-    
-    /// Rail background color
-    static let railBackground = Color(white: 0.12)
-    
-    /// Active/selected accent
-    static let accentHighlight = Color.white.opacity(0.12)
-    
-    /// Icon default tint
-    static let iconTint = Color.white.opacity(0.7)
-    
-    /// Icon active tint
-    static let iconActiveTint = Color.white
-    
+
+    static let panelBackground = Color.black
+    static let accentHighlight = Color.white.opacity(0.08)
+    static let iconTint = Color.white.opacity(0.35)
+    static let iconActiveTint = Color(hex: "0A84FF")
+
+    // MARK: - Surface Opacities
+
+    static let panelGlowOpacity: Double = 0.05
+    static let activeStateOpacity: Double = 0.08
+    static let hoverStateOpacity: Double = 0.05
+
+    // MARK: - State Colors
+
+    static let successTint = Color(red: 52/255, green: 199/255, blue: 89/255).opacity(0.10)
+    static let successBorder = Color(red: 52/255, green: 199/255, blue: 89/255).opacity(0.25)
+    static let errorTint = Color(red: 255/255, green: 159/255, blue: 10/255).opacity(0.10)
+    static let errorBorder = Color(red: 255/255, green: 159/255, blue: 10/255).opacity(0.25)
+    static let focusTint = Color(hex: "0A84FF").opacity(0.08)
+    static let focusBorder = Color(hex: "0A84FF").opacity(0.50)
+
     // MARK: - Keyboard Shortcut
-    
-    /// Global hotkey: Option + Space
-    static let globalHotkeyKeyCode: UInt16 = 49  // Space
+
+    static let globalHotkeyKeyCode: UInt16 = 49
     static let globalHotkeyModifiers: NSEvent.ModifierFlags = .option
 }
