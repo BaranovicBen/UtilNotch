@@ -8,6 +8,10 @@ struct DynamicIslandView: View {
     @State private var isExpanded: Bool = false
     @State private var showContent: Bool = false
     @State private var isPanelDropTargeted = false
+    /// Suppresses close-on-hover-exit for 600ms after an open sequence begins.
+    /// Prevents the race where the expanding panel window causes a spurious hover-exit
+    /// on the trigger zone, which would immediately fire the close sequence.
+    @State private var suppressClose: Bool = false
 
     // Collapsed pill geometry
     private let collapsedWidth:  CGFloat = 180
@@ -116,6 +120,10 @@ struct DynamicIslandView: View {
         .contentShape(Rectangle())
         .onHover { hovering in
             appState.isPointerInsidePanel = hovering
+            // Suppress close during the 600ms lock window that follows every open.
+            // This prevents the race where the panel window appearing causes a
+            // spurious hover-exit event that would immediately collapse the panel.
+            if !hovering && suppressClose { return }
             withAnimation(.spring(response: 0.38, dampingFraction: 0.78)) {
                 isExpanded = hovering
             }
@@ -136,6 +144,12 @@ struct DynamicIslandView: View {
         }
         .onChange(of: isExpanded) { _, expanded in
             if expanded {
+                // Start 600ms close-suppression lock — prevents spurious hover-exit
+                // events from the appearing panel window from collapsing the panel.
+                suppressClose = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                    suppressClose = false
+                }
                 // Rule 11: frame expands first (spring response=0.38, ~80% settled at 0.30s),
                 // then content fades in UNConstants.contentFadeDelay (0.08s) after that.
                 let delay = 0.30 + UNConstants.contentFadeDelay
@@ -154,12 +168,18 @@ struct DynamicIslandView: View {
             if visible {
                 isExpanded = false
                 showContent = false
+                // Start 600ms close-suppression lock on programmatic open too
+                suppressClose = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                    suppressClose = false
+                }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                     withAnimation(.spring(response: 0.38, dampingFraction: 0.78)) {
                         isExpanded = true
                     }
                 }
             } else {
+                suppressClose = false
                 isExpanded = false
                 showContent = false
             }
