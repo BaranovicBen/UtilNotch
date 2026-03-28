@@ -46,15 +46,27 @@ struct DynamicIslandView: View {
                 .fill(UNConstants.panelBackground)
             )
             .overlay(
-                // Ghost border (specular edge highlight). Top edge hidden by hardware notch.
-                UnevenRoundedRectangle(
-                    topLeadingRadius:     isExpanded ? 0 : collapsedHeight / 2,
-                    bottomLeadingRadius:  isExpanded ? UNConstants.panelCornerRadius : collapsedHeight / 2,
-                    bottomTrailingRadius: isExpanded ? UNConstants.panelCornerRadius : collapsedHeight / 2,
-                    topTrailingRadius:    isExpanded ? 0 : collapsedHeight / 2,
-                    style: .continuous
-                )
-                .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                Group {
+                    if isExpanded {
+                        // Open-path border: left + bottom + right edges ONLY.
+                        // UnevenRoundedRectangle.strokeBorder draws all four edges —
+                        // including a straight horizontal line at y=0 (the top) — even
+                        // when topRadius = 0. That 1px line is visible against the notch
+                        // hardware. DIExpandedBorderShape omits the top edge entirely.
+                        DIExpandedBorderShape(cornerRadius: UNConstants.panelCornerRadius)
+                            .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                    } else {
+                        // Floating pill: all four edges need the specular highlight
+                        UnevenRoundedRectangle(
+                            topLeadingRadius:     collapsedHeight / 2,
+                            bottomLeadingRadius:  collapsedHeight / 2,
+                            bottomTrailingRadius: collapsedHeight / 2,
+                            topTrailingRadius:    collapsedHeight / 2,
+                            style: .continuous
+                        )
+                        .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                    }
+                }
             )
             .overlay(
                 Group {
@@ -250,5 +262,46 @@ struct DynamicIslandView: View {
             }
         }
         return true
+    }
+}
+
+// MARK: - DI expanded border shape
+
+/// Open-path shape that draws only the LEFT + BOTTOM + RIGHT edges of the panel —
+/// the top edge is intentionally omitted.
+///
+/// Why: `UnevenRoundedRectangle(topRadius: 0).strokeBorder(...)` still renders a
+/// straight 1px horizontal line at y = 0 (the top of the rect). In DI mode the panel
+/// top is flush with the hardware notch/bezel, so that line is visible as a white seam.
+/// This shape's path starts at top-left, traces left → bottom → right, and stops at
+/// top-right without closing — leaving the top edge completely empty.
+private struct DIExpandedBorderShape: Shape {
+    let cornerRadius: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        let r = cornerRadius
+        // Start at top-left (sharp corner, flush with screen top — no arc)
+        p.move(to: CGPoint(x: 0, y: 0))
+        // Left edge down to bottom-left corner tangent point
+        p.addLine(to: CGPoint(x: 0, y: rect.maxY - r))
+        // Bottom-left corner (addArc with tangents handles coordinate-system ambiguity)
+        p.addArc(
+            tangent1End: CGPoint(x: 0,         y: rect.maxY),
+            tangent2End: CGPoint(x: r,         y: rect.maxY),
+            radius: r
+        )
+        // Bottom edge across to bottom-right corner tangent point
+        p.addLine(to: CGPoint(x: rect.maxX - r, y: rect.maxY))
+        // Bottom-right corner
+        p.addArc(
+            tangent1End: CGPoint(x: rect.maxX, y: rect.maxY),
+            tangent2End: CGPoint(x: rect.maxX, y: rect.maxY - r),
+            radius: r
+        )
+        // Right edge up to top-right (sharp corner — path ends here, not closed)
+        p.addLine(to: CGPoint(x: rect.maxX, y: 0))
+        // Intentionally NOT closed — top edge absent
+        return p
     }
 }
