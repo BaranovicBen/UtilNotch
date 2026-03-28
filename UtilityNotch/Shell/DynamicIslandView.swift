@@ -109,12 +109,18 @@ struct DynamicIslandView: View {
         }
         .onChange(of: isExpanded) { _, expanded in
             if expanded {
-                // Delay content fade-in until shape is ~80% through its morph
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+                // Rule 11: frame expands first (spring response=0.38, ~80% settled at 0.30s),
+                // then content fades in UNConstants.contentFadeDelay (0.08s) after that.
+                let delay = 0.30 + UNConstants.contentFadeDelay
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
                     showContent = true
                 }
             } else {
+                // Rule 11 close: content fades out first, then frame collapses
                 showContent = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                    isExpanded = false
+                }
             }
         }
         .onChange(of: appState.isPanelVisible) { _, visible in
