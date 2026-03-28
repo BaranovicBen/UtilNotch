@@ -266,6 +266,22 @@ struct TodoModuleView: View {
     }
 }
 
+// MARK: - Model
+
+struct TodoItem: Identifiable, Codable, Equatable {
+    let id: UUID
+    var title: String
+    var description: String?
+    var isDone: Bool
+
+    init(id: UUID = UUID(), title: String, description: String? = nil, isDone: Bool = false) {
+        self.id = id
+        self.title = title
+        self.description = description
+        self.isDone = isDone
+    }
+}
+
 // MARK: - Live Task Row View
 
 private struct LiveTaskRowView: View {
