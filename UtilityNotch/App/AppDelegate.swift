@@ -10,7 +10,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var panelController: NotchPanelController?
     private var hoverTrigger: HoverTriggerZone?
     private var eventManager: EventTriggerManager?
-    private var ambientPill: AmbientPillController?
     
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Suppress window state restoration noise
@@ -29,16 +28,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             eventManager?.install()
         }
         
-        ambientPill = AmbientPillController(appState: appState)
-        ambientPill?.install()
-
         startObservingPanelVisibility()
     }
     
     func applicationWillTerminate(_ notification: Notification) {
         hoverTrigger?.uninstall()
         eventManager?.uninstall()
-        ambientPill?.uninstall()
     }
     
     private func startObservingPanelVisibility() {

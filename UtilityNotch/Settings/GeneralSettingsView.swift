@@ -24,9 +24,15 @@ struct GeneralSettingsView: View {
             }
             
             Section("System") {
-                Toggle("Launch at login", isOn: $state.launchAtLogin)
-                // MARK: TODO — Wire to SMAppService.mainApp.register() in production
-                
+                Toggle("Launch at login", isOn: .constant(false))
+                    .disabled(true)
+                    .overlay(alignment: .trailing) {
+                        Text("Coming soon")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.trailing, 4)
+                    }
+
                 Text("Keyboard shortcut: ⌥ Space")
                     .foregroundStyle(.secondary)
                     .font(.callout)
@@ -41,11 +47,6 @@ struct GeneralSettingsView: View {
                 }
                 .pickerStyle(.segmented)
                 Text("Dynamic Island: hovers expand from a compact pill. Expanded Panel: always shows the full panel.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                Toggle("Show Live Activities in notch", isOn: $state.showAmbientPill)
-                Text("Displays a compact ambient pill in the notch area when an activity is running.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

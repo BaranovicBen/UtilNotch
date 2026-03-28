@@ -12,12 +12,8 @@ enum ModuleRegistry {
         ClipboardHistoryModule(),
         MusicControlModule(),
         FileConverterModule(),
-        LiveActivitiesModule(),
         CalendarModule(),
-        FilesTrayModule(),
-        ActiveAppsModule(),
-        RecentFilesModule(),
-        DownloadsModule()
+        FilesTrayModule()
     ]
 
     /// Look up a module by ID
