@@ -45,13 +45,13 @@ struct MusicModuleView: View {
     private var musicContent: some View {
         VStack(spacing: 0) {
             carouselView
-            Spacer().frame(height: 10)
+            Spacer().frame(height: 8)
             trackInfoView
-            Spacer().frame(height: 10)
+            Spacer().frame(height: 8)
             waveView
-            Spacer().frame(height: 10)
+            Spacer().frame(height: 8)
             controlsView
-            Spacer().frame(height: 10)
+            Spacer().frame(height: 8)
             progressView
         }
         .frame(maxWidth: .infinity)
@@ -77,7 +77,7 @@ struct MusicModuleView: View {
         // Combined with .clipped() this is a belt-and-suspenders guarantee: even if a
         // floating pixel of an outer album escapes the opacity fade it is hard-clipped here.
         .frame(width: slotDistance * 2 + artSize)   // 92*2 + 100 = 284 pt
-        .frame(height: 140)
+        .frame(height: 110)
         .clipped()
     }
 
@@ -158,14 +158,14 @@ struct MusicModuleView: View {
     private var trackInfoView: some View {
         VStack(spacing: 4) {
             Text(provider.currentTrack?.title ?? "—")
-                .font(.system(size: 20, weight: .bold))
+                .font(.system(size: 17, weight: .bold))
                 .foregroundStyle(Color.white)
                 .lineLimit(1)
                 .contentTransition(.numericText())
 
             Text(provider.currentTrack?.artist ?? "")
                 .font(.system(size: 13))
-                .foregroundStyle(Color.white.opacity(0.50))
+                .foregroundStyle(Color.white.opacity(0.55))
                 .lineLimit(1)
                 .contentTransition(.numericText())
         }
@@ -332,7 +332,7 @@ struct MusicModuleView: View {
 private struct MusicWaveView: View {
     let isPlaying: Bool
 
-    @State private var barHeights: [CGFloat] = Array(repeating: 4, count: 30)
+    @State private var barHeights: [CGFloat] = Array(repeating: 3, count: 30)
     @State private var waveTimer: Timer?
 
     var body: some View {
@@ -345,7 +345,7 @@ private struct MusicWaveView: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 32)
+        .frame(height: 24)
         .clipped()
         .onAppear   { if isPlaying { startAnimating() } }
         .onDisappear { stopAnimating() }
@@ -359,7 +359,7 @@ private struct MusicWaveView: View {
         let t = Timer.scheduledTimer(withTimeInterval: 0.12, repeats: true) { _ in
             DispatchQueue.main.async {
                 withAnimation(.easeInOut(duration: 0.12)) {
-                    barHeights = (0..<30).map { _ in CGFloat.random(in: 4...32) }
+                    barHeights = (0..<30).map { _ in CGFloat.random(in: 3...24) }
                 }
             }
         }
@@ -370,7 +370,7 @@ private struct MusicWaveView: View {
         waveTimer?.invalidate()
         waveTimer = nil
         withAnimation(.easeInOut(duration: 0.25)) {
-            barHeights = Array(repeating: 6, count: 30)
+            barHeights = Array(repeating: 3, count: 30)
         }
     }
 }
