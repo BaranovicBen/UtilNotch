@@ -61,36 +61,54 @@ struct MusicModuleView: View {
 
     private var carouselView: some View {
         ZStack(alignment: .center) {
-            // Outer albums declared first (lower zIndex in ZStack default stacking).
-            // The center album is declared last so it always renders on top.
-            wheelSlot(at: provider.currentIndex - 2, base: -slotDistance * 2, zIdx: 1)
-            wheelSlot(at: provider.currentIndex + 2, base:  slotDistance * 2, zIdx: 1)
+            // Outer slots (±2) are declared first so they sit behind everything else.
+            // They are invisible at rest (outerFade = 0) and only materialise during
+            // a swipe animation as they slide into the side position — this keeps
+            // the transition seamless without them ever showing at idle.
+            wheelSlot(at: provider.currentIndex - 2, base: -slotDistance * 2, zIdx: 1, isOuter: true)
+            wheelSlot(at: provider.currentIndex + 2, base:  slotDistance * 2, zIdx: 1, isOuter: true)
+            // Visible side slots
             wheelSlot(at: provider.currentIndex - 1, base: -slotDistance,     zIdx: 2)
             wheelSlot(at: provider.currentIndex + 1, base:  slotDistance,     zIdx: 2)
+            // Center — always on top
             wheelSlot(at: provider.currentIndex,     base:  0,                zIdx: 3)
         }
-        .frame(maxWidth: .infinity)
+        // Fixed width sized to exactly fit center + two side albums (no room for ±2 slots).
+        // Combined with .clipped() this is a belt-and-suspenders guarantee: even if a
+        // floating pixel of an outer album escapes the opacity fade it is hard-clipped here.
+        .frame(width: slotDistance * 2 + artSize)   // 92*2 + 100 = 284 pt
         .frame(height: 140)
         .clipped()
     }
 
-    /// One album in the wheel. All 3D transforms are computed from the album's
-    /// current visual x-position so they animate continuously as `wheelOffset` changes.
+    /// One album in the wheel.
+    /// All 3D transforms are derived from the album's live x-position (`base + wheelOffset`),
+    /// so they animate continuously and in-sync as the wheel turns.
+    ///
+    /// - Parameters:
+    ///   - isOuter: When `true` the slot fades to **zero opacity at rest** (|norm| ≥ 2) and
+    ///              only fades in as the animation brings it into the side position. This hides
+    ///              the ±2 albums without removing them from the view tree (removing them would
+    ///              create a visible gap on the arriving side mid-animation).
     @ViewBuilder
-    private func wheelSlot(at rawIndex: Int, base: CGFloat, zIdx: Double) -> some View {
+    private func wheelSlot(at rawIndex: Int, base: CGFloat, zIdx: Double, isOuter: Bool = false) -> some View {
         let pos    = base + wheelOffset
         let norm   = max(-2.0, min(2.0, Double(pos) / Double(slotDistance)))
-        let sideT  = min(1.0, abs(norm))   // 0.0 = center, 1.0 = full side
+        let sideT  = min(1.0, abs(norm))   // 0.0 = center, 1.0 = full side position
+
+        // Outer fade: 0 at |norm|=2 (at rest), rises linearly to 1 at |norm|=1 (side slot).
+        // Inner slots always get outerFade = 1 so they are unaffected.
+        let outerFade: Double = isOuter ? max(0.0, 2.0 - abs(norm)) : 1.0
 
         artTile(at: rawIndex)
             .frame(width: artSize, height: artSize)
-            // Dark vignette pressed onto the album surface before any 3D transform
+            // Dark vignette on the album surface, rotates with the tile
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(Color.black.opacity(0.35 * sideT))
             )
             .scaleEffect(1.0 - 0.28 * sideT)
-            .opacity(1.0 - 0.55 * sideT)
+            .opacity((1.0 - 0.55 * sideT) * outerFade)
             .rotation3DEffect(
                 .degrees(norm * maxRotation),
                 axis: (x: 0, y: 1, z: 0),
@@ -98,9 +116,9 @@ struct MusicModuleView: View {
                 anchorZ: 0,
                 perspective: 0.35
             )
-            // Shadow only meaningful at / near center position
+            // Shadow fades out for side albums; invisible for outer albums
             .shadow(
-                color: Color.black.opacity(0.55 * (1.0 - sideT)),
+                color: Color.black.opacity(0.55 * (1.0 - sideT) * outerFade),
                 radius: 18.0 * (1.0 - sideT),
                 y:      5.0  * (1.0 - sideT)
             )
