@@ -274,10 +274,10 @@ private struct TrayThumbnail: View {
 
     private func loadIcon() {
         let path = item.resolvedURL()?.path ?? item.path
-        Task.detached(priority: .userInitiated) {
+        Task { @MainActor in
             let img = NSWorkspace.shared.icon(forFile: path)
             img.size = NSSize(width: 64, height: 64)
-            await MainActor.run { icon = img }
+            icon = img
         }
     }
 }

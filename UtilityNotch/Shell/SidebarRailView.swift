@@ -185,9 +185,7 @@ private struct SidebarGearButton: View {
     @State private var isHovering = false
 
     var body: some View {
-        Button {
-            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-        } label: {
+        SettingsLink {
             ZStack {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(isHovering ? Color.white.opacity(UNConstants.hoverStateOpacity) : Color.clear)
@@ -204,7 +202,6 @@ private struct SidebarGearButton: View {
         .onHover { h in withAnimation(.easeInOut(duration: 0.12)) { isHovering = h } }
     }
 }
-
 // MARK: - Drop Delegate
 
 private struct SidebarDropDelegate: DropDelegate {

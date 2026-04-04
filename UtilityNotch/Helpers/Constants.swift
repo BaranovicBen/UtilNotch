@@ -65,6 +65,7 @@ enum UNConstants {
     static let panelWidth: CGFloat = 622
     static let panelHeight: CGFloat = 382
     static let panelCornerRadius: CGFloat = 20
+    static let invertedCornerRadius: CGFloat = 10
     static let innerCornerRadius: CGFloat = 12
 
     // MARK: - Shell Layout

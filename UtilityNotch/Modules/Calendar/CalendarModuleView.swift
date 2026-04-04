@@ -12,8 +12,7 @@ struct CalendarModuleView: View {
     @State private var ekEvents: [EKEvent] = []
 
     private var isAuthorized: Bool {
-        if #available(macOS 14.0, *) { return authStatus == .fullAccess }
-        return authStatus == .authorized
+        return authStatus == .fullAccess
     }
 
     // MARK: - Display models

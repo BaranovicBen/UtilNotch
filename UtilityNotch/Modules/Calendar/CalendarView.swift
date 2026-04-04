@@ -49,7 +49,7 @@ struct CalendarView: View {
 
             // ── Auth gate ──────────────────────────────────────────
             switch authStatus {
-            case .authorized, .fullAccess where isAuthorized:
+            case .fullAccess where isAuthorized:
                 authorizedContent
             case .notDetermined:
                 permissionRequestView
@@ -478,8 +478,7 @@ struct CalendarSettingsView: View {
 
     private var isAuthorized: Bool {
         let s = EKEventStore.authorizationStatus(for: .event)
-        if #available(macOS 14.0, *) { return s == .fullAccess }
-        return s == .authorized
+        return s == .fullAccess
     }
 }
 

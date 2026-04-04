@@ -24,8 +24,10 @@ final class NotchPanelController {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.repositionPanel()
-            self?.repositionTriggerZone()
+            Task { @MainActor in
+                self?.repositionPanel()
+                self?.repositionTriggerZone()
+            }
         }
     }
 

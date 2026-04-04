@@ -48,13 +48,14 @@ struct DynamicIslandView: View {
             .overlay(
                 Group {
                     if isExpanded {
-                        // Open-path border: left + bottom + right edges ONLY.
-                        // UnevenRoundedRectangle.strokeBorder draws all four edges —
-                        // including a straight horizontal line at y=0 (the top) — even
-                        // when topRadius = 0. That 1px line is visible against the notch
-                        // hardware. DIExpandedBorderShape omits the top edge entirely.
-                        DIExpandedBorderShape(cornerRadius: UNConstants.panelCornerRadius)
-                            .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                        // Open-path border: concave top corners + left + bottom + right.
+                        // Top edge is intentionally omitted (no horizontal seam against the notch).
+                        // Concave arcs at top-left and top-right match the outer radius of the notch pill.
+                        DIExpandedBorderShape(
+                            cornerRadius: UNConstants.panelCornerRadius,
+                            invertedCornerRadius: UNConstants.invertedCornerRadius
+                        )
+                        .stroke(Color.white.opacity(0.10), lineWidth: 1)
                     } else {
                         // Floating pill: all four edges need the specular highlight
                         UnevenRoundedRectangle(
@@ -114,15 +115,22 @@ struct DynamicIslandView: View {
                     .transition(.opacity)
             }
         }
-        // Clip to the current pill/panel shape so content never overflows during morph
+        // Clip to the current shape so content never overflows during morph.
+        // Expanded: NotchPanelShape gives concave top corners matching the notch pill.
+        // Collapsed: standard pill (capsule via UnevenRoundedRectangle).
         .clipShape(
-            UnevenRoundedRectangle(
-                topLeadingRadius:     isExpanded ? 0 : collapsedHeight / 2,
-                bottomLeadingRadius:  isExpanded ? UNConstants.panelCornerRadius : collapsedHeight / 2,
-                bottomTrailingRadius: isExpanded ? UNConstants.panelCornerRadius : collapsedHeight / 2,
-                topTrailingRadius:    isExpanded ? 0 : collapsedHeight / 2,
-                style: .continuous
-            )
+            isExpanded
+                ? AnyShape(NotchPanelShape(
+                    cornerRadius: UNConstants.panelCornerRadius,
+                    invertedCornerRadius: UNConstants.invertedCornerRadius
+                  ))
+                : AnyShape(UnevenRoundedRectangle(
+                    topLeadingRadius:     collapsedHeight / 2,
+                    bottomLeadingRadius:  collapsedHeight / 2,
+                    bottomTrailingRadius: collapsedHeight / 2,
+                    topTrailingRadius:    collapsedHeight / 2,
+                    style: .continuous
+                  ))
         )
         // Size the frame to the larger of the two states so the animation has room
         .frame(
@@ -265,43 +273,131 @@ struct DynamicIslandView: View {
     }
 }
 
-// MARK: - DI expanded border shape
+// MARK: - DI panel shapes
 
-/// Open-path shape that draws only the LEFT + BOTTOM + RIGHT edges of the panel —
-/// the top edge is intentionally omitted.
-///
-/// Why: `UnevenRoundedRectangle(topRadius: 0).strokeBorder(...)` still renders a
-/// straight 1px horizontal line at y = 0 (the top of the rect). In DI mode the panel
-/// top is flush with the hardware notch/bezel, so that line is visible as a white seam.
-/// This shape's path starts at top-left, traces left → bottom → right, and stops at
-/// top-right without closing — leaving the top edge completely empty.
-private struct DIExpandedBorderShape: Shape {
+/// Closed panel shape with concave (inverted) top corners and convex bottom corners.
+/// Used as the clip shape when the DI panel is expanded, so the scooped top corners
+/// reveal the desktop/wallpaper — creating the illusion the panel grows from the notch.
+private struct NotchPanelShape: Shape {
     let cornerRadius: CGFloat
+    let invertedCornerRadius: CGFloat
 
     func path(in rect: CGRect) -> Path {
-        var p = Path()
-        let r = cornerRadius
-        // Start at top-left (sharp corner, flush with screen top — no arc)
-        p.move(to: CGPoint(x: 0, y: 0))
-        // Left edge down to bottom-left corner tangent point
+        var path = Path()
+        let r  = cornerRadius
+        let ir = invertedCornerRadius
+
+        // Start on the top edge, past the left inverted corner scoop
+        path.move(to: CGPoint(x: ir, y: 0))
+
+        // Top-left inverted (concave) corner.
+        // Arc centered at (0, 0) — the rect's physical corner, outside the filled area.
+        // clockwise: true traces the short arc through (0.707·ir, 0.707·ir),
+        // bowing into the rect interior so the top-left region is transparent.
+        path.addArc(
+            center: .zero,
+            radius: ir,
+            startAngle: .degrees(0),
+            endAngle: .degrees(90),
+            clockwise: true
+        )
+
+        // Left edge down to bottom-left corner tangent
+        path.addLine(to: CGPoint(x: 0, y: rect.maxY - r))
+
+        // Bottom-left convex corner
+        path.addArc(
+            tangent1End: CGPoint(x: 0,         y: rect.maxY),
+            tangent2End: CGPoint(x: r,         y: rect.maxY),
+            radius: r
+        )
+
+        // Bottom edge
+        path.addLine(to: CGPoint(x: rect.maxX - r, y: rect.maxY))
+
+        // Bottom-right convex corner
+        path.addArc(
+            tangent1End: CGPoint(x: rect.maxX, y: rect.maxY),
+            tangent2End: CGPoint(x: rect.maxX, y: rect.maxY - r),
+            radius: r
+        )
+
+        // Right edge up to top-right corner scoop
+        path.addLine(to: CGPoint(x: rect.maxX, y: ir))
+
+        // Top-right inverted (concave) corner.
+        // Arc centered at (rect.maxX, 0) — the rect's top-right physical corner.
+        path.addArc(
+            center: CGPoint(x: rect.maxX, y: 0),
+            radius: ir,
+            startAngle: .degrees(90),
+            endAngle: .degrees(180),
+            clockwise: true
+        )
+
+        // Top edge back to start, then close
+        path.addLine(to: CGPoint(x: ir, y: 0))
+        path.closeSubpath()
+        return path
+    }
+}
+
+/// Open-path border shape: concave top corners + left + bottom + right edges.
+/// The top edge is intentionally omitted — no horizontal stroke at y=0 against the notch.
+private struct DIExpandedBorderShape: Shape {
+    let cornerRadius: CGFloat
+    let invertedCornerRadius: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        var p  = Path()
+        let r  = cornerRadius
+        let ir = invertedCornerRadius
+
+        // Start at top-left, past the concave scoop
+        p.move(to: CGPoint(x: ir, y: 0))
+
+        // Top-left inverted (concave) corner
+        p.addArc(
+            center: .zero,
+            radius: ir,
+            startAngle: .degrees(0),
+            endAngle: .degrees(90),
+            clockwise: true
+        )
+
+        // Left edge down
         p.addLine(to: CGPoint(x: 0, y: rect.maxY - r))
-        // Bottom-left corner (addArc with tangents handles coordinate-system ambiguity)
+
+        // Bottom-left convex corner
         p.addArc(
             tangent1End: CGPoint(x: 0,         y: rect.maxY),
             tangent2End: CGPoint(x: r,         y: rect.maxY),
             radius: r
         )
-        // Bottom edge across to bottom-right corner tangent point
+
+        // Bottom edge
         p.addLine(to: CGPoint(x: rect.maxX - r, y: rect.maxY))
-        // Bottom-right corner
+
+        // Bottom-right convex corner
         p.addArc(
             tangent1End: CGPoint(x: rect.maxX, y: rect.maxY),
             tangent2End: CGPoint(x: rect.maxX, y: rect.maxY - r),
             radius: r
         )
-        // Right edge up to top-right (sharp corner — path ends here, not closed)
-        p.addLine(to: CGPoint(x: rect.maxX, y: 0))
-        // Intentionally NOT closed — top edge absent
+
+        // Right edge up to top-right corner scoop
+        p.addLine(to: CGPoint(x: rect.maxX, y: ir))
+
+        // Top-right inverted (concave) corner — path ends here, top edge absent
+        p.addArc(
+            center: CGPoint(x: rect.maxX, y: 0),
+            radius: ir,
+            startAngle: .degrees(90),
+            endAngle: .degrees(180),
+            clockwise: true
+        )
+
+        // Intentionally NOT closed — no top-edge stroke
         return p
     }
 }

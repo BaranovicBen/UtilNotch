@@ -40,7 +40,14 @@
       "Bash(DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -scheme UtilityNotch -configuration Debug -quiet)",
       "Bash(git tag:*)",
       "Bash(DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project /Users/benjaminbaranovic/Dev/UtilityNotch/UtilityNotch.xcodeproj -scheme UtilityNotch -destination 'platform=macOS' build)",
-      "Bash(grep -v \"^$\")"
+      "Bash(grep -v \"^$\")",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(git reset:*)",
+      "Bash(xcrun --find swiftc)",
+      "Bash(swiftc --version)",
+      "Bash(git revert:*)",
+      "Bash(git stash:*)",
+      "Bash(xcodebuild -scheme UtilityNotch -destination platform=macOS build)"
     ]
   }
 }
