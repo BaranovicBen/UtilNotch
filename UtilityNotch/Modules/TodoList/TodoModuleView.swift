@@ -68,15 +68,31 @@ struct TodoModuleView: View {
                         }
                     }
                 } else {
-                    // Live list — ScrollView + LazyVStack for clean gesture handling.
-                    // Drag-to-reorder via onDrag/onDrop (undone items only).
-                    // Tap or checkbox → toggle done/undone.
-                    // Hover → edit / delete buttons.
+                    // Live list — ScrollView + LazyVStack with onDrag/onDrop reorder.
+                    // .clipped() constrains dragged rows within the module frame.
+                    // Spring animation on the container drives gap-open animation during drag.
                     ScrollView(.vertical, showsIndicators: false) {
                         LazyVStack(spacing: 8) {
                             ForEach(appState.todoItems) { item in
                                 liveRow(item)
-                                    .opacity(draggingID == item.id ? 0.5 : 1.0)
+                                    // Lifted appearance while this item is being dragged
+                                    .scaleEffect(draggingID == item.id ? 1.03 : 1.0)
+                                    .shadow(
+                                        color: .black.opacity(draggingID == item.id ? 0.35 : 0),
+                                        radius: 8, y: 4
+                                    )
+                                    .opacity(draggingID == item.id ? 0.85 : 1.0)
+                                    .zIndex(draggingID == item.id ? 1 : 0)
+                                    .animation(
+                                        .spring(response: 0.25, dampingFraction: 0.65),
+                                        value: draggingID
+                                    )
+                                    // Add/remove transitions
+                                    .transition(.asymmetric(
+                                        insertion: .scale(scale: 0.97).combined(with: .opacity),
+                                        removal:   .scale(scale: 0.97).combined(with: .opacity)
+                                    ))
+                                    // Drag-to-reorder (undone items only)
                                     .onDrag {
                                         guard !item.isDone else { return NSItemProvider() }
                                         self.draggingID = item.id
@@ -92,8 +108,14 @@ struct TodoModuleView: View {
                                     )
                             }
                         }
+                        // Gap-open spring: animates rows sliding apart as item is dragged over them
+                        .animation(
+                            .spring(response: 0.35, dampingFraction: 0.72),
+                            value: appState.todoItems.map(\.id)
+                        )
                         .padding(.bottom, 4)
                     }
+                    .clipped()
                 }
             }
         }
@@ -224,7 +246,7 @@ struct TodoModuleView: View {
     private func confirmAdd() {
         let text = newTaskText.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty else { cancelAdd(); return }
-        withAnimation(.easeOut(duration: 0.2)) {
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.74)) {
             appState.todoItems.insert(TodoItem(title: text), at: 0)
         }
         newTaskText = ""
@@ -239,7 +261,7 @@ struct TodoModuleView: View {
     }
 
     private func deleteTask(_ id: UUID) {
-        withAnimation(.easeOut(duration: 0.2)) {
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.74)) {
             appState.todoItems.removeAll { $0.id == id }
         }
     }
@@ -255,11 +277,11 @@ struct TodoModuleView: View {
     }
 
     /// Toggle done/undone, then re-sort so undone items always precede done items.
-    /// Uses a filter-based sort to avoid SwiftUI List animation glitches from
-    /// simultaneous item mutation + positional move in the same animation block.
+    /// Filter-based sort avoids SwiftUI animation glitches from simultaneous item
+    /// mutation + positional move in the same animation block.
     private func toggleTask(_ id: UUID) {
         guard let idx = appState.todoItems.firstIndex(where: { $0.id == id }) else { return }
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.74)) {
             appState.todoItems[idx].isDone.toggle()
             let undone = appState.todoItems.filter { !$0.isDone }
             let done   = appState.todoItems.filter {  $0.isDone }
@@ -302,15 +324,15 @@ private struct TodoDropDelegate: DropDelegate {
 
     func dropEntered(info: DropInfo) {
         guard
-            let id = draggingID,
-            id != target.id,
+            let id   = draggingID,
+            id      != target.id,
             !target.isDone,
             let from = items.firstIndex(where: { $0.id == id }),
             let to   = items.firstIndex(where: { $0.id == target.id }),
             !items[from].isDone
         else { return }
 
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
             items.move(
                 fromOffsets: IndexSet(integer: from),
                 toOffset: to > from ? to + 1 : to
@@ -373,7 +395,7 @@ private struct LiveTaskRowView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            // Right side: confirm (edit mode) / action buttons (hover) / timestamp
+            // Trailing: confirm (editing) | action buttons + drag handle (hovering) | passive state
             if isEditing {
                 Button { onSaveEdit(editDraft) } label: {
                     Image(systemName: "checkmark")
@@ -387,12 +409,12 @@ private struct LiveTaskRowView: View {
                 }
                 .buttonStyle(.plain)
             } else if isHovering {
-                HStack(spacing: 6) {
+                HStack(spacing: 4) {
                     Button(action: onEdit) {
                         Image(systemName: "pencil")
                             .font(.system(size: 12))
                             .foregroundStyle(Color.white.opacity(0.40))
-                            .frame(width: 28, height: 28)
+                            .frame(width: 26, height: 26)
                     }
                     .buttonStyle(.plain)
 
@@ -400,16 +422,31 @@ private struct LiveTaskRowView: View {
                         Image(systemName: "trash")
                             .font(.system(size: 12))
                             .foregroundStyle(Color(hex: "FF453A"))
-                            .frame(width: 28, height: 28)
+                            .frame(width: 26, height: 26)
                     }
                     .buttonStyle(.plain)
-                    .transition(.opacity.combined(with: .move(edge: .trailing)))
+
+                    // Drag handle — visible for undone items, signals draggability
+                    if !item.isDone {
+                        Image(systemName: "line.3.horizontal")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Color.white.opacity(0.9))
+                            .frame(width: 22, height: 26)
+                    }
                 }
                 .transition(.opacity)
             } else {
-                Text("—")
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(Color.white.opacity(0.35))
+                // Passive state: drag handle for undone, dash for done
+                if !item.isDone {
+                    Image(systemName: "line.3.horizontal")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Color.white.opacity(0.4))
+                        .frame(width: 22, height: 26)
+                } else {
+                    Text("—")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(Color.white.opacity(0.35))
+                }
             }
         }
         .padding(12)
@@ -419,7 +456,7 @@ private struct LiveTaskRowView: View {
                 .fill(Color.white.opacity(isEditing ? 0.07 : (isHovering ? 0.05 : 0.03)))
         )
         .contentShape(Rectangle())
-        // Tap the row (outside the checkbox button) → toggle done/undone
+        // Tap the row (outside buttons) → toggle done/undone
         .onTapGesture {
             guard !isEditing else { return }
             onToggle()

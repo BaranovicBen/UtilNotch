@@ -128,6 +128,7 @@ struct CalendarModuleView: View {
             Text(currentDayNumber)
                 .font(.system(size: 28, weight: .bold))
                 .foregroundStyle(Color.white)
+                .padding(.leading, 8)
 
             Text(currentMonthYear)
                 .font(.system(size: 13, weight: .regular))
