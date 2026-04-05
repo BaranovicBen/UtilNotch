@@ -86,7 +86,7 @@ struct TodoModuleView: View {
                                         of: [UTType.plainText],
                                         delegate: TodoDropDelegate(
                                             target: item,
-                                            items: $appState.todoItems,
+                                            items: Bindable(appState).todoItems,
                                             draggingID: $draggingID
                                         )
                                     )
