@@ -46,13 +46,13 @@ struct MusicModuleView: View {
     private var musicContent: some View {
         VStack(spacing: 0) {
             carouselView
-            Spacer().frame(height: 8)
+            Spacer().frame(height: 4)
             trackInfoView
-            Spacer().frame(height: 8)
+            Spacer().frame(height: 4)
             waveView
-            Spacer().frame(height: 8)
+            Spacer().frame(height: 4)
             controlsView
-            Spacer().frame(height: 8)
+            Spacer().frame(height: 4)
             progressView
         }
         .frame(maxWidth: .infinity)
@@ -180,22 +180,22 @@ struct MusicModuleView: View {
     private var waveView: some View {
         MusicWaveView(isPlaying: provider.isPlaying)
             .frame(maxWidth: .infinity)
-            .frame(height: 36)
+            .frame(height: 24)
     }
 
     // MARK: - Playback controls
 
     private var controlsView: some View {
-        HStack(spacing: 24) {
+        HStack(spacing: 16) {
             // ⏮ Backward
-            controlButton(icon: "backward.fill", size: 16, diameter: 36) {
+            controlButton(icon: "backward.fill", size: 13, diameter: 30) {
                 triggerCarousel(forward: false)
             }
 
             // ⏯ Play / Pause
             controlButton(
                 icon: provider.isPlaying ? "pause.fill" : "play.fill",
-                size: 20, diameter: 40,
+                size: 16, diameter: 34,
                 fillOpacity: 0.22
             ) {
                 Task {
@@ -205,7 +205,7 @@ struct MusicModuleView: View {
             }
 
             // ⏭ Forward
-            controlButton(icon: "forward.fill", size: 16, diameter: 36) {
+            controlButton(icon: "forward.fill", size: 13, diameter: 30) {
                 triggerCarousel(forward: true)
             }
         }
@@ -239,7 +239,7 @@ struct MusicModuleView: View {
         let elapsed  = isDraggingProgress ? dragProgress * duration : provider.currentTime
         let progress = max(0, min(1, elapsed / duration))
 
-        return VStack(spacing: 5) {
+        return VStack(spacing: 3) {
             ZStack(alignment: .leading) {
                 Capsule()
                     .fill(Color.white.opacity(0.12))
@@ -258,7 +258,7 @@ struct MusicModuleView: View {
                     )
             }
             // Fixed hit area — no GeometryReader, so no layout inflation
-            .frame(height: 18)
+            .frame(height: 12)
             .contentShape(Rectangle())
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { trackWidth = $0 }
             .gesture(
