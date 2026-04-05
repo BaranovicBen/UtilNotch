@@ -14,6 +14,7 @@ struct MusicModuleView: View {
     // Progress-bar drag state
     @State private var isDraggingProgress: Bool = false
     @State private var dragProgress: CGFloat = 0
+    @State private var trackWidth: CGFloat = 0
 
     // Wheel carousel geometry
     private let artSize: CGFloat    = 100   // layout size for all album tiles
@@ -179,6 +180,7 @@ struct MusicModuleView: View {
     private var waveView: some View {
         MusicWaveView(isPlaying: provider.isPlaying)
             .frame(maxWidth: .infinity)
+            .frame(height: 36)
     }
 
     // MARK: - Playback controls
@@ -233,47 +235,47 @@ struct MusicModuleView: View {
     // MARK: - Progress bar + timestamps
 
     private var progressView: some View {
-        VStack(spacing: 5) {
-            GeometryReader { geo in
-                let duration   = provider.currentTrack?.duration ?? 1
-                let elapsed    = isDraggingProgress ? dragProgress * duration : provider.currentTime
-                let progress   = max(0, min(1, elapsed / duration))
+        let duration = provider.currentTrack?.duration ?? 1
+        let elapsed  = isDraggingProgress ? dragProgress * duration : provider.currentTime
+        let progress = max(0, min(1, elapsed / duration))
 
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(Color.white.opacity(0.12))
-                        .frame(height: 3)
-                    Capsule()
-                        .fill(
-                            LinearGradient(
-                                colors: [Color(hex: "8B5CF6"), Color(hex: "3B82F6")],
-                                startPoint: .leading, endPoint: .trailing
-                            )
+        return VStack(spacing: 5) {
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.white.opacity(0.12))
+                    .frame(height: 3)
+                Capsule()
+                    .fill(
+                        LinearGradient(
+                            colors: [Color(hex: "8B5CF6"), Color(hex: "3B82F6")],
+                            startPoint: .leading, endPoint: .trailing
                         )
-                        .frame(width: max(0, geo.size.width * progress), height: 3)
-                        .animation(
-                            isDraggingProgress ? nil : .linear(duration: 0.5),
-                            value: provider.currentTime
-                        )
-                }
-                // Enlarged hit area for the scrubber
-                .frame(height: 18)
-                .contentShape(Rectangle())
-                .gesture(
-                    DragGesture(minimumDistance: 0)
-                        .onChanged { value in
-                            isDraggingProgress = true
-                            dragProgress = max(0, min(1, value.location.x / geo.size.width))
-                        }
-                        .onEnded { value in
-                            let normalized = max(0, min(1, value.location.x / geo.size.width))
-                            let time = normalized * (provider.currentTrack?.duration ?? 0)
-                            Task { await provider.seek(to: time) }
-                            isDraggingProgress = false
-                        }
-                )
+                    )
+                    .frame(width: max(0, trackWidth * progress), height: 3)
+                    .animation(
+                        isDraggingProgress ? nil : .linear(duration: 0.5),
+                        value: provider.currentTime
+                    )
             }
+            // Fixed hit area — no GeometryReader, so no layout inflation
             .frame(height: 18)
+            .contentShape(Rectangle())
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { trackWidth = $0 }
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        isDraggingProgress = true
+                        dragProgress = trackWidth > 0
+                            ? max(0, min(1, value.location.x / trackWidth)) : 0
+                    }
+                    .onEnded { value in
+                        let normalized = trackWidth > 0
+                            ? max(0, min(1, value.location.x / trackWidth)) : 0
+                        let time = normalized * (provider.currentTrack?.duration ?? 0)
+                        Task { await provider.seek(to: time) }
+                        isDraggingProgress = false
+                    }
+            )
 
             HStack {
                 Text(formatTime(
