@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Todo module — full-shell Figma implementation, wired to AppState.
 /// CSS source: /DesignReference/Css/todo.css
@@ -9,6 +10,7 @@ struct TodoModuleView: View {
     @FocusState private var isNewTaskFocused: Bool
     @State private var editingID: UUID? = nil
     @State private var editDraft: String = ""
+    @State private var draggingID: UUID? = nil
 
     // Dummy tasks shown when data source is empty
     private static let dummyTasks: [(text: String, timestamp: String, isDone: Bool)] = [
@@ -66,29 +68,32 @@ struct TodoModuleView: View {
                         }
                     }
                 } else {
-                    // Live list with drag-to-reorder
-                    List {
-                        ForEach(appState.todoItems) { item in
-                            liveRow(item)
-                                .padding(.bottom, 8)
-                                .listRowInsets(EdgeInsets())
-                                .listRowBackground(Color.clear)
-                                .listRowSeparator(.hidden)
-                        }
-                        .onMove { indices, newOffset in
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
-                                appState.todoItems.move(fromOffsets: indices, toOffset: newOffset)
-                                // Keep incomplete tasks above complete tasks
-                                let incomplete = appState.todoItems.filter { !$0.isDone }
-                                let complete = appState.todoItems.filter { $0.isDone }
-                                appState.todoItems = incomplete + complete
+                    // Live list — ScrollView + LazyVStack for clean gesture handling.
+                    // Drag-to-reorder via onDrag/onDrop (undone items only).
+                    // Tap or checkbox → toggle done/undone.
+                    // Hover → edit / delete buttons.
+                    ScrollView(.vertical, showsIndicators: false) {
+                        LazyVStack(spacing: 8) {
+                            ForEach(appState.todoItems) { item in
+                                liveRow(item)
+                                    .opacity(draggingID == item.id ? 0.5 : 1.0)
+                                    .onDrag {
+                                        guard !item.isDone else { return NSItemProvider() }
+                                        self.draggingID = item.id
+                                        return NSItemProvider(object: item.id.uuidString as NSString)
+                                    }
+                                    .onDrop(
+                                        of: [UTType.plainText],
+                                        delegate: TodoDropDelegate(
+                                            target: item,
+                                            items: $appState.todoItems,
+                                            draggingID: $draggingID
+                                        )
+                                    )
                             }
-                            appState.dismissalLocks.remove(.moduleGesture)
                         }
+                        .padding(.bottom, 4)
                     }
-                    .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
-                    .background(Color.clear)
                 }
             }
         }
@@ -249,19 +254,16 @@ struct TodoModuleView: View {
         appState.dismissalLocks.remove(.activeEditing)
     }
 
+    /// Toggle done/undone, then re-sort so undone items always precede done items.
+    /// Uses a filter-based sort to avoid SwiftUI List animation glitches from
+    /// simultaneous item mutation + positional move in the same animation block.
     private func toggleTask(_ id: UUID) {
         guard let idx = appState.todoItems.firstIndex(where: { $0.id == id }) else { return }
-        let wasAlreadyDone = appState.todoItems[idx].isDone
         withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
             appState.todoItems[idx].isDone.toggle()
-            if !wasAlreadyDone {
-                let item = appState.todoItems.remove(at: idx)
-                appState.todoItems.append(item)
-            } else {
-                let item = appState.todoItems.remove(at: idx)
-                let insertIdx = appState.todoItems.firstIndex(where: { $0.isDone }) ?? appState.todoItems.count
-                appState.todoItems.insert(item, at: insertIdx)
-            }
+            let undone = appState.todoItems.filter { !$0.isDone }
+            let done   = appState.todoItems.filter {  $0.isDone }
+            appState.todoItems = undone + done
         }
     }
 }
@@ -282,6 +284,41 @@ struct TodoItem: Identifiable, Codable, Equatable {
     }
 }
 
+// MARK: - Drop Delegate (drag-to-reorder, undone items only)
+
+private struct TodoDropDelegate: DropDelegate {
+    let target: TodoItem
+    @Binding var items: [TodoItem]
+    @Binding var draggingID: UUID?
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggingID = nil
+        return true
+    }
+
+    func dropEntered(info: DropInfo) {
+        guard
+            let id = draggingID,
+            id != target.id,
+            !target.isDone,
+            let from = items.firstIndex(where: { $0.id == id }),
+            let to   = items.firstIndex(where: { $0.id == target.id }),
+            !items[from].isDone
+        else { return }
+
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+            items.move(
+                fromOffsets: IndexSet(integer: from),
+                toOffset: to > from ? to + 1 : to
+            )
+        }
+    }
+}
+
 // MARK: - Live Task Row View
 
 private struct LiveTaskRowView: View {
@@ -299,7 +336,7 @@ private struct LiveTaskRowView: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            // Checkbox — also fires toggle
+            // Checkbox — toggles done/undone
             Button(action: onToggle) {
                 if item.isDone {
                     ZStack {
@@ -382,6 +419,7 @@ private struct LiveTaskRowView: View {
                 .fill(Color.white.opacity(isEditing ? 0.07 : (isHovering ? 0.05 : 0.03)))
         )
         .contentShape(Rectangle())
+        // Tap the row (outside the checkbox button) → toggle done/undone
         .onTapGesture {
             guard !isEditing else { return }
             onToggle()

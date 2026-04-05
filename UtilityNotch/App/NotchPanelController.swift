@@ -23,9 +23,11 @@ final class NotchPanelController {
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil,
             queue: .main
-        ) { @MainActor [weak self] _ in
-            self?.repositionPanel()
-            self?.repositionTriggerZone()
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.repositionPanel()
+                self?.repositionTriggerZone()
+            }
         }
     }
 
