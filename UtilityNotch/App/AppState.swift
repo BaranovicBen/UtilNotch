@@ -193,6 +193,10 @@ final class AppState {
 
     var pendingFileURL: URL?
 
+    /// URLs captured by FileDragReceiverZone when files are dropped at the notch before
+    /// the Files Tray panel finishes opening. FilesTrayModuleView drains this on appear/change.
+    var pendingTrayURLs: [URL] = []
+
     // MARK: - Helpers
 
     func togglePanel() {
@@ -281,6 +285,8 @@ struct DismissalLock: OptionSet {
     static let activeEditing = DismissalLock(rawValue: 1 << 3)
     /// A drag or gesture within module UI (list reorder, scroll momentum, etc.).
     static let moduleGesture = DismissalLock(rawValue: 1 << 4)
+    /// A file drag has entered the notch trigger strip (panel is opening, file in transit).
+    static let externalDragDrop = DismissalLock(rawValue: 1 << 5)
 }
 
 // MARK: - Models / Settings
