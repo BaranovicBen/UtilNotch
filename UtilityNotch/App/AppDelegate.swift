@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let appState = AppState.shared
     private var panelController: NotchPanelController?
     private var hoverTrigger: HoverTriggerZone?
+    private var fileDragReceiver: FileDragReceiverZone?
     private var eventManager: EventTriggerManager?
     
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -21,7 +22,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Install hover trigger zone at top-center of screen
         hoverTrigger = HoverTriggerZone(appState: appState)
         hoverTrigger?.install()
-        
+
+        // Install full-width drag receiver — always present, activates during file drags
+        fileDragReceiver = FileDragReceiverZone(appState: appState)
+        fileDragReceiver?.install()
+
         // Install all event monitors (hotkey, escape, click-outside, inactivity)
         if let panelController {
             eventManager = EventTriggerManager(appState: appState, panelController: panelController)
@@ -33,6 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     
     func applicationWillTerminate(_ notification: Notification) {
         hoverTrigger?.uninstall()
+        fileDragReceiver?.uninstall()
         eventManager?.uninstall()
     }
     
