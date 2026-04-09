@@ -2,23 +2,21 @@ import AppKit
 import UniformTypeIdentifiers
 
 /// A full-screen-width invisible window sitting at the top of the screen (notch area).
-/// Normally transparent to mouse events. During an external file drag it becomes active,
-/// detects when files enter the notch zone, opens the panel, and captures dropped URLs.
+/// Detects file drags entering the notch zone, opens the panel, and captures dropped URLs.
 ///
 /// Design:
-///   - Window spans the full display width at notch height — much easier to aim at than
-///     the 200pt HoverTriggerZone.
-///   - `ignoresMouseEvents = true` by default — invisible to all normal interactions.
-///   - Global `leftMouseDragged` monitor activates it; `leftMouseUp` deactivates it.
+///   - Window spans the full display width at notch height.
+///   - `ignoresMouseEvents = false` always — NSDraggingDestination requires this to fire.
+///     Safe because the window only covers the ~28pt notch cutout where there is no
+///     interactive UI. HoverTriggerZone sits at level +2 above this window (+1), so
+///     normal hover events still route to HoverTriggerZone first.
+///   - On drag enter: opens panel, navigates to Files Tray, inserts .externalDragDrop lock.
 ///   - On drop: URLs → `appState.pendingTrayURLs` (drained by FilesTrayModuleView).
 @MainActor
 final class FileDragReceiverZone {
 
     private var receiverWindow: NSWindow?
     private let appState: AppState
-    private var isDragActive = false
-    private var dragStartMonitor: Any?
-    private var dragEndMonitor: Any?
 
     init(appState: AppState) {
         self.appState = appState
@@ -28,24 +26,20 @@ final class FileDragReceiverZone {
         guard receiverWindow == nil else { return }
         receiverWindow = makeWindow()
         receiverWindow?.orderFrontRegardless()
-        installDragStateMonitors()
     }
 
     func uninstall() {
         receiverWindow?.orderOut(nil)
         receiverWindow = nil
-        if let m = dragStartMonitor { NSEvent.removeMonitor(m) }
-        if let m = dragEndMonitor   { NSEvent.removeMonitor(m) }
-        dragStartMonitor = nil
-        dragEndMonitor = nil
+        appState.dismissalLocks.remove(.externalDragDrop)
     }
 
     // MARK: - Private
 
     private func makeWindow() -> NSWindow {
-        guard let screen = NSScreen.screens.first else { return NSWindow() }
+        guard let screen = NSScreen.main ?? NSScreen.screens.first else { return NSWindow() }
 
-        // Full-width strip at the very top of the screen
+        // Full-width strip at the very top of the screen (inside the notch cutout)
         let frame = CGRect(
             x: screen.frame.minX,
             y: screen.frame.maxY - ScreenGeometry.triggerZoneHeight,
@@ -61,7 +55,11 @@ final class FileDragReceiverZone {
         )
         window.isOpaque = false
         window.backgroundColor = .clear
-        window.ignoresMouseEvents = true   // off until a drag is detected
+        // Must be false — NSDraggingDestination callbacks require the window to accept events.
+        // The notch cutout is a dead zone with no interactive UI, so this is safe.
+        window.ignoresMouseEvents = false
+        // Below HoverTriggerZone (+2) so hover events still route correctly.
+        // macOS drag session falls through non-registering windows to find us.
         window.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.mainMenuWindow)) + 1)
         window.collectionBehavior = [.canJoinAllSpaces, .stationary]
         window.hasShadow = false
@@ -72,28 +70,6 @@ final class FileDragReceiverZone {
         )
         window.contentView = receiverView
         return window
-    }
-
-    /// Use global event monitors to detect when the user starts/stops dragging.
-    /// This is the only reliable way to toggle ignoresMouseEvents from outside
-    /// the drag session without requiring accessibility permissions.
-    private func installDragStateMonitors() {
-        dragStartMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDragged) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self, !self.isDragActive else { return }
-                self.isDragActive = true
-                self.receiverWindow?.ignoresMouseEvents = false
-            }
-        }
-
-        dragEndMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseUp) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self, self.isDragActive else { return }
-                self.isDragActive = false
-                self.receiverWindow?.ignoresMouseEvents = true
-                self.appState.dismissalLocks.remove(.externalDragDrop)
-            }
-        }
     }
 }
 
@@ -115,11 +91,14 @@ private class FileDragReceiverView: NSView {
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
         Task { @MainActor in
-            // Open panel and navigate to Files Tray
             appState.showPanel()
             appState.selectModule("filesTray")
             appState.dismissalLocks.insert(.externalDragDrop)
         }
+        return .copy
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
         return .copy
     }
 
@@ -129,11 +108,16 @@ private class FileDragReceiverView: NSView {
         }
     }
 
+    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        return true
+    }
+
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         let pb = sender.draggingPasteboard
-        guard let items = pb.readObjects(forClasses: [NSURL.self],
-                                         options: [.urlReadingFileURLsOnly: true]) as? [URL],
-              !items.isEmpty else { return false }
+        guard let items = pb.readObjects(
+            forClasses: [NSURL.self],
+            options: [.urlReadingFileURLsOnly: true]
+        ) as? [URL], !items.isEmpty else { return false }
 
         Task { @MainActor in
             appState.pendingTrayURLs.append(contentsOf: items)
