@@ -7,8 +7,10 @@ import AppKit
 struct FilesTrayModuleView: View {
     @Environment(AppState.self) private var appState
 
-    @State private var trayItems: [TrayItem] = []
+    @State private var store = FilesTrayStore()
     @State private var isDragTargeted: Bool = false
+    // Captures the AirDrop button's NSView so NSSharingServicePicker anchors to it
+    @State private var shareAnchorView: NSView? = nil
 
     // Dummy files shown when tray is empty (preserves visual design on first launch)
     private struct DummyFile: Identifiable {
@@ -25,7 +27,7 @@ struct FilesTrayModuleView: View {
         DummyFile(name: "report.xlsx",    gradientStart: Color(hex: "30D158"), gradientEnd: Color(hex: "1A6632"), sfSymbol: "tablecells.fill"),
     ]
 
-    private var isUsingDummy: Bool { trayItems.isEmpty }
+    private var isUsingDummy: Bool { store.trayItems.isEmpty }
 
     var body: some View {
         ModuleShellView(
@@ -39,27 +41,64 @@ struct FilesTrayModuleView: View {
                 }
             },
             statusDotColor: Color.white.opacity(0.2),
-            statusLeft: isUsingDummy ? "4 FILES" : "\(trayItems.count) FILES",
+            statusLeft: isUsingDummy ? "4 FILES" : "\(store.trayItems.count) FILES",
             statusRight: "DROP TO ADD",
             actionButton: {
                 AnyView(
-                    Button { shareAll() } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "antenna.radiowaves.left.and.right")
-                                .font(.system(size: 10, weight: .medium))
-                            Text("AIRDROP ALL")
-                                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                .textCase(.uppercase)
-                                .kerning(0.55)
+                    HStack(spacing: 6) {
+                        // Add files — always visible
+                        CircularIconButton(
+                            icon: "folder.badge.plus",
+                            tooltip: "Add files",
+                            isActive: false,
+                            isDisabled: false,
+                            action: { store.openFilePicker(appState: appState) }
+                        )
+
+                        // Select / Done — hidden while tray is empty
+                        if !isUsingDummy {
+                            CircularIconButton(
+                                icon: store.isSelectMode ? "checkmark.circle.fill" : "checkmark.circle",
+                                tooltip: store.isSelectMode ? "Done" : "Select files",
+                                isActive: store.isSelectMode,
+                                isDisabled: false,
+                                action: { store.toggleSelectMode() }
+                            )
+                            .transition(.scale(scale: 0.7).combined(with: .opacity))
                         }
-                        .foregroundStyle(Color.white)
-                        .padding(.vertical, 4)
-                        .padding(.horizontal, 12)
-                        .background(Capsule().fill(Color.white.opacity(0.1)))
+
+                        // AirDrop — badge shows selection count in select mode
+                        let canShare = !isUsingDummy && (!store.isSelectMode || !store.selectedIDs.isEmpty)
+                        let airdropTooltip = (store.isSelectMode && !store.selectedIDs.isEmpty)
+                            ? "AirDrop \(store.selectedIDs.count) file\(store.selectedIDs.count == 1 ? "" : "s")"
+                            : "AirDrop all"
+                        ZStack(alignment: .topTrailing) {
+                            CircularIconButton(
+                                icon: "antenna.radiowaves.left.and.right",
+                                tooltip: airdropTooltip,
+                                isActive: false,
+                                isDisabled: !canShare,
+                                action: { store.shareItems(appState: appState, anchorView: shareAnchorView) }
+                            )
+                            .background(NSViewAnchor { shareAnchorView = $0 })
+
+                            // Selection count badge
+                            if store.isSelectMode && !store.selectedIDs.isEmpty {
+                                Text("\(store.selectedIDs.count)")
+                                    .font(.system(size: 7, weight: .bold, design: .monospaced))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 3)
+                                    .padding(.vertical, 1.5)
+                                    .background(Capsule().fill(Color(hex: "0A84FF")))
+                                    .offset(x: 5, y: -3)
+                                    .allowsHitTesting(false)
+                                    .transition(.scale(scale: 0.7).combined(with: .opacity))
+                            }
+                        }
                     }
-                    .buttonStyle(.plain)
-                    .opacity(isUsingDummy ? 0.4 : 1.0)
-                    .disabled(isUsingDummy)
+                    .animation(.spring(response: 0.28, dampingFraction: 0.72), value: isUsingDummy)
+                    .animation(.spring(response: 0.28, dampingFraction: 0.72), value: store.isSelectMode)
+                    .animation(.spring(response: 0.28, dampingFraction: 0.72), value: store.selectedIDs.isEmpty)
                 )
             }
         ) {
@@ -84,7 +123,7 @@ struct FilesTrayModuleView: View {
                             dummyThumbnail(file)
                         }
                     } else {
-                        ForEach(trayItems) { item in
+                        ForEach(store.trayItems) { item in
                             liveThumbnail(item)
                         }
                     }
@@ -97,7 +136,19 @@ struct FilesTrayModuleView: View {
                 handleDrop(providers)
             }
         }
-        .onAppear { trayItems = TrayPersistence.load() }
+        .onAppear {
+            store.onAppear()
+            // Drain files captured by FileDragReceiverZone before the panel finished opening
+            if !appState.pendingTrayURLs.isEmpty {
+                store.addURLs(appState.pendingTrayURLs)
+                appState.pendingTrayURLs = []
+            }
+        }
+        .onChange(of: appState.pendingTrayURLs) { _, urls in
+            guard !urls.isEmpty else { return }
+            store.addURLs(urls)
+            appState.pendingTrayURLs = []
+        }
         .onChange(of: isDragTargeted) { _, targeted in
             if targeted { appState.dismissalLocks.insert(.dragDrop) }
             else { appState.dismissalLocks.remove(.dragDrop) }
@@ -135,12 +186,36 @@ struct FilesTrayModuleView: View {
         .opacity(0.6)
     }
 
-    // MARK: - Live Thumbnail (wired × button + drag-out)
+    // MARK: - Live Thumbnail (wired × button, select mode, drag-out)
 
     @ViewBuilder
     private func liveThumbnail(_ item: TrayItem) -> some View {
-        LiveThumbnailView(item: item) {
-            removeItem(item)
+        LiveThumbnailView(
+            item: item,
+            isSelectMode: store.isSelectMode,
+            isSelected: store.selectedIDs.contains(item.id),
+            onRemove: { store.removeItem(item) },
+            onSelect: { store.toggleSelection(item) }
+        )
+        .contextMenu {
+            Button {
+                if let url = item.resolvedURL() {
+                    appState.pendingFileURL = url
+                    withAnimation(.spring(duration: 0.28, bounce: 0.16)) {
+                        appState.selectModule("fileConverter")
+                    }
+                }
+            } label: {
+                Label("Send to File Converter", systemImage: "arrow.2.squarepath")
+            }
+
+            Divider()
+
+            Button(role: .destructive) {
+                store.removeItem(item)
+            } label: {
+                Label("Remove from Tray", systemImage: "trash")
+            }
         }
     }
 
@@ -152,32 +227,78 @@ struct FilesTrayModuleView: View {
                 guard let data = item as? Data,
                       let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
                 Task { @MainActor in
-                    guard !trayItems.contains(where: { $0.path == url.path }) else { return }
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                        trayItems.append(TrayItem(url: url))
-                    }
-                    TrayPersistence.save(trayItems)
+                    store.addURLs([url])
                 }
             }
         }
         return true
     }
+}
 
-    // MARK: - Actions
+// MARK: - NSView anchor helper
 
-    private func removeItem(_ item: TrayItem) {
-        withAnimation(.easeOut(duration: 0.2)) {
-            trayItems.removeAll { $0.id == item.id }
-        }
-        TrayPersistence.save(trayItems)
+/// Transparent NSView embedded as a button background.
+/// Captures the underlying NSView so NSSharingServicePicker can anchor to the actual button position.
+private struct NSViewAnchor: NSViewRepresentable {
+    let captured: (NSView) -> Void
+    func makeNSView(context: Context) -> NSView {
+        let v = NSView()
+        DispatchQueue.main.async { captured(v) }
+        return v
     }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
 
-    private func shareAll() {
-        let urls = trayItems.compactMap { $0.resolvedURL() }
-        guard !urls.isEmpty else { return }
-        guard let button = NSApp.keyWindow?.contentView else { return }
-        let picker = NSSharingServicePicker(items: urls as [Any])
-        picker.show(relativeTo: .zero, of: button, preferredEdge: .minY)
+// MARK: - Circular icon button with hover tooltip
+
+private struct CircularIconButton: View {
+    let icon: String
+    let tooltip: String
+    let isActive: Bool
+    let isDisabled: Bool
+    let action: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(
+                    isActive  ? Color(hex: "0A84FF") :
+                    isDisabled ? Color.white.opacity(0.25) :
+                    Color.white.opacity(0.5)
+                )
+                .frame(width: 26, height: 26)
+                .background(
+                    Circle().fill(
+                        isActive ? Color(hex: "0A84FF").opacity(0.15) : Color.white.opacity(0.08)
+                    )
+                )
+        }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .overlay(alignment: .bottom) {
+            if isHovering && !isDisabled {
+                Text(tooltip)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(Color.white.opacity(0.85))
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .fill(Color(red: 0.12, green: 0.12, blue: 0.12))
+                            .shadow(color: .black.opacity(0.4), radius: 4, y: 2)
+                    )
+                    .fixedSize()
+                    .offset(y: 32)
+                    .transition(.opacity.combined(with: .offset(y: -3)))
+                    .allowsHitTesting(false)
+                    .zIndex(100)
+            }
+        }
+        .onHover { h in withAnimation(.easeInOut(duration: 0.15)) { isHovering = h } }
+        .zIndex(isHovering ? 100 : 0)
     }
 }
 
@@ -185,7 +306,10 @@ struct FilesTrayModuleView: View {
 
 private struct LiveThumbnailView: View {
     let item: TrayItem
+    let isSelectMode: Bool
+    let isSelected: Bool
     let onRemove: () -> Void
+    let onSelect: () -> Void
 
     @State private var isHovering = false
     @State private var icon: NSImage? = nil
@@ -228,8 +352,18 @@ private struct LiveThumbnailView: View {
         ZStack(alignment: .topTrailing) {
             VStack(spacing: 8) {
                 ZStack {
+                    // Background tile — highlighted when selected
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color.white.opacity(0.08))
+                        .fill(isSelected
+                              ? Color(hex: "0A84FF").opacity(0.18)
+                              : Color.white.opacity(0.08))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .strokeBorder(
+                                    isSelected ? Color(hex: "0A84FF").opacity(0.6) : Color.clear,
+                                    lineWidth: 1.5
+                                )
+                        )
                         .frame(width: 72, height: 72)
 
                     if let icon {
@@ -252,20 +386,31 @@ private struct LiveThumbnailView: View {
                 }
                 Text(item.displayName)
                     .font(.system(size: 10, weight: .regular))
-                    .foregroundStyle(Color.white.opacity(0.4))
+                    .foregroundStyle(Color.white.opacity(isSelected ? 0.75 : 0.4))
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .frame(maxWidth: 72)
                     .multilineTextAlignment(.center)
             }
-            // Drag-out support — exposes file URL to drop destinations
+            // Drag-out support — disabled in select mode
             .onDrag {
-                guard let url = item.resolvedURL() else { return NSItemProvider() }
+                guard !isSelectMode, let url = item.resolvedURL() else { return NSItemProvider() }
                 return NSItemProvider(contentsOf: url) ?? NSItemProvider()
             }
+            // Tap to toggle selection in select mode
+            .onTapGesture {
+                if isSelectMode { onSelect() }
+            }
 
-            // × remove button (hover only)
-            if isHovering {
+            // Top-right overlay: checkmark in select mode, × on hover in normal mode
+            if isSelectMode {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(isSelected ? Color(hex: "0A84FF") : Color.white.opacity(0.45))
+                    .background(Color.black.opacity(0.35), in: Circle())
+                    .offset(x: 4, y: -4)
+                    .transition(.scale(scale: 0.8).combined(with: .opacity))
+            } else if isHovering {
                 Button(action: onRemove) {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 14, weight: .bold))

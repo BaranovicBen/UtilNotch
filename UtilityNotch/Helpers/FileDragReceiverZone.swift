@@ -99,7 +99,7 @@ final class FileDragReceiverZone {
 
 // MARK: - Drag receiver view
 
-private class FileDragReceiverView: NSView, NSDraggingDestination {
+private class FileDragReceiverView: NSView {
 
     private let appState: AppState
 
