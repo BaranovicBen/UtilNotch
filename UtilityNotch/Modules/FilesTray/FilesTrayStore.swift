@@ -127,7 +127,7 @@ final class FilesTrayStore {
         let urls = items.compactMap { $0.resolvedURL() }
         guard !urls.isEmpty else { return }
 
-        let delegate = SharingPickerDelegate(appState: appState)
+        let delegate = SharingPickerDelegate(appState: appState, store: self)
         _sharingDelegate = delegate
 
         let picker = NSSharingServicePicker(items: urls as [Any])
@@ -136,11 +136,15 @@ final class FilesTrayStore {
 
         // Activate app and make the panel key — required from a .nonactivatingPanel
         NSApp.activate(ignoringOtherApps: true)
-        anchorView?.window?.makeKey()
+
+        // Find our panel window to anchor to — keyWindow may be nil on a .nonactivatingPanel
+        let panelWindow = anchorView?.window
+            ?? NSApp.windows.first(where: { $0.isVisible && $0.level.rawValue >= Int(CGWindowLevelForKey(.mainMenuWindow)) })
+        panelWindow?.makeKey()
 
         if let view = anchorView {
             picker.show(relativeTo: view.bounds, of: view, preferredEdge: .minY)
-        } else if let contentView = NSApp.keyWindow?.contentView {
+        } else if let contentView = panelWindow?.contentView {
             let rect = CGRect(
                 x: contentView.bounds.maxX - 80,
                 y: contentView.bounds.maxY - 50,
