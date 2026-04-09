@@ -50,6 +50,12 @@ struct ConverterModuleView: View {
                 appState.pendingFileURL = nil
             }
         }
+        .onChange(of: appState.pendingFileURL) { _, url in
+            // React when Files Tray sends a file while this module is already active
+            guard let url else { return }
+            droppedFileName = url.lastPathComponent
+            appState.pendingFileURL = nil
+        }
         .onChange(of: isDragTargeted) { _, targeted in
             if targeted { appState.dismissalLocks.insert(.dragDrop) }
             else { appState.dismissalLocks.remove(.dragDrop) }
