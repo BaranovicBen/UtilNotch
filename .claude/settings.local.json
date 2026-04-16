@@ -48,7 +48,8 @@
       "Bash(git revert:*)",
       "Bash(git stash:*)",
       "Bash(xcodebuild -scheme UtilityNotch -destination platform=macOS build)",
-      "Bash(DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -scheme UtilityNotch -destination \"platform=macOS\" build)"
+      "Bash(DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -scheme UtilityNotch -destination \"platform=macOS\" build)",
+      "Bash(log show:*)"
     ]
   }
 }

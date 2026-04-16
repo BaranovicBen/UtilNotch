@@ -118,38 +118,50 @@ final class FilesTrayStore {
     /// Shares selected items when in select mode (if any selected), otherwise shares all.
     /// Inserts .pickerOpen lock so the panel stays open while the picker is visible.
     ///
-    /// The panel uses .nonactivatingPanel, so we must:
-    ///   1. Activate the app (NSApp.activate)
-    ///   2. Make the anchor's window key so the picker has a proper parent
-    ///   3. Keep strong references to both picker and delegate until dismissed
+    /// Notes:
+    ///   - .pickerOpen is inserted at the TOP of this function, before any anchor check,
+    ///     so the panel can never close during setup due to a mouse-leave or inactivity fire.
+    ///     If the guard fails, the lock is removed synchronously in that branch.
+    ///   - NSSharingServicePicker does NOT require NSApp.activate — calling it causes a
+    ///     synthetic activation event that races the dismissal lock on the main queue.
+    ///   - Strong references to picker and delegate are held until sharingPickerDidDismiss.
     func shareItems(appState: AppState, anchorView: NSView?) {
         let items = (isSelectMode && !selectedIDs.isEmpty) ? selectedItems : trayItems
         let urls = items.compactMap { $0.resolvedURL() }
         guard !urls.isEmpty else { return }
+
+        // Insert .pickerOpen BEFORE any anchor resolution so the panel can never
+        // close during the setup phase due to a mouse-leave or inactivity fire.
+        // If we bail below, the lock is removed synchronously in that branch.
+        appState.dismissalLocks.insert(.pickerOpen)
+        print("🔵 [Share] lock inserted — locks: \(appState.dismissalLocks.rawValue), anchorView: \(anchorView != nil), anchorWindow: \(anchorView?.window != nil)")
+
+        let panelWindow = anchorView?.window
+            ?? NSApp.windows.first(where: { $0.isVisible && $0.level.rawValue >= Int(CGWindowLevelForKey(.mainMenuWindow)) })
+
+        let anchorIsValid = anchorView?.window != nil
+        let fallbackView = panelWindow?.contentView
+
+        guard anchorIsValid || fallbackView != nil else {
+            // Can't show picker — release the lock we just inserted.
+            appState.dismissalLocks.remove(.pickerOpen)
+            print("🔴 [Share] guard failed — no anchor, no fallback view. Lock released.")
+            return
+        }
 
         let delegate = SharingPickerDelegate(appState: appState, store: self)
         _sharingDelegate = delegate
 
         let picker = NSSharingServicePicker(items: urls as [Any])
         picker.delegate = delegate
-        _sharingPicker = picker  // must be kept alive until didChoose fires
+        _sharingPicker = picker
 
-        // Activate app and make the panel key — required from a .nonactivatingPanel
-        NSApp.activate(ignoringOtherApps: true)
-
-        // Find our panel window to anchor to — keyWindow may be nil on a .nonactivatingPanel
-        let panelWindow = anchorView?.window
-            ?? NSApp.windows.first(where: { $0.isVisible && $0.level.rawValue >= Int(CGWindowLevelForKey(.mainMenuWindow)) })
-        panelWindow?.makeKey()
-
-        if let view = anchorView {
+        if anchorIsValid, let view = anchorView {
             picker.show(relativeTo: view.bounds, of: view, preferredEdge: .minY)
-        } else if let contentView = panelWindow?.contentView {
-            let rect = CGRect(
-                x: contentView.bounds.maxX - 80,
-                y: contentView.bounds.maxY - 50,
-                width: 60, height: 30
-            )
+        } else if let contentView = fallbackView {
+            // Fallback: footer/right area where action buttons live.
+            // Footer is at y=0..38 (bottom of content view in AppKit coords).
+            let rect = CGRect(x: contentView.bounds.maxX - 90, y: 6, width: 60, height: 26)
             picker.show(relativeTo: rect, of: contentView, preferredEdge: .minY)
         }
     }
@@ -173,14 +185,18 @@ private final class SharingPickerDelegate: NSObject, NSSharingServicePickerDeleg
         self.appState = appState
         self.store = store
         super.init()
-        appState.dismissalLocks.insert(.pickerOpen)
+        // .pickerOpen lock is inserted by shareItems() before this delegate is created.
+        // Do NOT insert again here — would require two removes to clear.
     }
 
     func sharingServicePicker(_ picker: NSSharingServicePicker, didChoose service: NSSharingService?) {
-        // Fires on both selection and cancellation — always release lock and cleanup
-        DispatchQueue.main.async { [weak self] in
+        // Fires on both service selection and dismissal (service == nil).
+        // Short delay so the panel can't close while the mouse travels back from the picker.
+        print("🔵 [Share] didChoose fired — service: \(service?.title ?? "nil")")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
             self?.appState.dismissalLocks.remove(.pickerOpen)
             self?.store?.sharingPickerDidDismiss()
+            print("🔵 [Share] lock released — locks: \(self?.appState.dismissalLocks.rawValue ?? -1)")
         }
     }
 }

@@ -3,7 +3,7 @@ import EventKit
 
 // MARK: - Settings Keys
 
-private enum CalKey {
+enum CalKey {
     static let lookahead  = "cal.lookaheadDays"   // Int: 1, 3, or 7
     static let enabledIDs = "cal.enabledCalIDs"   // comma-joined calendar identifiers
 }

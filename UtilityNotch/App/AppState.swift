@@ -208,7 +208,12 @@ final class AppState {
     }
 
     func hidePanel() {
-        guard !shouldSuppressClose else { return }
+        guard !shouldSuppressClose else {
+            print("🔒 [UtilityNotch] hidePanel() suppressed — locks: \(dismissalLocks.rawValue), insidePanel: \(isPointerInsidePanel)")
+            return
+        }
+        print("🚪 [UtilityNotch] hidePanel() proceeding — locks: \(dismissalLocks.rawValue)")
+        Thread.callStackSymbols.enumerated().forEach { i, s in print("  [\(i)] \(s)") }
         isPanelVisible = false
         dismissalLocks.remove(.activeEditing)
         isPointerInsidePanel = false
@@ -216,6 +221,8 @@ final class AppState {
 
     /// Force-hide even when interacting (e.g. user pressed Escape or hotkey).
     func forceHidePanel() {
+        print("⛔️ [UtilityNotch] forceHidePanel() called — locks were: \(dismissalLocks.rawValue)")
+        Thread.callStackSymbols.enumerated().forEach { i, s in print("  [\(i)] \(s)") }
         isPanelVisible = false
         dismissalLocks = []
         isPointerInsidePanel = false

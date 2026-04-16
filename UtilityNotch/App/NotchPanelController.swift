@@ -29,6 +29,22 @@ final class NotchPanelController {
                 self?.repositionTriggerZone()
             }
         }
+        // DEBUG: log every app deactivation so we can correlate with panel-close events.
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didResignActiveNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            print("📴 [UtilityNotch] app DID RESIGN ACTIVE")
+            Thread.callStackSymbols.prefix(8).enumerated().forEach { i, s in print("  [\(i)] \(s)") }
+        }
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            print("📲 [UtilityNotch] app DID BECOME ACTIVE")
+        }
     }
 
     deinit {
@@ -129,6 +145,11 @@ final class NotchPanelController {
         )
 
         panel.isFloatingPanel = true
+        // Prevent macOS from auto-hiding the panel when the app deactivates.
+        // NSPanel.hidesOnDeactivate defaults to true — without this, any app-activation
+        // transition (e.g. NSSharingServicePicker appearing) orders the panel out directly,
+        // bypassing all dismissal lock logic in AppState.
+        panel.hidesOnDeactivate = false
         // Must be above mainMenuWindow so the panel renders inside the notch area
         panel.level = NSWindow.Level(
             rawValue: Int(CGWindowLevelForKey(.mainMenuWindow)) + 2
@@ -191,6 +212,13 @@ private class NotchPanel: NSPanel {
     override class func allowedClasses(forRestorableStateKeyPath keyPath: String) -> [AnyClass] { [] }
 
     override func resignKey() {
+        print("🔑 [UtilityNotch] NotchPanel resignKey — new key window: \(NSApp.keyWindow.map { "\(type(of: $0))" } ?? "nil")")
         super.resignKey()
+    }
+
+    override func orderOut(_ sender: Any?) {
+        print("🪟 [UtilityNotch] NotchPanel orderOut called")
+        Thread.callStackSymbols.prefix(10).enumerated().forEach { i, s in print("  [\(i)] \(s)") }
+        super.orderOut(sender)
     }
 }

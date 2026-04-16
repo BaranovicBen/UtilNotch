@@ -39,12 +39,15 @@ final class FileDragReceiverZone {
     private func makeWindow() -> NSWindow {
         guard let screen = NSScreen.main ?? NSScreen.screens.first else { return NSWindow() }
 
-        // Full-width strip at the very top of the screen (inside the notch cutout)
+        // Centered strip wider than the notch, extending further down for easier drag targeting.
+        let zoneWidth  = ScreenGeometry.triggerZoneWidth + 50
+        let zoneHeight = ScreenGeometry.triggerZoneHeight + 7
+
         let frame = CGRect(
-            x: screen.frame.minX,
-            y: screen.frame.maxY - ScreenGeometry.triggerZoneHeight,
-            width: screen.frame.width,
-            height: ScreenGeometry.triggerZoneHeight
+            x: screen.frame.midX - zoneWidth / 2,
+            y: screen.frame.maxY - zoneHeight,
+            width: zoneWidth,
+            height: zoneHeight
         )
 
         let window = NSWindow(
@@ -55,13 +58,12 @@ final class FileDragReceiverZone {
         )
         window.isOpaque = false
         window.backgroundColor = .clear
-        // Must be false — NSDraggingDestination callbacks require the window to accept events.
-        // The notch cutout is a dead zone with no interactive UI, so this is safe.
+        // Must be false — NSDraggingDestination callbacks require the window to receive events.
         window.ignoresMouseEvents = false
-        // Below HoverTriggerZone (+2) so hover events still route correctly.
-        // macOS drag session falls through non-registering windows to find us.
+        // One level below HoverTriggerZone (mainMenuWindow + 2) so hover events still route there.
+        // macOS drag delivery iterates registered windows, so drags reach us even at the lower level.
         window.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.mainMenuWindow)) + 1)
-        window.collectionBehavior = [.canJoinAllSpaces, .stationary]
+        window.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
         window.hasShadow = false
 
         let receiverView = FileDragReceiverView(

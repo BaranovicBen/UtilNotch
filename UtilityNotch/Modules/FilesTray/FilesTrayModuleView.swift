@@ -246,7 +246,10 @@ private struct NSViewAnchor: NSViewRepresentable {
         DispatchQueue.main.async { captured(v) }
         return v
     }
-    func updateNSView(_ nsView: NSView, context: Context) {}
+    func updateNSView(_ nsView: NSView, context: Context) {
+        // Re-capture on every layout pass so the reference is never stale/windowless.
+        DispatchQueue.main.async { captured(nsView) }
+    }
 }
 
 // MARK: - Circular icon button with hover tooltip

@@ -1,4 +1,4 @@
-import SwiftUI
+ import SwiftUI
 import EventKit
 
 /// Calendar module — full-shell Figma implementation with EventKit integration.
@@ -10,6 +10,7 @@ struct CalendarModuleView: View {
     // MARK: - Auth state
     @State private var authStatus: EKAuthorizationStatus = EKEventStore.authorizationStatus(for: .event)
     @State private var ekEvents: [EKEvent] = []
+    @State private var selectedDate: Date = Calendar.current.startOfDay(for: .now)
 
     private var isAuthorized: Bool {
         return authStatus == .fullAccess
@@ -20,7 +21,9 @@ struct CalendarModuleView: View {
     private struct WeekDay {
         let abbrev: String
         let day: Int
+        let date: Date
         let isToday: Bool
+        let isSelected: Bool
     }
 
     private struct CalEvent: Identifiable {
@@ -42,28 +45,33 @@ struct CalendarModuleView: View {
 
     private var currentWeekDays: [WeekDay] {
         let cal = Calendar.current
-        let today = Date()
-        let weekday = cal.component(.weekday, from: today)
+        let weekday = cal.component(.weekday, from: selectedDate)
         let firstWeekday = cal.firstWeekday
         let offset = (weekday - firstWeekday + 7) % 7
-        guard let startOfWeek = cal.date(byAdding: .day, value: -offset, to: today) else { return [] }
+        guard let startOfWeek = cal.date(byAdding: .day, value: -offset, to: selectedDate) else { return [] }
         let abbrevs = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"]
         return (0..<7).compactMap { i -> WeekDay? in
             guard let date = cal.date(byAdding: .day, value: i, to: startOfWeek) else { return nil }
             let dayNum = cal.component(.day, from: date)
             let wdIndex = cal.component(.weekday, from: date) - 1
-            return WeekDay(abbrev: abbrevs[wdIndex], day: dayNum, isToday: cal.isDateInToday(date))
+            return WeekDay(
+                abbrev: abbrevs[wdIndex],
+                day: dayNum,
+                date: date,
+                isToday: cal.isDateInToday(date),
+                isSelected: cal.isDate(date, inSameDayAs: selectedDate)
+            )
         }
     }
 
     private var currentDayNumber: String {
         let f = DateFormatter(); f.dateFormat = "d"
-        return f.string(from: Date())
+        return f.string(from: selectedDate)
     }
 
     private var currentMonthYear: String {
         let f = DateFormatter(); f.dateFormat = "MMMM yyyy"
-        return f.string(from: Date())
+        return f.string(from: selectedDate)
     }
 
     private var displayEvents: [CalEvent] {
@@ -120,42 +128,42 @@ struct CalendarModuleView: View {
     }
 
     // MARK: - Date Row
-    // Total height: 40pt. Top padding: 12pt.
-    // Running total after: 12 + 40 = 52pt
 
     private var dateRow: some View {
-        HStack(alignment: .bottom, spacing: 0) {
+        HStack(alignment: .bottom, spacing: 8) {
             Text(currentDayNumber)
-                .font(.system(size: 28, weight: .bold))
+                .font(.system(size: 52, weight: .black))
                 .foregroundStyle(Color.white)
                 .padding(.leading, 8)
 
             Text(currentMonthYear)
-                .font(.system(size: 13, weight: .regular))
-                .foregroundStyle(Color.white.opacity(0.5))
-                .padding(.leading, 8)
-                .padding(.bottom, 3)
+                .font(.system(size: 28, weight: .semibold))
+                .foregroundStyle(Color.white.opacity(0.70))
+                .padding(.bottom, 4)
 
             Spacer()
 
             HStack(spacing: 8) {
-                navButton(icon: "chevron.left")
-                navButton(icon: "chevron.right")
+                navButton(icon: "chevron.left")  { shiftDay(-7) }
+                navButton(icon: "chevron.right") { shiftDay(7) }
             }
+            .padding(.bottom, 4)
         }
-        .frame(height: 40)
     }
 
     @ViewBuilder
-    private func navButton(icon: String) -> some View {
-        Image(systemName: icon)
-            .font(.system(size: 10, weight: .medium))
-            .foregroundStyle(Color.white.opacity(0.5))
-            .frame(width: 24, height: 24)
-            .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(Color.white.opacity(0.10))
-            )
+    private func navButton(icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(Color.white.opacity(0.5))
+                .frame(width: 24, height: 24)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(Color.white.opacity(0.10))
+                )
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Week Strip
@@ -165,7 +173,10 @@ struct CalendarModuleView: View {
     private var weekStrip: some View {
         HStack(spacing: 0) {
             ForEach(currentWeekDays, id: \.day) { day in
-                weekDayCell(day)
+                Button { selectDay(day.date) } label: {
+                    weekDayCell(day)
+                }
+                .buttonStyle(.plain)
             }
         }
         .frame(maxWidth: .infinity)
@@ -176,20 +187,20 @@ struct CalendarModuleView: View {
     @ViewBuilder
     private func weekDayCell(_ day: WeekDay) -> some View {
         ZStack {
-            if day.isToday {
+            if day.isSelected {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color(hex: "0A84FF"))
+                    .fill(day.isToday ? Color(hex: "0A84FF") : Color.white.opacity(0.12))
                     .frame(width: 44, height: 40)
             }
 
             VStack(spacing: 3) {
                 Text(day.abbrev)
-                    .font(.system(size: 10, weight: day.isToday ? .medium : .regular))
-                    .foregroundStyle(day.isToday ? Color.white : Color.white.opacity(0.30))
+                    .font(.system(size: 10, weight: day.isSelected ? .medium : .regular))
+                    .foregroundStyle(day.isSelected ? Color.white : Color.white.opacity(0.30))
 
                 Text("\(day.day)")
-                    .font(.system(size: 13, weight: day.isToday ? .semibold : .regular))
-                    .foregroundStyle(day.isToday ? Color.white : Color.white.opacity(0.35))
+                    .font(.system(size: 13, weight: day.isSelected ? .semibold : .regular))
+                    .foregroundStyle(day.isSelected ? Color.white : Color.white.opacity(0.35))
             }
         }
         .frame(maxWidth: .infinity)
@@ -259,12 +270,29 @@ struct CalendarModuleView: View {
         }
     }
 
+    // MARK: - Navigation
+
+    private func shiftDay(_ delta: Int) {
+        guard let d = Calendar.current.date(byAdding: .day, value: delta, to: selectedDate) else { return }
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.72)) {
+            selectedDate = Calendar.current.startOfDay(for: d)
+        }
+        loadEvents()
+    }
+
+    private func selectDay(_ date: Date) {
+        withAnimation(.spring(response: 0.25, dampingFraction: 0.72)) {
+            selectedDate = Calendar.current.startOfDay(for: date)
+        }
+        loadEvents()
+    }
+
     // MARK: - Data Loading
 
     private func loadEvents() {
         guard isAuthorized else { return }
         let cal = Calendar.current
-        let start = cal.startOfDay(for: Date())
+        let start = cal.startOfDay(for: selectedDate)
         let end = cal.date(byAdding: .day, value: 7, to: start) ?? start
         let predicate = sharedEventStore.predicateForEvents(withStart: start, end: end, calendars: nil)
         ekEvents = sharedEventStore.events(matching: predicate)
