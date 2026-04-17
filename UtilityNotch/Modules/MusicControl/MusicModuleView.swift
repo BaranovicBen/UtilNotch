@@ -2,10 +2,10 @@ import SwiftUI
 
 /// Music module — vertical-column layout.
 /// Carousel (prev/current/next art) → title/artist → wave → controls → scrubber.
-/// Depends only on MusicProvider; injected via \.musicProvider environment key.
+/// Reads from MusicOrchestrator via \.musicOrchestrator environment key.
 struct MusicModuleView: View {
-    @Environment(AppState.self)      private var appState
-    @Environment(\.musicProvider)    private var provider
+    @Environment(AppState.self)         private var appState
+    @Environment(\.musicOrchestrator)   private var orchestrator
 
     // Carousel animation state
     @State private var wheelOffset: CGFloat = 0
@@ -17,11 +17,21 @@ struct MusicModuleView: View {
     @State private var trackWidth: CGFloat = 0
 
     // Wheel carousel geometry
-    private let artSize: CGFloat    = 100   // layout size for all album tiles
-    private let slotDistance: CGFloat = 92  // center-to-side-center distance
-    private let maxRotation: Double  = 35   // Y-rotation degrees at the side positions
+    private let artSize: CGFloat     = 100
+    private let slotDistance: CGFloat = 92
+    private let maxRotation: Double   = 35
+
+    // Virtual carousel: [outerPrev?, prev?, current?, next?, outerNext?]
+    // Indices 0/4 are the ±2 outer (off-screen) slots used only during animation.
+    private var carouselCards: [TrackCard?] {
+        let s = orchestrator.nowPlaying
+        return [nil, s?.previous, s?.current, s?.next, s?.upNext.first]
+    }
+    // Center index is always 2 (current track)
+    private let carouselCenter = 2
 
     var body: some View {
+        let np = orchestrator.nowPlaying
         ModuleShellView(
             moduleTitle: "Music",
             moduleIcon: "music.note",
@@ -33,12 +43,13 @@ struct MusicModuleView: View {
                 }
             },
             statusDotColor: Color.white.opacity(0.2),
-            statusLeft: provider.currentTrack != nil ? "NOW PLAYING" : "CONNECT A PLAYER",
-            statusRight: "DEMO",
+            statusLeft: np?.current != nil ? "NOW PLAYING" : "CONNECT A PLAYER",
+            statusRight: np?.playbackSourceLabel ?? "—",
             actionButton: nil
         ) {
             musicContent
         }
+        .onAppear { appState.setModuleActionButton(nil) }
     }
 
     // MARK: - Full content column
@@ -62,48 +73,26 @@ struct MusicModuleView: View {
 
     private var carouselView: some View {
         ZStack(alignment: .center) {
-            // Outer slots (±2) are declared first so they sit behind everything else.
-            // They are invisible at rest (outerFade = 0) and only materialise during
-            // a swipe animation as they slide into the side position — this keeps
-            // the transition seamless without them ever showing at idle.
-            wheelSlot(at: provider.currentIndex - 2, base: -slotDistance * 2, zIdx: 1, isOuter: true)
-            wheelSlot(at: provider.currentIndex + 2, base:  slotDistance * 2, zIdx: 1, isOuter: true)
-            // Visible side slots
-            wheelSlot(at: provider.currentIndex - 1, base: -slotDistance,     zIdx: 2)
-            wheelSlot(at: provider.currentIndex + 1, base:  slotDistance,     zIdx: 2)
-            // Center — always on top
-            wheelSlot(at: provider.currentIndex,     base:  0,                zIdx: 3)
+            wheelSlot(at: carouselCenter - 2, base: -slotDistance * 2, zIdx: 1, isOuter: true)
+            wheelSlot(at: carouselCenter + 2, base:  slotDistance * 2, zIdx: 1, isOuter: true)
+            wheelSlot(at: carouselCenter - 1, base: -slotDistance,     zIdx: 2)
+            wheelSlot(at: carouselCenter + 1, base:  slotDistance,     zIdx: 2)
+            wheelSlot(at: carouselCenter,     base:  0,                zIdx: 3)
         }
-        // Fixed width sized to exactly fit center + two side albums (no room for ±2 slots).
-        // Combined with .clipped() this is a belt-and-suspenders guarantee: even if a
-        // floating pixel of an outer album escapes the opacity fade it is hard-clipped here.
-        .frame(width: slotDistance * 2 + artSize)   // 92*2 + 100 = 284 pt
+        .frame(width: slotDistance * 2 + artSize)
         .frame(height: 110)
         .clipped()
     }
 
-    /// One album in the wheel.
-    /// All 3D transforms are derived from the album's live x-position (`base + wheelOffset`),
-    /// so they animate continuously and in-sync as the wheel turns.
-    ///
-    /// - Parameters:
-    ///   - isOuter: When `true` the slot fades to **zero opacity at rest** (|norm| ≥ 2) and
-    ///              only fades in as the animation brings it into the side position. This hides
-    ///              the ±2 albums without removing them from the view tree (removing them would
-    ///              create a visible gap on the arriving side mid-animation).
     @ViewBuilder
-    private func wheelSlot(at rawIndex: Int, base: CGFloat, zIdx: Double, isOuter: Bool = false) -> some View {
+    private func wheelSlot(at index: Int, base: CGFloat, zIdx: Double, isOuter: Bool = false) -> some View {
         let pos    = base + wheelOffset
         let norm   = max(-2.0, min(2.0, Double(pos) / Double(slotDistance)))
-        let sideT  = min(1.0, abs(norm))   // 0.0 = center, 1.0 = full side position
-
-        // Outer fade: 0 at |norm|=2 (at rest), rises linearly to 1 at |norm|=1 (side slot).
-        // Inner slots always get outerFade = 1 so they are unaffected.
+        let sideT  = min(1.0, abs(norm))
         let outerFade: Double = isOuter ? max(0.0, 2.0 - abs(norm)) : 1.0
 
-        artTile(at: rawIndex)
+        artTile(at: index)
             .frame(width: artSize, height: artSize)
-            // Dark vignette on the album surface, rotates with the tile
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(Color.black.opacity(0.35 * sideT))
@@ -117,7 +106,6 @@ struct MusicModuleView: View {
                 anchorZ: 0,
                 perspective: 0.35
             )
-            // Shadow fades out for side albums; invisible for outer albums
             .shadow(
                 color: Color.black.opacity(0.55 * (1.0 - sideT) * outerFade),
                 radius: 18.0 * (1.0 - sideT),
@@ -127,44 +115,69 @@ struct MusicModuleView: View {
             .zIndex(zIdx)
     }
 
-    /// Base album-art tile — colored gradient square with music note icon.
-    /// Shadow and side-transforms are applied by `wheelSlot`, not here.
+    /// Album art tile. Shows AsyncImage when artworkURL is available,
+    /// otherwise a deterministic gradient placeholder keyed on the track ID.
     @ViewBuilder
-    private func artTile(at rawIndex: Int) -> some View {
-        let tracks = provider.tracks
-        if tracks.isEmpty {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.white.opacity(0.05))
+    private func artTile(at index: Int) -> some View {
+        let card = carouselCards.indices.contains(index) ? carouselCards[index] : nil
+        if let url = card?.artworkURL {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: artSize, height: artSize)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                default:
+                    artPlaceholder(for: card)
+                }
+            }
         } else {
-            let idx   = ((rawIndex % tracks.count) + tracks.count) % tracks.count
-            let track = tracks[idx]
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: track.albumColors,
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .overlay(
-                    Image(systemName: "music.note")
-                        .font(.system(size: 22))
-                        .foregroundStyle(Color.white.opacity(0.25))
-                )
+            artPlaceholder(for: card)
         }
+    }
+
+    private func artPlaceholder(for card: TrackCard?) -> some View {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(LinearGradient(
+                colors: gradientColors(for: card?.id),
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ))
+            .overlay(
+                Image(systemName: "music.note")
+                    .font(.system(size: 22))
+                    .foregroundStyle(Color.white.opacity(0.25))
+            )
+    }
+
+    /// Deterministic gradient from a fixed palette, keyed on track ID hash.
+    private func gradientColors(for id: String?) -> [Color] {
+        // Same palettes as the mock tracks for visual continuity
+        let palettes: [[Color]] = [
+            [Color(hex: "1A0533"), Color(hex: "6D28D9")],
+            [Color(hex: "7F1D1D"), Color(hex: "F97316")],
+            [Color(hex: "1E3A5F"), Color(hex: "06B6D4")],
+            [Color(hex: "713F12"), Color(hex: "FBBF24")],
+            [Color(hex: "4C1D95"), Color(hex: "EC4899")],
+            [Color(hex: "064E3B"), Color(hex: "34D399")],
+        ]
+        let hash = abs(id?.hashValue ?? 0)
+        return palettes[hash % palettes.count]
     }
 
     // MARK: - Track info
 
     private var trackInfoView: some View {
-        VStack(spacing: 4) {
-            Text(provider.currentTrack?.title ?? "—")
+        let np = orchestrator.nowPlaying
+        return VStack(spacing: 4) {
+            Text(np?.current?.title ?? "—")
                 .font(.system(size: 17, weight: .bold))
                 .foregroundStyle(Color.white)
                 .lineLimit(1)
                 .contentTransition(.numericText())
 
-            Text(provider.currentTrack?.artist ?? "")
+            Text(np?.current?.artist ?? "")
                 .font(.system(size: 13))
                 .foregroundStyle(Color.white.opacity(0.55))
                 .lineLimit(1)
@@ -172,13 +185,13 @@ struct MusicModuleView: View {
         }
         .frame(maxWidth: .infinity)
         .multilineTextAlignment(.center)
-        .animation(.easeInOut(duration: 0.25), value: provider.currentIndex)
+        .animation(.easeInOut(duration: 0.25), value: orchestrator.nowPlaying?.current?.id)
     }
 
     // MARK: - Sound wave
 
     private var waveView: some View {
-        MusicWaveView(isPlaying: provider.isPlaying)
+        MusicWaveView(isPlaying: orchestrator.nowPlaying?.isPlaying ?? false)
             .frame(maxWidth: .infinity)
             .frame(height: 24)
     }
@@ -186,26 +199,23 @@ struct MusicModuleView: View {
     // MARK: - Playback controls
 
     private var controlsView: some View {
-        HStack(spacing: 16) {
-            // ⏮ Backward
-            controlButton(icon: "backward.fill", size: 13, diameter: 30) {
+        let caps = orchestrator.capabilities
+        return HStack(spacing: 16) {
+            controlButton(icon: "backward.fill", size: 13, diameter: 30,
+                          disabled: !caps.canSkipPrevious) {
                 triggerCarousel(forward: false)
             }
 
-            // ⏯ Play / Pause
             controlButton(
-                icon: provider.isPlaying ? "pause.fill" : "play.fill",
-                size: 16, diameter: 34,
-                fillOpacity: 0.22
+                icon: orchestrator.nowPlaying?.isPlaying == true ? "pause.fill" : "play.fill",
+                size: 16, diameter: 34, fillOpacity: 0.22,
+                disabled: !caps.canPlayPause
             ) {
-                Task {
-                    if provider.isPlaying { await provider.pause() }
-                    else                  { await provider.play()  }
-                }
+                Task { await orchestrator.playPause() }
             }
 
-            // ⏭ Forward
-            controlButton(icon: "forward.fill", size: 13, diameter: 30) {
+            controlButton(icon: "forward.fill", size: 13, diameter: 30,
+                          disabled: !caps.canSkipNext) {
                 triggerCarousel(forward: true)
             }
         }
@@ -217,6 +227,7 @@ struct MusicModuleView: View {
         size: CGFloat,
         diameter: CGFloat,
         fillOpacity: Double = 0.15,
+        disabled: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
@@ -226,17 +237,20 @@ struct MusicModuleView: View {
                     .frame(width: diameter, height: diameter)
                 Image(systemName: icon)
                     .font(.system(size: size, weight: .medium))
-                    .foregroundStyle(Color.white)
+                    .foregroundStyle(Color.white.opacity(disabled ? 0.3 : 1.0))
             }
         }
         .buttonStyle(.plain)
+        .disabled(disabled)
     }
 
     // MARK: - Progress bar + timestamps
 
     private var progressView: some View {
-        let duration = provider.currentTrack?.duration ?? 1
-        let elapsed  = isDraggingProgress ? dragProgress * duration : provider.currentTime
+        let duration = orchestrator.nowPlaying?.durationSeconds ?? 1
+        let elapsed  = isDraggingProgress
+            ? dragProgress * duration
+            : (orchestrator.nowPlaying?.progressSeconds ?? 0)
         let progress = max(0, min(1, elapsed / duration))
 
         return VStack(spacing: 3) {
@@ -245,19 +259,16 @@ struct MusicModuleView: View {
                     .fill(Color.white.opacity(0.12))
                     .frame(height: 3)
                 Capsule()
-                    .fill(
-                        LinearGradient(
-                            colors: [Color(hex: "8B5CF6"), Color(hex: "3B82F6")],
-                            startPoint: .leading, endPoint: .trailing
-                        )
-                    )
+                    .fill(LinearGradient(
+                        colors: [Color(hex: "8B5CF6"), Color(hex: "3B82F6")],
+                        startPoint: .leading, endPoint: .trailing
+                    ))
                     .frame(width: max(0, trackWidth * progress), height: 3)
                     .animation(
                         isDraggingProgress ? nil : .linear(duration: 0.5),
-                        value: provider.currentTime
+                        value: orchestrator.nowPlaying?.progressSeconds
                     )
             }
-            // Fixed hit area — no GeometryReader, so no layout inflation
             .frame(height: 12)
             .contentShape(Rectangle())
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { trackWidth = $0 }
@@ -271,8 +282,8 @@ struct MusicModuleView: View {
                     .onEnded { value in
                         let normalized = trackWidth > 0
                             ? max(0, min(1, value.location.x / trackWidth)) : 0
-                        let time = normalized * (provider.currentTrack?.duration ?? 0)
-                        Task { await provider.seek(to: time) }
+                        let time = normalized * (orchestrator.nowPlaying?.durationSeconds ?? 0)
+                        Task { await orchestrator.seek(to: time) }
                         isDraggingProgress = false
                     }
             )
@@ -280,16 +291,16 @@ struct MusicModuleView: View {
             HStack {
                 Text(formatTime(
                     isDraggingProgress
-                        ? dragProgress * (provider.currentTrack?.duration ?? 0)
-                        : provider.currentTime
+                        ? dragProgress * (orchestrator.nowPlaying?.durationSeconds ?? 0)
+                        : (orchestrator.nowPlaying?.progressSeconds ?? 0)
                 ))
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(Color.white.opacity(0.35))
-                .animation(nil, value: provider.currentTime)
+                .animation(nil, value: orchestrator.nowPlaying?.progressSeconds)
 
                 Spacer()
 
-                Text(formatTime(provider.currentTrack?.duration ?? 0))
+                Text(formatTime(orchestrator.nowPlaying?.durationSeconds ?? 0))
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(Color.white.opacity(0.35))
             }
@@ -298,32 +309,27 @@ struct MusicModuleView: View {
 
     // MARK: - Wheel animation
 
-    /// Spin the wheel in the given direction, then commit the index change.
-    /// The snap-back is seamless: the new album arrangement at wheelOffset=0
-    /// exactly matches the visuals at the animated end-state.
     private func triggerCarousel(forward: Bool) {
         guard !carouselLocked else { return }
         carouselLocked = true
-
         let target = forward ? -slotDistance : slotDistance
 
         withAnimation(.spring(response: 0.45, dampingFraction: 0.78)) {
             wheelOffset = target
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.38) {
-            Task { @MainActor in
-                if forward { await provider.next()     }
-                else       { await provider.previous() }
-                wheelOffset = 0   // instant — no animation, visually seamless
-                carouselLocked = false
-            }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(0.38))
+            if forward { await orchestrator.next() }
+            else       { await orchestrator.previous() }
+            wheelOffset = 0
+            carouselLocked = false
         }
     }
 
     // MARK: - Helpers
 
-    private func formatTime(_ seconds: TimeInterval) -> String {
+    private func formatTime(_ seconds: Double) -> String {
         let s = max(0, Int(seconds))
         return String(format: "%d:%02d", s / 60, s % 60)
     }
@@ -359,7 +365,7 @@ private struct MusicWaveView: View {
     private func startAnimating() {
         stopAnimating()
         let t = Timer.scheduledTimer(withTimeInterval: 0.12, repeats: true) { _ in
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 withAnimation(.easeInOut(duration: 0.12)) {
                     barHeights = (0..<30).map { _ in CGFloat.random(in: 3...24) }
                 }

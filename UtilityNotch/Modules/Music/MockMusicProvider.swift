@@ -1,13 +1,19 @@
 import SwiftUI
 
-/// Mock MusicProvider backed by an in-memory MusicPlayerState.
-/// Used until a real Spotify / Apple Music integration is wired in.
+/// Mock music provider backed by an in-memory MusicPlayerState.
+/// Used until real providers (Apple Music, Spotify) are wired in.
 @Observable
-final class MockMusicProvider: MusicProvider {
+final class MockMusicProvider: MusicProvider, QueueAwareMusicProvider {
 
     static let shared = MockMusicProvider()
 
+    let kind: MusicProviderKind = .appleMusic
+    let capabilities: MusicCapabilities = .full
+
     private let state: MusicPlayerState
+    /// Last-seen track ID — used to detect track changes and promote current → previous.
+    private var lastSeenTrackID: String?
+    private var cachedPrevious: TrackCard?
 
     private init() {
         self.state = MusicPlayerState(tracks: Self.mockTracks)
@@ -15,17 +21,86 @@ final class MockMusicProvider: MusicProvider {
 
     // MARK: - MusicProvider
 
-    var tracks: [MusicTrack]     { state.tracks }
-    var currentIndex: Int        { state.currentIndex }
-    var currentTrack: MusicTrack? { state.currentTrack }
-    var isPlaying: Bool          { state.isPlaying }
-    var currentTime: TimeInterval { state.currentTime }
+    func connect() async {}
+    func disconnect() async {}
 
-    func play()     async { state.play() }
-    func pause()    async { state.pause() }
-    func next()     async { state.next() }
+    func refreshStatus() async -> MusicProviderStatus {
+        MusicProviderStatus(isAuthorized: true, isInstalled: true, hasActiveSession: true,
+                            displayName: "Mock (Demo)", detail: nil)
+    }
+
+    func refreshNowPlaying() async -> NowPlayingState {
+        let tracks = state.tracks
+        guard !tracks.isEmpty else { return .unavailable(for: .appleMusic) }
+
+        let current = trackCard(at: state.currentIndex)
+
+        // Promote current → previous when track advances
+        if let current, current.id != lastSeenTrackID {
+            if lastSeenTrackID != nil { cachedPrevious = trackCard(forID: lastSeenTrackID!) }
+            lastSeenTrackID = current.id
+        }
+
+        let nextIdx  = (state.currentIndex + 1) % tracks.count
+        let upNextCards = (2...4).compactMap { offset -> TrackCard? in
+            trackCard(at: (state.currentIndex + offset) % tracks.count)
+        }
+
+        return NowPlayingState(
+            provider: .appleMusic,
+            isAvailable: true,
+            isPlaying: state.isPlaying,
+            progressSeconds: state.currentTime,
+            durationSeconds: state.currentTrack?.duration,
+            current: current,
+            previous: cachedPrevious,
+            next: trackCard(at: nextIdx),
+            upNext: upNextCards,
+            playbackSourceLabel: "DEMO"
+        )
+    }
+
+    func playPause() async {
+        if state.isPlaying { state.pause() } else { state.play() }
+    }
+
+    func next() async {
+        if let id = lastSeenTrackID { cachedPrevious = trackCard(forID: id) }
+        state.next()
+    }
+
     func previous() async { state.previous() }
-    func seek(to time: TimeInterval) async { state.seek(to: time) }
+    func seek(to seconds: Double) async { state.seek(to: seconds) }
+    func openNativeApp() {}
+
+    // MARK: - QueueAwareMusicProvider
+
+    func refreshQueue() async -> [TrackCard] {
+        let tracks = state.tracks
+        guard !tracks.isEmpty else { return [] }
+        return (1...min(4, tracks.count - 1)).compactMap { offset in
+            trackCard(at: (state.currentIndex + offset) % tracks.count)
+        }
+    }
+
+    // MARK: - Helpers
+
+    private func trackCard(at rawIndex: Int) -> TrackCard? {
+        let tracks = state.tracks
+        guard !tracks.isEmpty else { return nil }
+        let idx = ((rawIndex % tracks.count) + tracks.count) % tracks.count
+        return makeCard(from: tracks[idx])
+    }
+
+    private func trackCard(forID id: String) -> TrackCard? {
+        state.tracks.first(where: { $0.id.uuidString == id }).map { makeCard(from: $0) }
+    }
+
+    private func makeCard(from track: MusicTrack) -> TrackCard {
+        TrackCard(id: track.id.uuidString, provider: .appleMusic,
+                  title: track.title, artist: track.artist,
+                  album: nil, artworkURL: nil, deepLinkURL: nil)
+    }
 
     // MARK: - Mock catalogue
 
@@ -43,19 +118,4 @@ final class MockMusicProvider: MusicProvider {
         MusicTrack(id: UUID(), title: "Peaches",           artist: "Justin Bieber", duration: 198,
                    albumColors: [Color(hex: "064E3B"), Color(hex: "34D399")]),
     ]
-}
-
-// MARK: - SwiftUI Environment
-
-private struct MusicProviderKey: EnvironmentKey {
-    // nonisolated(unsafe) allows accessing the @Observable shared instance as a
-    // static default without actor isolation gymnastics.
-    nonisolated(unsafe) static let defaultValue: any MusicProvider = MockMusicProvider.shared
-}
-
-extension EnvironmentValues {
-    var musicProvider: any MusicProvider {
-        get { self[MusicProviderKey.self] }
-        set { self[MusicProviderKey.self] = newValue }
-    }
 }

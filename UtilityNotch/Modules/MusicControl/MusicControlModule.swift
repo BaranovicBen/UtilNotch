@@ -1,11 +1,8 @@
 import SwiftUI
 
-/// Music Control utility module — mock now-playing UI with playback controls.
-/// Swap `MockMusicProvider.shared` for `SpotifyMusicProvider()` or
-/// `AppleMusicProvider()` once the real integration is wired.
-///
-/// TODO: Music provider selection (Mock / Spotify / Apple Music) —
-///       wire when provider is implemented (MusicSettingsView).
+/// Music Control utility module.
+/// The orchestrator (`MusicOrchestrator.shared`) is injected via the default
+/// `\.musicOrchestrator` environment key — no manual injection needed here.
 struct MusicControlModule: UtilityModule {
     let id = "musicControl"
     let name = "Music Control"
@@ -23,10 +20,7 @@ struct MusicControlModule: UtilityModule {
     }
 
     func makeMainView() -> AnyView {
-        AnyView(
-            MusicModuleView()
-                .environment(\.musicProvider, MockMusicProvider.shared)
-        )
+        AnyView(MusicModuleView())
     }
 
     func makeSettingsView() -> AnyView? {

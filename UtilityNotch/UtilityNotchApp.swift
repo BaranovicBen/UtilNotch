@@ -20,7 +20,6 @@ struct UtilityNotchApp: App {
                 .environment(appState)
         } label: {
             HStack(spacing: 6) {
-                Image(systemName: "rectangle.expand.vertical")
                 Text(appState.summaryTextForMenuBar())
                     .lineLimit(1)
                     .truncationMode(.tail)

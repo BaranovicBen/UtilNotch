@@ -1,25 +1,19 @@
 import Foundation
 
-/// Stub for a future Spotify integration.
-///
-/// Implementation options:
-///   • Spotify Web API  — OAuth2 + REST, requires internet & user auth
-///   • AppleScript bridge — `tell application "Spotify" to …`, works locally
-///   • SpotifyiOS SDK  — not available on macOS; use the Web API instead
-///
-/// TODO: Spotify provider selection — wire when integration is implemented.
+/// Stub for Spotify provider — will be fully implemented in Phase 3 using Spotify Web API.
 @Observable
 final class SpotifyMusicProvider: MusicProvider {
 
-    var tracks: [MusicTrack] = []
-    var currentIndex: Int = 0
-    var currentTrack: MusicTrack? { nil }
-    var isPlaying: Bool = false
-    var currentTime: TimeInterval = 0
+    let kind: MusicProviderKind = .spotify
+    let capabilities: MusicCapabilities = .full
 
-    func play()     async { /* TODO: POST /me/player/play */ }
-    func pause()    async { /* TODO: PUT  /me/player/pause */ }
-    func next()     async { /* TODO: POST /me/player/next */ }
-    func previous() async { /* TODO: POST /me/player/previous */ }
-    func seek(to time: TimeInterval) async { /* TODO: PUT /me/player/seek?position_ms= */ }
+    func connect() async {}
+    func disconnect() async {}
+    func refreshStatus() async -> MusicProviderStatus { .disconnected(displayName: "Spotify") }
+    func refreshNowPlaying() async -> NowPlayingState { .unavailable(for: .spotify) }
+    func playPause() async {}
+    func next() async {}
+    func previous() async {}
+    func seek(to seconds: Double) async {}
+    func openNativeApp() {}
 }
