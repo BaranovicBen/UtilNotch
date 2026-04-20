@@ -74,41 +74,38 @@ struct TodoModuleView: View {
                     ScrollView(.vertical, showsIndicators: false) {
                         LazyVStack(spacing: 8) {
                             ForEach(appState.todoItems) { item in
+                                let isDragged = draggingID == item.id
                                 liveRow(item)
-                                    // Lifted appearance while this item is being dragged
-                                    .scaleEffect(draggingID == item.id ? 1.03 : 1.0)
-                                    .shadow(
-                                        color: .black.opacity(draggingID == item.id ? 0.35 : 0),
-                                        radius: 8, y: 4
-                                    )
-                                    .opacity(draggingID == item.id ? 0.85 : 1.0)
-                                    .zIndex(draggingID == item.id ? 1 : 0)
+                                    // Hide the source row while dragging — the system
+                                    // drag preview is the only visible representation.
+                                    .opacity(isDragged ? 0.0 : 1.0)
                                     .animation(
                                         .spring(response: 0.25, dampingFraction: 0.65),
                                         value: draggingID
                                     )
-                                    // Add/remove transitions
                                     .transition(.asymmetric(
                                         insertion: .scale(scale: 0.97).combined(with: .opacity),
                                         removal:   .scale(scale: 0.97).combined(with: .opacity)
                                     ))
-                                    // Drag-to-reorder (undone items only)
-                                    .onDrag {
-                                        guard !item.isDone else { return NSItemProvider() }
-                                        self.draggingID = item.id
-                                        return NSItemProvider(object: item.id.uuidString as NSString)
+                                    // Drag-to-reorder — only undone items
+                                    .if(!item.isDone) { view in
+                                        view.onDrag {
+                                            self.draggingID = item.id
+                                            appState.dismissalLocks.insert(.dragDrop)
+                                            return NSItemProvider(object: item.id.uuidString as NSString)
+                                        }
                                     }
                                     .onDrop(
                                         of: [UTType.plainText],
                                         delegate: TodoDropDelegate(
                                             target: item,
                                             items: Bindable(appState).todoItems,
-                                            draggingID: $draggingID
+                                            draggingID: $draggingID,
+                                            onCleanup: { cleanupDrag() }
                                         )
                                     )
                             }
                         }
-                        // Gap-open spring: animates rows sliding apart as item is dragged over them
                         .animation(
                             .spring(response: 0.35, dampingFraction: 0.72),
                             value: appState.todoItems.map(\.id)
@@ -116,6 +113,12 @@ struct TodoModuleView: View {
                         .padding(.bottom, 4)
                     }
                     .clipped()
+                    .onChange(of: draggingID) { _, newVal in
+                        // Safety net: if draggingID is cleared by any path, release lock
+                        if newVal == nil {
+                            appState.dismissalLocks.remove(.dragDrop)
+                        }
+                    }
                 }
             }
         }
@@ -276,6 +279,11 @@ struct TodoModuleView: View {
         appState.dismissalLocks.remove(.activeEditing)
     }
 
+    private func cleanupDrag() {
+        draggingID = nil
+        appState.dismissalLocks.remove(.dragDrop)
+    }
+
     /// Toggle done/undone, then re-sort so undone items always precede done items.
     /// Filter-based sort avoids SwiftUI animation glitches from simultaneous item
     /// mutation + positional move in the same animation block.
@@ -312,14 +320,19 @@ private struct TodoDropDelegate: DropDelegate {
     let target: TodoItem
     @Binding var items: [TodoItem]
     @Binding var draggingID: UUID?
+    let onCleanup: () -> Void
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
         DropProposal(operation: .move)
     }
 
     func performDrop(info: DropInfo) -> Bool {
-        draggingID = nil
+        onCleanup()
         return true
+    }
+
+    func dropExited(info: DropInfo) {
+        // Clean up if the drag leaves without dropping on a valid target
     }
 
     func dropEntered(info: DropInfo) {
@@ -338,6 +351,15 @@ private struct TodoDropDelegate: DropDelegate {
                 toOffset: to > from ? to + 1 : to
             )
         }
+    }
+}
+
+// MARK: - Conditional Modifier
+
+private extension View {
+    @ViewBuilder
+    func `if`<Content: View>(_ condition: Bool, transform: (Self) -> Content) -> some View {
+        if condition { transform(self) } else { self }
     }
 }
 

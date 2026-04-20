@@ -1,10 +1,9 @@
 import SwiftUI
 
 /// Central coordinator for music playback.
-/// The only object the Music module UI talks to — providers are never accessed from UI directly.
-///
-/// Provider selection priority: user preferred → Apple Music → Spotify
-/// Polling interval: 1 second (adaptive per-phase polish in Phase 6)
+/// Uses MediaRemoteProvider (MRMediaRemote private framework) as the universal base.
+/// Optional enrichment providers extend the queue preview per active app.
+@MainActor
 @Observable
 final class MusicOrchestrator {
 
@@ -17,117 +16,121 @@ final class MusicOrchestrator {
     private(set) var nowPlaying: NowPlayingState?
     private(set) var activeProviderKind: MusicProviderKind?
     private(set) var providerStatuses: [MusicProviderKind: MusicProviderStatus] = [:]
-
-    /// User's preferred provider. Persisted separately — set via `setPreferredProvider`.
-    var preferredProvider: MusicProviderKind? {
-        didSet { Task { await refresh() } }
-    }
+    private(set) var isMediaRemoteAvailable: Bool = false
 
     // MARK: - Private
 
-    private var providers: [MusicProviderKind: any MusicProvider] = [:]
-    private var pollingTask: Task<Void, Never>?
+    private let mediaRemote = MediaRemoteProvider.shared
+    private var enrichers: [String: any MusicEnrichmentProvider] = [:]
+    private var refreshTask: Task<Void, Never>?
 
-    private init() {
-        providers[.appleMusic] = MockMusicProvider.shared
-        Task { await refresh() }
-        startPolling()
+    nonisolated private init() {
+        Task { await connect() }
     }
 
-    // MARK: - Provider registration
+    // MARK: - Setup
 
-    /// Replace or add a provider. Call from app bootstrap when real providers are ready.
-    func setProvider(_ provider: any MusicProvider) {
-        providers[provider.kind] = provider
+    private func connect() async {
+        await mediaRemote.connect()
+        isMediaRemoteAvailable = mediaRemote.isAvailable
+        mediaRemote.onNowPlayingChanged = { [weak self] in
+            self?.scheduleRefresh()
+        }
+        registerEnricher(AppleMusicEnrichment(), forBundleID: "com.apple.Music")
+        await _refresh()
+    }
+
+    // MARK: - Provider registration (compat + enricher registration)
+
+    func connectProvider(_ kind: MusicProviderKind) async {
+        await connect()
+    }
+
+    func registerEnricher(_ enricher: any MusicEnrichmentProvider, forBundleID bundleID: String) {
+        enrichers[bundleID] = enricher
     }
 
     // MARK: - Computed capabilities
 
     var capabilities: MusicCapabilities {
-        guard let kind = activeProviderKind, let p = providers[kind] else { return .none }
-        return p.capabilities
+        isMediaRemoteAvailable ? mediaRemote.capabilities : .none
     }
 
-    // MARK: - Actions (forwarded to active provider)
+    var hasAnyAuthorizedProvider: Bool {
+        isMediaRemoteAvailable
+    }
+
+    // MARK: - Actions
 
     func playPause() async {
-        await activeProvider?.playPause()
-        await refresh()
+        await mediaRemote.playPause()
+        try? await Task.sleep(for: .milliseconds(150))
+        await _refresh()
     }
 
     func next() async {
-        await activeProvider?.next()
-        await refresh()
+        await mediaRemote.next()
+        try? await Task.sleep(for: .milliseconds(350))
+        await _refresh()
     }
 
     func previous() async {
-        await activeProvider?.previous()
-        await refresh()
+        await mediaRemote.previous()
+        try? await Task.sleep(for: .milliseconds(350))
+        await _refresh()
     }
 
     func seek(to seconds: Double) async {
-        await activeProvider?.seek(to: seconds)
+        await mediaRemote.seek(to: seconds)
     }
 
     func openCurrentProviderApp() {
-        activeProvider?.openNativeApp()
-    }
-
-    func setPreferredProvider(_ kind: MusicProviderKind?) {
-        preferredProvider = kind
-    }
-
-    // MARK: - Polling
-
-    private func startPolling() {
-        pollingTask?.cancel()
-        pollingTask = Task { [weak self] in
-            while !Task.isCancelled {
-                await self?.refresh()
-                try? await Task.sleep(for: .seconds(1))
-            }
-        }
+        mediaRemote.openNativeApp()
     }
 
     // MARK: - Refresh
 
-    func refresh() async {
-        await refreshStatuses()
-        await resolveNowPlaying()
+    /// Schedules a debounced refresh. Cancels any in-flight refresh before starting a new one.
+    func scheduleRefresh() {
+        refreshTask?.cancel()
+        refreshTask = Task { [weak self] in
+            guard let self, !Task.isCancelled else { return }
+            await self._refresh()
+        }
     }
 
-    private func refreshStatuses() async {
-        for (kind, provider) in providers {
-            let status = await provider.refreshStatus()
+    func refresh() async {
+        await _refresh()
+    }
+
+    private func _refresh() async {
+        guard !Task.isCancelled else { return }
+        var state = await mediaRemote.refreshNowPlaying()
+
+        if state.isAvailable,
+           let bundleID = mediaRemote.activeAppBundleID,
+           let enricher = enrichers[bundleID] {
+            let queue = await enricher.enrichQueue()
+            if !queue.isEmpty { state = state.withUpNext(queue) }
+        }
+
+        nowPlaying = state.isAvailable ? state : nil
+        activeProviderKind = state.isAvailable ? state.provider : nil
+        updateProviderStatuses(from: state)
+    }
+
+    private func updateProviderStatuses(from state: NowPlayingState) {
+        let status = MusicProviderStatus(
+            isAuthorized: isMediaRemoteAvailable,
+            isInstalled: true,
+            hasActiveSession: state.isAvailable,
+            displayName: "System Media",
+            detail: isMediaRemoteAvailable ? nil : "MediaRemote unavailable"
+        )
+        // Mirror status under all known kinds so the settings view works correctly
+        for kind in MusicProviderKind.allCases {
             providerStatuses[kind] = status
         }
-    }
-
-    private func resolveNowPlaying() async {
-        for kind in prioritizedProviders() {
-            guard let provider = providers[kind] else { continue }
-            let state = await provider.refreshNowPlaying()
-            if state.isAvailable {
-                activeProviderKind = kind
-                nowPlaying = state
-                return
-            }
-        }
-        activeProviderKind = nil
-        nowPlaying = nil
-    }
-
-    private var activeProvider: (any MusicProvider)? {
-        guard let kind = activeProviderKind else { return nil }
-        return providers[kind]
-    }
-
-    /// Provider priority: user preferred → Apple Music → Spotify
-    private func prioritizedProviders() -> [MusicProviderKind] {
-        if let preferred = preferredProvider {
-            return [preferred] + MusicProviderKind.allCases.filter { $0 != preferred }
-        }
-        return MusicProviderKind.allCases
     }
 }
 

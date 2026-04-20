@@ -16,6 +16,9 @@ struct MusicModuleView: View {
     @State private var dragProgress: CGFloat = 0
     @State private var trackWidth: CGFloat = 0
 
+    // 1-second tick for interpolated elapsed time display
+    @State private var displayTime = Date()
+
     // Wheel carousel geometry
     private let artSize: CGFloat     = 100
     private let slotDistance: CGFloat = 92
@@ -42,14 +45,61 @@ struct MusicModuleView: View {
                     appState.selectModule(id)
                 }
             },
-            statusDotColor: Color.white.opacity(0.2),
-            statusLeft: np?.current != nil ? "NOW PLAYING" : "CONNECT A PLAYER",
+            statusDotColor: np != nil
+                ? UNConstants.musicPlayingTint
+                : Color.white.opacity(0.2),
+            statusLeft: np?.current != nil ? "NOW PLAYING" : "NO SOURCE",
             statusRight: np?.playbackSourceLabel ?? "—",
             actionButton: nil
         ) {
-            musicContent
+            if np != nil {
+                musicContent
+            } else {
+                emptyStateView
+            }
         }
         .onAppear { appState.setModuleActionButton(nil) }
+        .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { t in
+            displayTime = t
+        }
+    }
+
+    // MARK: - Empty state
+
+    private var emptyStateView: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "music.note.list")
+                .font(.system(size: 32))
+                .foregroundStyle(Color.white.opacity(0.18))
+
+            VStack(spacing: 6) {
+                Text("No music playing")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.7))
+                Text("Play any music and it will appear here automatically.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.white.opacity(0.35))
+                    .multilineTextAlignment(.center)
+            }
+
+            Button {
+                Task { await orchestrator.connectProvider(.appleMusic) }
+            } label: {
+                Label("Allow Media Control", systemImage: "play.circle")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Color.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .background(
+                        Capsule()
+                            .fill(Color.white.opacity(0.12))
+                            .overlay(Capsule().strokeBorder(Color.white.opacity(0.15), lineWidth: 0.5))
+                    )
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .transition(.opacity)
     }
 
     // MARK: - Full content column
@@ -115,12 +165,17 @@ struct MusicModuleView: View {
             .zIndex(zIdx)
     }
 
-    /// Album art tile. Shows AsyncImage when artworkURL is available,
-    /// otherwise a deterministic gradient placeholder keyed on the track ID.
+    /// Album art tile. Prefers raw artworkData, then artworkURL, then a deterministic gradient.
     @ViewBuilder
     private func artTile(at index: Int) -> some View {
         let card = carouselCards.indices.contains(index) ? carouselCards[index] : nil
-        if let url = card?.artworkURL {
+        if let data = card?.artworkData, let nsImg = NSImage(data: data) {
+            Image(nsImage: nsImg)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: artSize, height: artSize)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        } else if let url = card?.artworkURL {
             AsyncImage(url: url) { phase in
                 switch phase {
                 case .success(let image):
@@ -138,9 +193,11 @@ struct MusicModuleView: View {
     }
 
     private func artPlaceholder(for card: TrackCard?) -> some View {
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
+        let palette = UNConstants.musicArtPalette
+        let idx = abs(card?.id.hashValue ?? 0) % palette.count
+        return RoundedRectangle(cornerRadius: 12, style: .continuous)
             .fill(LinearGradient(
-                colors: gradientColors(for: card?.id),
+                colors: palette[idx],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             ))
@@ -149,21 +206,6 @@ struct MusicModuleView: View {
                     .font(.system(size: 22))
                     .foregroundStyle(Color.white.opacity(0.25))
             )
-    }
-
-    /// Deterministic gradient from a fixed palette, keyed on track ID hash.
-    private func gradientColors(for id: String?) -> [Color] {
-        // Same palettes as the mock tracks for visual continuity
-        let palettes: [[Color]] = [
-            [Color(hex: "1A0533"), Color(hex: "6D28D9")],
-            [Color(hex: "7F1D1D"), Color(hex: "F97316")],
-            [Color(hex: "1E3A5F"), Color(hex: "06B6D4")],
-            [Color(hex: "713F12"), Color(hex: "FBBF24")],
-            [Color(hex: "4C1D95"), Color(hex: "EC4899")],
-            [Color(hex: "064E3B"), Color(hex: "34D399")],
-        ]
-        let hash = abs(id?.hashValue ?? 0)
-        return palettes[hash % palettes.count]
     }
 
     // MARK: - Track info
@@ -247,11 +289,12 @@ struct MusicModuleView: View {
     // MARK: - Progress bar + timestamps
 
     private var progressView: some View {
-        let duration = orchestrator.nowPlaying?.durationSeconds ?? 1
+        let np = orchestrator.nowPlaying
+        let duration = np?.durationSeconds ?? 1
         let elapsed  = isDraggingProgress
             ? dragProgress * duration
-            : (orchestrator.nowPlaying?.progressSeconds ?? 0)
-        let progress = max(0, min(1, elapsed / duration))
+            : (np?.currentElapsedTime(at: displayTime) ?? 0)
+        let progress = max(0, min(1, elapsed / max(duration, 1)))
 
         return VStack(spacing: 3) {
             ZStack(alignment: .leading) {
@@ -260,14 +303,12 @@ struct MusicModuleView: View {
                     .frame(height: 3)
                 Capsule()
                     .fill(LinearGradient(
-                        colors: [Color(hex: "8B5CF6"), Color(hex: "3B82F6")],
+                        colors: [UNConstants.musicProgressStart, UNConstants.musicProgressEnd],
                         startPoint: .leading, endPoint: .trailing
                     ))
                     .frame(width: max(0, trackWidth * progress), height: 3)
-                    .animation(
-                        isDraggingProgress ? nil : .linear(duration: 0.5),
-                        value: orchestrator.nowPlaying?.progressSeconds
-                    )
+                    .animation(isDraggingProgress ? nil : .spring(response: 0.4, dampingFraction: 0.9),
+                               value: progress)
             }
             .frame(height: 12)
             .contentShape(Rectangle())
@@ -282,7 +323,7 @@ struct MusicModuleView: View {
                     .onEnded { value in
                         let normalized = trackWidth > 0
                             ? max(0, min(1, value.location.x / trackWidth)) : 0
-                        let time = normalized * (orchestrator.nowPlaying?.durationSeconds ?? 0)
+                        let time = normalized * (np?.durationSeconds ?? 0)
                         Task { await orchestrator.seek(to: time) }
                         isDraggingProgress = false
                     }
@@ -291,16 +332,15 @@ struct MusicModuleView: View {
             HStack {
                 Text(formatTime(
                     isDraggingProgress
-                        ? dragProgress * (orchestrator.nowPlaying?.durationSeconds ?? 0)
-                        : (orchestrator.nowPlaying?.progressSeconds ?? 0)
+                        ? dragProgress * (np?.durationSeconds ?? 0)
+                        : (np?.currentElapsedTime(at: displayTime) ?? 0)
                 ))
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(Color.white.opacity(0.35))
-                .animation(nil, value: orchestrator.nowPlaying?.progressSeconds)
 
                 Spacer()
 
-                Text(formatTime(orchestrator.nowPlaying?.durationSeconds ?? 0))
+                Text(formatTime(np?.durationSeconds ?? 0))
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(Color.white.opacity(0.35))
             }

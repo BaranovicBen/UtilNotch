@@ -24,16 +24,72 @@ struct MusicControlModule: UtilityModule {
     }
 
     func makeSettingsView() -> AnyView? {
-        AnyView(
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Music Control Settings")
-                    .font(.headline)
-                Text("Display preferences, preferred music app (Mock / Spotify / Apple Music), and notification behavior will be configurable once a provider is integrated.")
+        AnyView(MusicSettingsView())
+    }
+}
+
+// MARK: - Settings view
+
+private struct MusicSettingsView: View {
+    @Environment(\.musicOrchestrator) private var orchestrator
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Music Sources")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.primary)
+
+            HStack(spacing: 10) {
+                Image(systemName: orchestrator.isMediaRemoteAvailable ? "checkmark.circle.fill" : "xmark.circle")
+                    .font(.system(size: 14))
+                    .foregroundStyle(orchestrator.isMediaRemoteAvailable ? Color.green : Color.secondary)
+                    .frame(width: 20)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("System Media Control")
+                        .font(.system(size: 13))
+                    Text(orchestrator.isMediaRemoteAvailable
+                         ? (orchestrator.activeProviderKind.map { "Active: \($0.displayName)" } ?? "No media playing")
+                         : "MediaRemote unavailable")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                if !orchestrator.isMediaRemoteAvailable {
+                    Button("Retry") {
+                        Task { await orchestrator.connectProvider(.appleMusic) }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 14))
+                        .foregroundStyle(Color.green)
+                        .frame(width: 20)
+                    Text("Apple Music Queue")
+                        .font(.system(size: 13))
+                }
+                Text("Upcoming tracks are read from your current playlist when Music.app is playing.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                // TODO: Music provider selection — wire when provider is implemented.
+                    .padding(.leading, 28)
             }
-            .padding()
-        )
+
+            Divider()
+
+            Text("Spotify queue enrichment coming in a future update.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

@@ -6,6 +6,9 @@
 	<true/>
 	<key>com.apple.security.files.user-selected.read-write</key>
 	<true/>
+	<!-- Automation — needed to send Apple Events to Music.app for now-playing + playback control -->
+	<key>com.apple.security.automation.apple-events</key>
+	<true/>
 	<!-- Calendar access for Calendar module -->
 	<key>com.apple.security.personal-information.calendars</key>
 	<true/>

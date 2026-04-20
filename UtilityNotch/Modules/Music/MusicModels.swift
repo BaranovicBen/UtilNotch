@@ -5,11 +5,14 @@ import Foundation
 enum MusicProviderKind: String, Codable, Equatable, CaseIterable {
     case appleMusic
     case spotify
+    /// Any other media app detected via MRMediaRemote (Podcasts, YouTube Music, etc.)
+    case unknown
 
     var displayName: String {
         switch self {
         case .appleMusic: return "Apple Music"
         case .spotify:    return "Spotify"
+        case .unknown:    return "Media"
         }
     }
 }
@@ -24,6 +27,8 @@ struct TrackCard: Equatable, Identifiable {
     let title: String
     let artist: String
     let album: String?
+    /// Raw artwork bytes from MRMediaRemote. Preferred over artworkURL when present.
+    let artworkData: Data?
     let artworkURL: URL?
     let deepLinkURL: URL?
 }
@@ -37,11 +42,36 @@ struct NowPlayingState: Equatable {
     let isPlaying: Bool
     let progressSeconds: Double?
     let durationSeconds: Double?
+    /// Actual playback rate (1.0 = normal, 0.0 = paused, 0.5/2.0 = slow/fast).
+    let playbackRate: Double
+    /// When this snapshot was captured — used to interpolate elapsed time in the view.
+    let refreshedAt: Date
     let current: TrackCard?
     let previous: TrackCard?
     let next: TrackCard?
     let upNext: [TrackCard]
     let playbackSourceLabel: String?
+
+    /// Interpolated elapsed time. Call from a periodic view timer for smooth scrubber display.
+    func currentElapsedTime(at date: Date = Date()) -> Double {
+        guard let progress = progressSeconds else { return 0 }
+        guard isPlaying && playbackRate > 0 else { return progress }
+        return progress + date.timeIntervalSince(refreshedAt) * playbackRate
+    }
+
+    /// Returns a new state with the upNext queue replaced by the given tracks.
+    /// The first track in `tracks` becomes `next`, the rest populate `upNext`.
+    func withUpNext(_ tracks: [TrackCard]) -> NowPlayingState {
+        NowPlayingState(
+            provider: provider, isAvailable: isAvailable, isPlaying: isPlaying,
+            progressSeconds: progressSeconds, durationSeconds: durationSeconds,
+            playbackRate: playbackRate, refreshedAt: refreshedAt,
+            current: current, previous: previous,
+            next: tracks.first ?? next,
+            upNext: tracks.count > 1 ? Array(tracks.dropFirst()) : upNext,
+            playbackSourceLabel: playbackSourceLabel
+        )
+    }
 
     static func unavailable(for provider: MusicProviderKind) -> NowPlayingState {
         NowPlayingState(
@@ -50,6 +80,8 @@ struct NowPlayingState: Equatable {
             isPlaying: false,
             progressSeconds: nil,
             durationSeconds: nil,
+            playbackRate: 1.0,
+            refreshedAt: Date(),
             current: nil,
             previous: nil,
             next: nil,

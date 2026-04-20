@@ -115,6 +115,24 @@ enum UNConstants {
     static let focusTint = Color(hex: "0A84FF").opacity(0.08)
     static let focusBorder = Color(hex: "0A84FF").opacity(0.50)
 
+    // MARK: - Music Module
+
+    /// Status dot color when music is actively playing.
+    static let musicPlayingTint = Color(red: 52/255, green: 211/255, blue: 153/255).opacity(0.8)
+    /// Progress bar gradient — leading color.
+    static let musicProgressStart = Color(red: 139/255, green: 92/255, blue: 246/255)
+    /// Progress bar gradient — trailing color.
+    static let musicProgressEnd   = Color(red: 59/255, green: 130/255, blue: 246/255)
+    /// Deterministic album-art placeholder palette (6 two-stop gradients, keyed on track ID hash).
+    static let musicArtPalette: [[Color]] = [
+        [Color(hex: "1A0533"), Color(hex: "6D28D9")],
+        [Color(hex: "7F1D1D"), Color(hex: "F97316")],
+        [Color(hex: "1E3A5F"), Color(hex: "06B6D4")],
+        [Color(hex: "713F12"), Color(hex: "FBBF24")],
+        [Color(hex: "4C1D95"), Color(hex: "EC4899")],
+        [Color(hex: "064E3B"), Color(hex: "34D399")],
+    ]
+
     // MARK: - Keyboard Shortcut
 
     static let globalHotkeyKeyCode: UInt16 = 49

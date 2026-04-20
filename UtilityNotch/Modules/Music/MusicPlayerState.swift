@@ -58,13 +58,10 @@ final class MusicPlayerState {
 
     private func startTimer() {
         stopTimer()
-        let timer = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in
-            DispatchQueue.main.async { [weak self] in
-                guard let self, self.isPlaying,
-                      let track = self.currentTrack else { return }
-                self.currentTime += 1
-                if self.currentTime >= track.duration { self.next() }
-            }
+        let timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            guard let self, self.isPlaying, let track = self.currentTrack else { return }
+            self.currentTime += 1
+            if self.currentTime >= track.duration { self.next() }
         }
         RunLoop.main.add(timer, forMode: .common)
         playTimer = timer
