@@ -23,9 +23,12 @@ final class MusicOrchestrator {
 
     private let mediaRemote = MediaRemoteProvider.shared
     private let dnWatcher   = DistributedNotificationProvider()
+    private let appleMusicEnricher = AppleMusicEnrichment()
+    private var spotifyEnricher: SpotifyEnrichment?
     private var enrichers: [String: any MusicEnrichmentProvider] = [:]
     private var refreshTask: Task<Void, Never>?
     private var pollingTask: Task<Void, Never>?
+    private var refreshGeneration: UInt64 = 0
 
     nonisolated private init() {
         Task { await connect() }
@@ -55,8 +58,10 @@ final class MusicOrchestrator {
         }
 
         spotifyAuth.loadStoredTokens()
-        registerEnricher(AppleMusicEnrichment(), forBundleID: "com.apple.Music")
-        registerEnricher(SpotifyEnrichment(auth: spotifyAuth), forBundleID: "com.spotify.client")
+        let se = SpotifyEnrichment(auth: spotifyAuth)
+        spotifyEnricher = se
+        registerEnricher(appleMusicEnricher, forBundleID: "com.apple.Music")
+        registerEnricher(se, forBundleID: "com.spotify.client")
         await _refresh()
         startPolling()
     }
@@ -101,8 +106,15 @@ final class MusicOrchestrator {
     // MARK: - Actions
 
     func playPause() async {
+        // Optimistic toggle — keeps UI snappy while command + refresh are in-flight
+        if let np = nowPlaying {
+            nowPlaying = np.withPlayState(
+                isPlaying: !np.isPlaying,
+                progressSeconds: np.currentElapsedTime(at: Date())
+            )
+        }
         await mediaRemote.playPause()
-        try? await Task.sleep(for: .milliseconds(150))
+        try? await Task.sleep(for: .milliseconds(400))
         await _refresh()
     }
 
@@ -144,8 +156,13 @@ final class MusicOrchestrator {
     private func _refresh() async {
         guard !Task.isCancelled else { return }
 
+        // Bump generation so we can detect stale results after each await
+        let gen: UInt64 = refreshGeneration &+ 1
+        refreshGeneration = gen
+
         // Try MRMediaRemote first (on macOS < 15 this returns real data)
         var state = await mediaRemote.refreshNowPlaying()
+        guard refreshGeneration == gen else { return }
 
         // On macOS 15+, mediaremoted returns "Operation not permitted".
         // Fall back to the distributed-notification watcher which works everywhere.
@@ -165,10 +182,26 @@ final class MusicOrchestrator {
             }
         }()
 
+        // Enrich Spotify state with real play state, progress, and artwork via Web API
+        if state.isAvailable, state.provider == .spotify, let se = spotifyEnricher {
+            state = await se.enrichCurrentState(base: state)
+            guard refreshGeneration == gen else { return }
+        }
+
+        // Enrich Apple Music state with current position via AppleScript
+        if state.isAvailable, state.provider == .appleMusic, state.progressSeconds == nil {
+            if let pos = await appleMusicEnricher.currentPosition() {
+                state = state.withProgress(pos)
+            }
+            guard refreshGeneration == gen else { return }
+        }
+
+        // Queue enrichment (prev / next / upNext carousel slots)
         if state.isAvailable,
            let bundleID = activeBundleID,
            let enricher = enrichers[bundleID] {
             let queue = await enricher.enrichQueue()
+            guard refreshGeneration == gen else { return }
             if !queue.isEmpty { state = state.withUpNext(queue) }
         }
 
@@ -177,7 +210,7 @@ final class MusicOrchestrator {
         updateProviderStatuses(from: state)
         #if DEBUG
         if let np = nowPlaying {
-            print("🎵 [Orch] nowPlaying → \"\(np.current?.title ?? "?")\" playing=\(np.isPlaying)")
+            print("🎵 [Orch] nowPlaying → \"\(np.current?.title ?? "?")\" playing=\(np.isPlaying) progress=\(String(format: "%.1f", np.progressSeconds ?? 0))s")
         } else {
             print("🎵 [Orch] nowPlaying → nil (unavailable)")
         }

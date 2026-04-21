@@ -21,10 +21,16 @@ final class AppleMusicEnrichment: MusicEnrichmentProvider {
         guard isRunning else { return [] }
         guard let raw = await runScript(queueScript), !raw.isEmpty else { return [] }
 
-        // Rows: char(30) — Record Separator.  Fields: char(31) — Unit Separator.
-        // Format per row: title \u001F artist \u001F album \u001F databaseID
         let rows = raw.components(separatedBy: "\u{001E}").filter { !$0.isEmpty }
         return rows.compactMap { parseRow($0) }
+    }
+
+    /// Returns the current player position in seconds via AppleScript.
+    /// Returns nil when Music is not running or any error occurs.
+    func currentPosition() async -> Double? {
+        guard isRunning else { return nil }
+        let src = "if application \"Music\" is not running then return \"\"\ntell application \"Music\" to get player position as string"
+        return await runScript(src).flatMap { Double($0) }
     }
 
     // MARK: - Private helpers

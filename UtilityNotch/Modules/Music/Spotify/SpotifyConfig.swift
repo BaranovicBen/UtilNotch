@@ -10,5 +10,6 @@ enum SpotifyConfig {
     static let scopes = "user-read-playback-state"
     static let tokenEndpoint = URL(string: "https://accounts.spotify.com/api/token")!
     static let authEndpointBase = "https://accounts.spotify.com/authorize"
-    static let queueEndpoint = URL(string: "https://api.spotify.com/v1/me/player/queue")!
+    static let queueEndpoint         = URL(string: "https://api.spotify.com/v1/me/player/queue")!
+    static let currentPlayerEndpoint = URL(string: "https://api.spotify.com/v1/me/player")!
 }

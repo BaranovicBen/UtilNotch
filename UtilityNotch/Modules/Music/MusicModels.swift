@@ -56,7 +56,46 @@ struct NowPlayingState: Equatable {
     func currentElapsedTime(at date: Date = Date()) -> Double {
         guard let progress = progressSeconds else { return 0 }
         guard isPlaying && playbackRate > 0 else { return progress }
-        return progress + date.timeIntervalSince(refreshedAt) * playbackRate
+        let elapsed = progress + date.timeIntervalSince(refreshedAt) * playbackRate
+        if let dur = durationSeconds { return max(0, min(elapsed, dur)) }
+        return max(0, elapsed)
+    }
+
+    /// Returns a new state with updated progress and `refreshedAt` reset to `Date()`.
+    func withProgress(_ seconds: Double) -> NowPlayingState {
+        NowPlayingState(
+            provider: provider, isAvailable: isAvailable, isPlaying: isPlaying,
+            progressSeconds: seconds, durationSeconds: durationSeconds,
+            playbackRate: playbackRate, refreshedAt: Date(),
+            current: current, previous: previous,
+            next: next, upNext: upNext,
+            playbackSourceLabel: playbackSourceLabel
+        )
+    }
+
+    /// Returns a new state with updated play/pause state and a fresh `refreshedAt`.
+    func withPlayState(isPlaying: Bool, progressSeconds: Double?, durationSeconds: Double? = nil) -> NowPlayingState {
+        NowPlayingState(
+            provider: provider, isAvailable: isAvailable, isPlaying: isPlaying,
+            progressSeconds: progressSeconds,
+            durationSeconds: durationSeconds ?? self.durationSeconds,
+            playbackRate: isPlaying ? 1.0 : 0.0, refreshedAt: Date(),
+            current: current, previous: previous,
+            next: next, upNext: upNext,
+            playbackSourceLabel: playbackSourceLabel
+        )
+    }
+
+    /// Returns a new state with the current track card replaced.
+    func withCurrentCard(_ card: TrackCard) -> NowPlayingState {
+        NowPlayingState(
+            provider: provider, isAvailable: isAvailable, isPlaying: isPlaying,
+            progressSeconds: progressSeconds, durationSeconds: durationSeconds,
+            playbackRate: playbackRate, refreshedAt: refreshedAt,
+            current: card, previous: previous,
+            next: next, upNext: upNext,
+            playbackSourceLabel: playbackSourceLabel
+        )
     }
 
     /// Returns a new state with the upNext queue replaced by the given tracks.

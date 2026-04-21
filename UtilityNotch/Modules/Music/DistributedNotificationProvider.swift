@@ -70,8 +70,9 @@ final class DistributedNotificationProvider {
         let artist   = (info["Artist"]  as? String) ?? ""
         let album    = info["Album"]    as? String
         let trackID  = (info["Track ID"] as? String) ?? "\(title)-\(artist)"
-        // "Playing" is delivered as NSNumber (1/0) or Bool depending on macOS version
+        // Newer Spotify versions use "Player State" string; older ones use "Playing" Bool/NSNumber.
         let isPlaying: Bool = {
+            if let state = info["Player State"] as? String { return state == "Playing" }
             if let b = info["Playing"] as? Bool { return b }
             if let n = info["Playing"] as? NSNumber { return n.boolValue }
             return false
@@ -151,8 +152,9 @@ final class DistributedNotificationProvider {
         }()
         let duration = totalTimeMs.map { $0 / 1000 }
         let storeURL = (info["Store URL"] as? String).flatMap { URL(string: $0) }
-        // Artwork may be present as NSData
-        let artData  = info["Artwork"] as? Data
+        // Artwork is delivered as NSData or NSImage depending on macOS version
+        let artData: Data? = (info["Artwork"] as? Data)
+            ?? (info["Artwork"] as? NSImage)?.tiffRepresentation
 
         #if DEBUG
         print("🎵 [DN-AppleMusic] \"\(title)\" – \(artist) state=\(playerState)")
