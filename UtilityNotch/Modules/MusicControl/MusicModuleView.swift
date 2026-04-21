@@ -76,27 +76,25 @@ struct MusicModuleView: View {
                 Text("No music playing")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Color.white.opacity(0.7))
-                Text("Play any music and it will appear here automatically.")
+                Text("Start playback in Spotify, Apple Music, or any media app — it will appear here automatically.")
                     .font(.system(size: 11))
                     .foregroundStyle(Color.white.opacity(0.35))
                     .multilineTextAlignment(.center)
             }
 
-            Button {
-                Task { await orchestrator.connectProvider(.appleMusic) }
-            } label: {
-                Label("Allow Media Control", systemImage: "play.circle")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Color.white)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 7)
-                    .background(
-                        Capsule()
-                            .fill(Color.white.opacity(0.12))
-                            .overlay(Capsule().strokeBorder(Color.white.opacity(0.15), lineWidth: 0.5))
-                    )
+            if !orchestrator.isMediaRemoteAvailable {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.orange)
+                    Text("MediaRemote failed to load")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.orange)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Capsule().fill(Color.orange.opacity(0.12)))
             }
-            .buttonStyle(.plain)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .transition(.opacity)
