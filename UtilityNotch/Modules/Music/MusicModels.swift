@@ -31,6 +31,17 @@ struct TrackCard: Equatable, Identifiable {
     let artworkData: Data?
     let artworkURL: URL?
     let deepLinkURL: URL?
+
+    /// Returns a copy of this card with artwork taken from `source` when self has none.
+    func preservingArtwork(from source: TrackCard) -> TrackCard {
+        guard artworkData == nil && artworkURL == nil else { return self }
+        guard source.artworkData != nil || source.artworkURL != nil else { return self }
+        return TrackCard(
+            id: id, provider: provider, title: title, artist: artist, album: album,
+            artworkData: source.artworkData, artworkURL: source.artworkURL,
+            deepLinkURL: deepLinkURL
+        )
+    }
 }
 
 // MARK: - Now Playing State
@@ -81,6 +92,18 @@ struct NowPlayingState: Equatable {
             durationSeconds: durationSeconds ?? self.durationSeconds,
             playbackRate: isPlaying ? 1.0 : 0.0, refreshedAt: Date(),
             current: current, previous: previous,
+            next: next, upNext: upNext,
+            playbackSourceLabel: playbackSourceLabel
+        )
+    }
+
+    /// Returns a new state with the previous track slot replaced.
+    func withPrevious(_ card: TrackCard?) -> NowPlayingState {
+        NowPlayingState(
+            provider: provider, isAvailable: isAvailable, isPlaying: isPlaying,
+            progressSeconds: progressSeconds, durationSeconds: durationSeconds,
+            playbackRate: playbackRate, refreshedAt: refreshedAt,
+            current: current, previous: card,
             next: next, upNext: upNext,
             playbackSourceLabel: playbackSourceLabel
         )

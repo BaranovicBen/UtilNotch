@@ -155,6 +155,13 @@ final class DistributedNotificationProvider {
         // Artwork is delivered as NSData or NSImage depending on macOS version
         let artData: Data? = (info["Artwork"] as? Data)
             ?? (info["Artwork"] as? NSImage)?.tiffRepresentation
+        #if DEBUG
+        if let raw = info["Artwork"] {
+            print("🎵 [DN-AppleMusic] artwork key type: \(type(of: raw)), produced data: \(artData?.count ?? 0) bytes")
+        } else {
+            print("🎵 [DN-AppleMusic] artwork key absent")
+        }
+        #endif
 
         #if DEBUG
         print("🎵 [DN-AppleMusic] \"\(title)\" – \(artist) state=\(playerState)")

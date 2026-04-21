@@ -5,11 +5,14 @@ import AppKit
 /// Reads the next 5 tracks from the currently-playing playlist so the carousel
 /// can show upcoming titles/artists even when MRMediaRemote does not expose them.
 ///
-/// Only called when MediaRemoteProvider identifies `com.apple.Music` as the
-/// active player — everything else (playback state, artwork) still comes from MRMR.
+/// NSAppleScript is NOT thread-safe. All script executions are serialised through
+/// a dedicated serial queue to prevent concurrent Apple Music AppleScript calls from
+/// corrupting playback state.
 final class AppleMusicEnrichment: MusicEnrichmentProvider {
 
     private static let bundleID = "com.apple.Music"
+    /// Serial queue — only one NSAppleScript runs at a time, even across multiple callers.
+    private static let scriptQueue = DispatchQueue(label: "dev.utilitynotch.applescript", qos: .userInitiated)
 
     // MARK: - MusicEnrichmentProvider
 
@@ -23,14 +26,6 @@ final class AppleMusicEnrichment: MusicEnrichmentProvider {
 
         let rows = raw.components(separatedBy: "\u{001E}").filter { !$0.isEmpty }
         return rows.compactMap { parseRow($0) }
-    }
-
-    /// Returns the current player position in seconds via AppleScript.
-    /// Returns nil when Music is not running or any error occurs.
-    func currentPosition() async -> Double? {
-        guard isRunning else { return nil }
-        let src = "if application \"Music\" is not running then return \"\"\ntell application \"Music\" to get player position as string"
-        return await runScript(src).flatMap { Double($0) }
     }
 
     // MARK: - Private helpers
@@ -94,10 +89,15 @@ final class AppleMusicEnrichment: MusicEnrichmentProvider {
     @discardableResult
     private func runScript(_ source: String) async -> String? {
         await withCheckedContinuation { cont in
-            DispatchQueue.global(qos: .userInitiated).async {
+            // Use the serial queue so concurrent callers queue up rather than
+            // running NSAppleScript in parallel (NSAppleScript is not thread-safe).
+            Self.scriptQueue.async {
                 let script = NSAppleScript(source: source)
                 var err: NSDictionary?
                 let result = script?.executeAndReturnError(&err)
+                #if DEBUG
+                if let e = err { print("🎵 [AppleScript] error: \(e)") }
+                #endif
                 cont.resume(returning: result?.stringValue)
             }
         }

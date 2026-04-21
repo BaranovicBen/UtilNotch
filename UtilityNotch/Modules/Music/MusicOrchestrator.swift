@@ -30,6 +30,11 @@ final class MusicOrchestrator {
     private var pollingTask: Task<Void, Never>?
     private var refreshGeneration: UInt64 = 0
 
+    /// The track that was `nowPlaying.current` before the most recent track change.
+    /// Injected into the `previous` carousel slot when providers don't supply it.
+    private var previousCard: TrackCard?
+    private var lastKnownCurrentID: String?
+
     nonisolated private init() {
         Task { await connect() }
     }
@@ -156,16 +161,12 @@ final class MusicOrchestrator {
     private func _refresh() async {
         guard !Task.isCancelled else { return }
 
-        // Bump generation so we can detect stale results after each await
         let gen: UInt64 = refreshGeneration &+ 1
         refreshGeneration = gen
 
-        // Try MRMediaRemote first (on macOS < 15 this returns real data)
         var state = await mediaRemote.refreshNowPlaying()
         guard refreshGeneration == gen else { return }
 
-        // On macOS 15+, mediaremoted returns "Operation not permitted".
-        // Fall back to the distributed-notification watcher which works everywhere.
         if !state.isAvailable, let dnState = dnWatcher.latestState {
             state = dnState
             #if DEBUG
@@ -173,7 +174,6 @@ final class MusicOrchestrator {
             #endif
         }
 
-        // Resolve the active bundle ID from the winning state
         let activeBundleID: String? = {
             switch state.provider {
             case .appleMusic: return "com.apple.Music"
@@ -188,15 +188,7 @@ final class MusicOrchestrator {
             guard refreshGeneration == gen else { return }
         }
 
-        // Enrich Apple Music state with current position via AppleScript
-        if state.isAvailable, state.provider == .appleMusic, state.progressSeconds == nil {
-            if let pos = await appleMusicEnricher.currentPosition() {
-                state = state.withProgress(pos)
-            }
-            guard refreshGeneration == gen else { return }
-        }
-
-        // Queue enrichment (prev / next / upNext carousel slots)
+        // Queue enrichment (next / upNext carousel slots)
         if state.isAvailable,
            let bundleID = activeBundleID,
            let enricher = enrichers[bundleID] {
@@ -205,12 +197,34 @@ final class MusicOrchestrator {
             if !queue.isEmpty { state = state.withUpNext(queue) }
         }
 
+        // Preserve artwork from the existing nowPlaying state when the same track
+        // re-refreshes without artwork (e.g. after a DN fires before enrichment completes).
+        if let existing = nowPlaying?.current,
+           let newCurrent = state.current,
+           existing.id == newCurrent.id {
+            state = state.withCurrentCard(newCurrent.preservingArtwork(from: existing))
+        }
+
+        // Track the previously-playing card so the carousel can show it.
+        // Save the old current BEFORE overwriting nowPlaying.
+        if let newID = state.current?.id, newID != lastKnownCurrentID {
+            previousCard = nowPlaying?.current
+            lastKnownCurrentID = newID
+        }
+
+        // Inject previousCard into the state when providers don't supply a previous slot.
+        if state.previous == nil,
+           let prev = previousCard,
+           prev.id != state.current?.id {
+            state = state.withPrevious(prev)
+        }
+
         nowPlaying = state.isAvailable ? state : nil
         activeProviderKind = state.isAvailable ? state.provider : nil
         updateProviderStatuses(from: state)
         #if DEBUG
         if let np = nowPlaying {
-            print("🎵 [Orch] nowPlaying → \"\(np.current?.title ?? "?")\" playing=\(np.isPlaying) progress=\(String(format: "%.1f", np.progressSeconds ?? 0))s")
+            print("🎵 [Orch] nowPlaying → \"\(np.current?.title ?? "?")\" playing=\(np.isPlaying) progress=\(String(format: "%.1f", np.progressSeconds ?? 0))s art=\(np.current?.artworkURL != nil || np.current?.artworkData != nil ? "✓" : "–")")
         } else {
             print("🎵 [Orch] nowPlaying → nil (unavailable)")
         }
