@@ -22,6 +22,7 @@ final class MusicOrchestrator {
     // MARK: - Private
 
     private let mediaRemote = MediaRemoteProvider.shared
+    private let dnWatcher   = DistributedNotificationProvider()
     private var enrichers: [String: any MusicEnrichmentProvider] = [:]
     private var refreshTask: Task<Void, Never>?
     private var pollingTask: Task<Void, Never>?
@@ -36,6 +37,14 @@ final class MusicOrchestrator {
         #if DEBUG
         print("🎵 [Orch] connect() starting")
         #endif
+
+        // Distributed notifications — primary source, works on all macOS versions
+        dnWatcher.start()
+        dnWatcher.onNowPlayingChanged = { [weak self] in
+            self?.scheduleRefresh()
+        }
+
+        // MRMediaRemote — blocked on macOS 15 but kept for commands (play/pause/skip)
         await mediaRemote.connect()
         isMediaRemoteAvailable = mediaRemote.isAvailable
         #if DEBUG
@@ -44,7 +53,7 @@ final class MusicOrchestrator {
         mediaRemote.onNowPlayingChanged = { [weak self] in
             self?.scheduleRefresh()
         }
-        // Restore any previously-stored Spotify tokens from the Keychain
+
         spotifyAuth.loadStoredTokens()
         registerEnricher(AppleMusicEnrichment(), forBundleID: "com.apple.Music")
         registerEnricher(SpotifyEnrichment(auth: spotifyAuth), forBundleID: "com.spotify.client")
@@ -134,10 +143,30 @@ final class MusicOrchestrator {
 
     private func _refresh() async {
         guard !Task.isCancelled else { return }
+
+        // Try MRMediaRemote first (on macOS < 15 this returns real data)
         var state = await mediaRemote.refreshNowPlaying()
 
+        // On macOS 15+, mediaremoted returns "Operation not permitted".
+        // Fall back to the distributed-notification watcher which works everywhere.
+        if !state.isAvailable, let dnState = dnWatcher.latestState {
+            state = dnState
+            #if DEBUG
+            print("🎵 [Orch] using DN state (MRMediaRemote unavailable)")
+            #endif
+        }
+
+        // Resolve the active bundle ID from the winning state
+        let activeBundleID: String? = {
+            switch state.provider {
+            case .appleMusic: return "com.apple.Music"
+            case .spotify:    return "com.spotify.client"
+            case .unknown:    return mediaRemote.activeAppBundleID
+            }
+        }()
+
         if state.isAvailable,
-           let bundleID = mediaRemote.activeAppBundleID,
+           let bundleID = activeBundleID,
            let enricher = enrichers[bundleID] {
             let queue = await enricher.enrichQueue()
             if !queue.isEmpty { state = state.withUpNext(queue) }
