@@ -33,6 +33,8 @@ final class MusicOrchestrator {
     /// Previously-playing track injected into the carousel `previous` slot.
     private var recentHistory: [TrackCard] = []  // oldest first, max 10
     private var lastKnownCurrentID: String?
+    /// Set to true before calling `previous()` so `_refresh` knows not to append to history.
+    private var pendingNavBackward = false
 
     /// Bounded Spotify artwork retry — cancelled/replaced on each track change or new retry.
     private var spotifyRetryTask: Task<Void, Never>?
@@ -134,6 +136,7 @@ final class MusicOrchestrator {
     }
 
     func previous() async {
+        pendingNavBackward = true
         await mediaRemote.previous()
         try? await Task.sleep(for: .milliseconds(350))
         await _refresh()
@@ -233,11 +236,14 @@ final class MusicOrchestrator {
 
         // Track the previously-playing card for the carousel previous slot.
         if let newID = state.current?.id, newID != lastKnownCurrentID {
-            // Push the card that was current before this track to the ring buffer.
-            if let departing = nowPlaying?.current, departing.id != newID {
+            // Only push to history on forward/natural navigation — not when pressing previous.
+            // Backward nav restores from history; appending would corrupt carousel order.
+            if !pendingNavBackward,
+               let departing = nowPlaying?.current, departing.id != newID {
                 recentHistory.append(departing)
                 if recentHistory.count > 10 { recentHistory.removeFirst() }
             }
+            pendingNavBackward = false
             lastKnownCurrentID = newID
             // Reset Spotify artwork retry count for this new track
             spotifyArtworkRetryCount.removeValue(forKey: newID)
