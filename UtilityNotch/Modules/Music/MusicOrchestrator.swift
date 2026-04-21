@@ -31,7 +31,7 @@ final class MusicOrchestrator {
     private var refreshGeneration: UInt64 = 0
 
     /// Previously-playing track injected into the carousel `previous` slot.
-    private var previousCard: TrackCard?
+    private var recentHistory: [TrackCard] = []  // oldest first, max 10
     private var lastKnownCurrentID: String?
 
     /// Bounded Spotify artwork retry — cancelled/replaced on each track change or new retry.
@@ -233,17 +233,34 @@ final class MusicOrchestrator {
 
         // Track the previously-playing card for the carousel previous slot.
         if let newID = state.current?.id, newID != lastKnownCurrentID {
-            previousCard = nowPlaying?.current
+            // Push the card that was current before this track to the ring buffer.
+            if let departing = nowPlaying?.current, departing.id != newID {
+                recentHistory.append(departing)
+                if recentHistory.count > 10 { recentHistory.removeFirst() }
+            }
             lastKnownCurrentID = newID
             // Reset Spotify artwork retry count for this new track
             spotifyArtworkRetryCount.removeValue(forKey: newID)
             spotifyRetryTask?.cancel()
         }
 
-        if state.previous == nil,
-           let prev = previousCard,
-           prev.id != state.current?.id {
+        // Inject the most-recent history card as the `previous` slot (slot 1 in carousel).
+        // Also patch any history entry whose artwork hadn't loaded when it was pushed.
+        let prevCard = recentHistory.last(where: { $0.id != state.current?.id })
+        if state.previous == nil, let prev = prevCard {
             state = state.withPrevious(prev)
+        }
+
+        // Carry the full history into state (excludes current track to avoid dup).
+        let historyForState = recentHistory.filter { $0.id != state.current?.id }
+        state = state.withPreviousHistory(historyForState)
+
+        // Preserve a pre-fetched next card across same-track refreshes.
+        // (DN never provides 'next' for Apple Music; album pre-fetch injects it.)
+        if state.next == nil,
+           let existingNext = nowPlaying?.next,
+           state.current?.id == nowPlaying?.current?.id {
+            state = state.withNext(existingNext)
         }
 
         nowPlaying = state.isAvailable ? state : nil
@@ -273,6 +290,13 @@ final class MusicOrchestrator {
            card.artworkData == nil, card.artworkURL == nil {
             spawnAppleMusicArtworkFetch(for: card)
         }
+
+        // Apple Music: heuristic next-track pre-fetch via album lookup (best-effort).
+        if state.isAvailable, state.provider == .appleMusic,
+           state.next == nil,
+           let card = state.current {
+            spawnAppleMusicNextTrackPreFetch(for: card)
+        }
     }
 
     /// Schedules a bounded retry refresh for Spotify when enrichment returned no artwork.
@@ -300,26 +324,85 @@ final class MusicOrchestrator {
 
     /// Fetches Apple Music artwork from the iTunes Search API in a background task.
     /// Updates `nowPlaying` only if the same track is still playing when the result arrives.
+    /// Also patches any matching entry in `recentHistory` in case the track moved there quickly.
     private func spawnAppleMusicArtworkFetch(for card: TrackCard) {
         let trackID  = card.id
         let title    = card.title
         let artist   = card.artist
         let album    = card.album
-        let storeURL = card.deepLinkURL  // Apple Music Store URL contains ?i=<trackID>
+        let storeURL = card.deepLinkURL
         Task { [weak self] in
             guard let self else { return }
             guard let artURL = await AppleMusicArtworkFetcher.shared.artwork(
                 title: title, artist: artist, album: album, storeURL: storeURL
             ) else { return }
-            guard let current = self.nowPlaying?.current, current.id == trackID,
-                  current.artworkURL == nil, current.artworkData == nil else { return }
-            if let existing = self.nowPlaying {
+
+            // Inject into current card if it's still current.
+            if let current = self.nowPlaying?.current, current.id == trackID,
+               current.artworkURL == nil, current.artworkData == nil,
+               let existing = self.nowPlaying {
                 self.nowPlaying = existing.withCurrentCard(current.withArtworkURL(artURL))
                 #if DEBUG
                 print("🎵 [Orch] Apple Music artwork injected for \"\(title)\"")
                 #endif
             }
+
+            // Also patch any history entry that was pushed before artwork arrived.
+            if let histIdx = self.recentHistory.firstIndex(where: { $0.id == trackID }),
+               self.recentHistory[histIdx].artworkURL == nil,
+               self.recentHistory[histIdx].artworkData == nil {
+                self.recentHistory[histIdx] = self.recentHistory[histIdx].withArtworkURL(artURL)
+                // Re-stamp state so the carousel sees the updated history.
+                if let existing = self.nowPlaying {
+                    let updated = self.recentHistory.filter { $0.id != existing.current?.id }
+                    var patched = existing.withPreviousHistory(updated)
+                    if let prevCard = updated.last {
+                        patched = patched.withPrevious(prevCard)
+                    }
+                    self.nowPlaying = patched
+                }
+            }
         }
+    }
+
+    /// Heuristic: look up the next track in the same album via the iTunes API and pre-warm
+    /// the carousel `next` slot. Only fires for Apple Music when `next` is nil, the card has
+    /// a trackNumber, and the deepLinkURL exposes an album ID.
+    /// This is best-effort — fails gracefully for playlists / shuffle / last album track.
+    private func spawnAppleMusicNextTrackPreFetch(for card: TrackCard) {
+        guard let trackNumber = card.trackNumber,
+              let storeURL = card.deepLinkURL,
+              let albumID = Self.extractAlbumID(from: storeURL)
+        else { return }
+
+        let currentID = card.id
+        Task { [weak self] in
+            guard let self else { return }
+            guard let nextCard = await AppleMusicArtworkFetcher.shared
+                    .nextTrackInAlbum(albumID: albumID, afterTrackNumber: trackNumber)
+            else { return }
+            // Only inject if same track is still current and next slot is still empty.
+            guard self.nowPlaying?.current?.id == currentID,
+                  self.nowPlaying?.next == nil,
+                  let existing = self.nowPlaying
+            else { return }
+            self.nowPlaying = existing.withNext(nextCard)
+            #if DEBUG
+            print("🎵 [Orch] Apple Music next-track pre-fetched: \"\(nextCard.title)\"")
+            #endif
+        }
+    }
+
+    /// Extracts the album ID from an Apple Music Store URL.
+    /// Format: `https://music.apple.com/us/album/<name>/<albumID>?i=<trackID>`
+    static func extractAlbumID(from url: URL) -> String? {
+        // Strip query, take the last numeric path component.
+        var comps = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        comps?.query = nil
+        guard let cleanURL = comps?.url else { return nil }
+        let last = cleanURL.lastPathComponent
+        guard !last.isEmpty, last.allSatisfy(\.isNumber) else { return nil }
+        return last
     }
 
     private func updateProviderStatuses(from state: NowPlayingState) {

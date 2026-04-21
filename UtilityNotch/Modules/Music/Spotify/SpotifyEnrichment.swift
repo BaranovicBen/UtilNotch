@@ -122,7 +122,8 @@ final class SpotifyEnrichment: MusicEnrichmentProvider {
             album: player.album ?? base.current?.album,
             artworkData: nil,
             artworkURL: player.artworkURL ?? base.current?.artworkURL,
-            deepLinkURL: player.deepLinkURL ?? base.current?.deepLinkURL
+            deepLinkURL: player.deepLinkURL ?? base.current?.deepLinkURL,
+            trackNumber: nil
         )
         return base
             .withCurrentCard(card)

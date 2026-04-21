@@ -31,12 +31,15 @@ struct TrackCard: Equatable, Identifiable {
     let artworkData: Data?
     let artworkURL: URL?
     let deepLinkURL: URL?
+    /// Track number within its album (Apple Music DN "Track Number"). Used for next-track pre-fetch.
+    let trackNumber: Int?
 
     /// Returns a copy of this card with `artworkURL` set to the given value.
     func withArtworkURL(_ url: URL) -> TrackCard {
         TrackCard(
             id: id, provider: provider, title: title, artist: artist, album: album,
-            artworkData: artworkData, artworkURL: url, deepLinkURL: deepLinkURL
+            artworkData: artworkData, artworkURL: url, deepLinkURL: deepLinkURL,
+            trackNumber: trackNumber
         )
     }
 
@@ -47,7 +50,7 @@ struct TrackCard: Equatable, Identifiable {
         return TrackCard(
             id: id, provider: provider, title: title, artist: artist, album: album,
             artworkData: source.artworkData, artworkURL: source.artworkURL,
-            deepLinkURL: deepLinkURL
+            deepLinkURL: deepLinkURL, trackNumber: trackNumber
         )
     }
 }
@@ -70,6 +73,9 @@ struct NowPlayingState: Equatable {
     let next: TrackCard?
     let upNext: [TrackCard]
     let playbackSourceLabel: String?
+    /// Chronological ring-buffer of recently-played cards (oldest first, max 10).
+    /// Excludes the current track. Populated by MusicOrchestrator on each track change.
+    let previousHistory: [TrackCard]
 
     /// Interpolated elapsed time. Call from a periodic view timer for smooth scrubber display.
     func currentElapsedTime(at date: Date = Date()) -> Double {
@@ -88,7 +94,8 @@ struct NowPlayingState: Equatable {
             playbackRate: playbackRate, refreshedAt: Date(),
             current: current, previous: previous,
             next: next, upNext: upNext,
-            playbackSourceLabel: playbackSourceLabel
+            playbackSourceLabel: playbackSourceLabel,
+            previousHistory: previousHistory
         )
     }
 
@@ -101,7 +108,8 @@ struct NowPlayingState: Equatable {
             playbackRate: isPlaying ? 1.0 : 0.0, refreshedAt: Date(),
             current: current, previous: previous,
             next: next, upNext: upNext,
-            playbackSourceLabel: playbackSourceLabel
+            playbackSourceLabel: playbackSourceLabel,
+            previousHistory: previousHistory
         )
     }
 
@@ -113,7 +121,8 @@ struct NowPlayingState: Equatable {
             playbackRate: playbackRate, refreshedAt: refreshedAt,
             current: current, previous: card,
             next: next, upNext: upNext,
-            playbackSourceLabel: playbackSourceLabel
+            playbackSourceLabel: playbackSourceLabel,
+            previousHistory: previousHistory
         )
     }
 
@@ -125,7 +134,21 @@ struct NowPlayingState: Equatable {
             playbackRate: playbackRate, refreshedAt: refreshedAt,
             current: card, previous: previous,
             next: next, upNext: upNext,
-            playbackSourceLabel: playbackSourceLabel
+            playbackSourceLabel: playbackSourceLabel,
+            previousHistory: previousHistory
+        )
+    }
+
+    /// Returns a new state with the next track card replaced.
+    func withNext(_ card: TrackCard?) -> NowPlayingState {
+        NowPlayingState(
+            provider: provider, isAvailable: isAvailable, isPlaying: isPlaying,
+            progressSeconds: progressSeconds, durationSeconds: durationSeconds,
+            playbackRate: playbackRate, refreshedAt: refreshedAt,
+            current: current, previous: previous,
+            next: card, upNext: upNext,
+            playbackSourceLabel: playbackSourceLabel,
+            previousHistory: previousHistory
         )
     }
 
@@ -139,7 +162,21 @@ struct NowPlayingState: Equatable {
             current: current, previous: previous,
             next: tracks.first ?? next,
             upNext: tracks.count > 1 ? Array(tracks.dropFirst()) : upNext,
-            playbackSourceLabel: playbackSourceLabel
+            playbackSourceLabel: playbackSourceLabel,
+            previousHistory: previousHistory
+        )
+    }
+
+    /// Returns a new state with the previous history ring-buffer replaced.
+    func withPreviousHistory(_ history: [TrackCard]) -> NowPlayingState {
+        NowPlayingState(
+            provider: provider, isAvailable: isAvailable, isPlaying: isPlaying,
+            progressSeconds: progressSeconds, durationSeconds: durationSeconds,
+            playbackRate: playbackRate, refreshedAt: refreshedAt,
+            current: current, previous: previous,
+            next: next, upNext: upNext,
+            playbackSourceLabel: playbackSourceLabel,
+            previousHistory: history
         )
     }
 
@@ -156,7 +193,8 @@ struct NowPlayingState: Equatable {
             previous: nil,
             next: nil,
             upNext: [],
-            playbackSourceLabel: nil
+            playbackSourceLabel: nil,
+            previousHistory: []
         )
     }
 }

@@ -28,7 +28,10 @@ struct MusicModuleView: View {
     // Indices 0/4 are the ±2 outer (off-screen) slots used only during animation.
     private var carouselCards: [TrackCard?] {
         let s = orchestrator.nowPlaying
-        return [nil, s?.previous, s?.current, s?.next, s?.upNext.first]
+        let history = s?.previousHistory ?? []
+        // outerPrev = second-most-recent history card (the card before `previous`)
+        let outerPrev: TrackCard? = history.count > 1 ? history[history.count - 2] : nil
+        return [outerPrev, s?.previous, s?.current, s?.next, s?.upNext.first]
     }
     // Center index is always 2 (current track)
     private let carouselCenter = 2

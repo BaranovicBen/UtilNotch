@@ -50,7 +50,8 @@ final class AppleMusicEnrichment: MusicEnrichmentProvider {
             album: album.isEmpty ? nil : album,
             artworkData: nil,
             artworkURL: nil,
-            deepLinkURL: nil
+            deepLinkURL: nil,
+            trackNumber: nil
         )
     }
 

@@ -134,7 +134,8 @@ final class MediaRemoteProvider: MusicProvider {
             album: album,
             artworkData: artData,
             artworkURL: artURL,
-            deepLinkURL: nil
+            deepLinkURL: nil,
+            trackNumber: nil
         )
 
         if trackUID != lastSeenTrackID {
@@ -142,7 +143,8 @@ final class MediaRemoteProvider: MusicProvider {
                 ? TrackCard(
                     id: "mrmr:prev:\(lastSeenTrackID!)",
                     provider: kind, title: title, artist: artist,
-                    album: album, artworkData: nil, artworkURL: nil, deepLinkURL: nil
+                    album: album, artworkData: nil, artworkURL: nil, deepLinkURL: nil,
+                    trackNumber: nil
                 )
                 : nil
             lastSeenTrackID = trackUID
@@ -173,7 +175,8 @@ final class MediaRemoteProvider: MusicProvider {
             previous: cachedPrevious,
             next: nil,
             upNext: [],
-            playbackSourceLabel: sourceLabel
+            playbackSourceLabel: sourceLabel,
+            previousHistory: []
         )
     }
 

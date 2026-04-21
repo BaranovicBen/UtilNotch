@@ -13,8 +13,8 @@ struct DynamicIslandView: View {
     /// Prevents the race where the expanding panel window causes a spurious hover-exit
     /// on the trigger zone, which would immediately fire the close sequence.
     @State private var suppressClose: Bool = false
-    /// Animated collapsed pill width — 420 when music is playing, 280 otherwise.
-    @State private var pillWidth: CGFloat = 280
+    /// Animated collapsed pill width — 320 when music is playing, 180 otherwise.
+    @State private var pillWidth: CGFloat = 180
 
     // Collapsed pill geometry
     private let collapsedHeight: CGFloat = 36
@@ -167,7 +167,7 @@ struct DynamicIslandView: View {
         .onAppear {
             isExpanded = false
             showContent = false
-            pillWidth = isMusicPlaying ? 420 : 280
+            pillWidth = isMusicPlaying ? 320 : 180
         }
         .onChange(of: isExpanded) { _, expanded in
             if expanded {
@@ -215,7 +215,7 @@ struct DynamicIslandView: View {
             // Only animate pill width when collapsed — expanding takes priority
             guard !isExpanded else { return }
             withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                pillWidth = playing ? 420 : 280
+                pillWidth = playing ? 320 : 180
             }
         }
         .environment(\.colorScheme, .dark)
@@ -223,47 +223,7 @@ struct DynamicIslandView: View {
         Spacer(minLength: 0)
         } // VStack
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        #if DEBUG
-        .overlay(alignment: .top) { debugGuides }
-        #endif
     }
-
-    // MARK: - Debug Width Guides
-
-    #if DEBUG
-    /// Red lines = current pill edges. Blue lines = full expanded-panel edges.
-    /// Renders outside the clipped ZStack so guides are never clipped.
-    @ViewBuilder
-    private var debugGuides: some View {
-        ZStack(alignment: .top) {
-            // Full panel width — blue vertical edges
-            HStack(spacing: 0) {
-                Rectangle().fill(Color.blue.opacity(0.85)).frame(width: 1)
-                Spacer()
-                Rectangle().fill(Color.blue.opacity(0.85)).frame(width: 1)
-            }
-            .frame(width: expandedWidth, height: expandedHeight)
-
-            // Current pill width — red vertical edges
-            HStack(spacing: 0) {
-                Rectangle().fill(Color.red.opacity(0.9)).frame(width: 1)
-                Spacer()
-                Rectangle().fill(Color.red.opacity(0.9)).frame(width: 1)
-            }
-            .frame(width: pillWidth, height: collapsedHeight)
-
-            // Dimension label just below the pill
-            Text("pill \(Int(pillWidth))pt  |  panel \(Int(expandedWidth))pt")
-                .font(.system(size: 9, weight: .medium, design: .monospaced))
-                .foregroundStyle(.yellow)
-                .padding(.horizontal, 4)
-                .padding(.vertical, 2)
-                .background(.black.opacity(0.65), in: RoundedRectangle(cornerRadius: 3))
-                .offset(y: collapsedHeight + 6)
-        }
-        .allowsHitTesting(false)
-    }
-    #endif
 
     // MARK: - Collapsed Pill
 

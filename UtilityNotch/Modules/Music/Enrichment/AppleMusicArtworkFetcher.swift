@@ -98,7 +98,6 @@ actor AppleMusicArtworkFetcher {
             let (data, _) = try await URLSession.shared.data(for: req)
             let resp = try JSONDecoder().decode(iTunesResponse.self, from: data)
 
-            let normalTitle  = title.lowercased().trimmingCharacters(in: .whitespaces)
             let normalArtist = artist.lowercased().trimmingCharacters(in: .whitespaces)
             let baseTitleNorm  = baseTitle.lowercased()
             let firstArtistNorm = firstArtist.lowercased()
@@ -151,6 +150,75 @@ actor AppleMusicArtworkFetcher {
             #endif
             return nil
         }
+    }
+
+    // MARK: - Next-track pre-fetch (heuristic, album-based)
+
+    /// Returns a minimal `TrackCard` for the track immediately following `afterTrackNumber`
+    /// in the album identified by `albumID` using the iTunes Lookup API.
+    /// Returns nil when the track is the last in the album, the request fails, or the API
+    /// doesn't recognize the album ID.  This is a heuristic — it is wrong for playlists,
+    /// shuffle, and autoplay radio; use only as a cache-warming hint.
+    func nextTrackInAlbum(albumID: String, afterTrackNumber: Int) async -> TrackCard? {
+        var comps = URLComponents(string: "https://itunes.apple.com/lookup")!
+        comps.queryItems = [
+            URLQueryItem(name: "id",     value: albumID),
+            URLQueryItem(name: "entity", value: "song")
+        ]
+        guard let url = comps.url else { return nil }
+        do {
+            var req = URLRequest(url: url)
+            req.timeoutInterval = 6
+            let (data, _) = try await URLSession.shared.data(for: req)
+            let resp = try JSONDecoder().decode(iTunesAlbumResponse.self, from: data)
+            let tracks = resp.results.filter { $0.wrapperType == "track" }
+            guard let nextTrack = tracks.first(where: { ($0.trackNumber ?? 0) == afterTrackNumber + 1 })
+            else { return nil }
+
+            // Build a minimal card. Pre-warm the hits cache so artwork is instant when current.
+            let title  = nextTrack.trackName  ?? ""
+            let artist = nextTrack.artistName ?? ""
+            let key    = cacheKey(title: title, artist: artist)
+            var artURL: URL? = hits[key]
+            if artURL == nil, let rawArt = nextTrack.artworkUrl100 {
+                let highRes = rawArt.replacingOccurrences(
+                    of: #"\d+x\d+bb"#, with: "600x600bb", options: .regularExpression)
+                artURL = URL(string: highRes)
+                if let u = artURL { hits[key] = u }
+            }
+
+            let trackID = nextTrack.trackId.map { "\($0)" } ?? "\(albumID)-\(afterTrackNumber+1)"
+            return TrackCard(
+                id: "apple:next:\(trackID)",
+                provider: .appleMusic,
+                title: title,
+                artist: artist,
+                album: nextTrack.collectionName,
+                artworkData: nil,
+                artworkURL: artURL,
+                deepLinkURL: nextTrack.trackViewUrl.flatMap { URL(string: $0) },
+                trackNumber: nextTrack.trackNumber
+            )
+        } catch {
+            #if DEBUG
+            print("🎵 [AppleMusicArt] album lookup error id=\(albumID): \(error.localizedDescription)")
+            #endif
+            return nil
+        }
+    }
+
+    private struct iTunesAlbumResponse: Decodable {
+        let results: [iTunesAlbumTrack]
+    }
+    private struct iTunesAlbumTrack: Decodable {
+        let wrapperType:    String?
+        let trackNumber:    Int?
+        let trackId:        Int?
+        let trackName:      String?
+        let artistName:     String?
+        let collectionName: String?
+        let artworkUrl100:  String?
+        let trackViewUrl:   String?
     }
 
     private struct iTunesResponse: Decodable {

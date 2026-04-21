@@ -152,7 +152,8 @@ private struct QueueItem: Decodable {
             album: album?.name,
             artworkData: nil,
             artworkURL: artURL,
-            deepLinkURL: deepLink
+            deepLinkURL: deepLink,
+            trackNumber: nil
         )
     }
 }

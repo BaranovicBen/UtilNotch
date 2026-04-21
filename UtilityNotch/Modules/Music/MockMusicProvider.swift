@@ -58,7 +58,8 @@ final class MockMusicProvider: MusicProvider, QueueAwareMusicProvider {
             previous: cachedPrevious,
             next: trackCard(at: nextIdx),
             upNext: upNextCards,
-            playbackSourceLabel: "DEMO"
+            playbackSourceLabel: "DEMO",
+            previousHistory: []
         )
     }
 
@@ -101,7 +102,8 @@ final class MockMusicProvider: MusicProvider, QueueAwareMusicProvider {
     private func makeCard(from track: MusicTrack) -> TrackCard {
         TrackCard(id: track.id.uuidString, provider: .appleMusic,
                   title: track.title, artist: track.artist,
-                  album: nil, artworkData: nil, artworkURL: nil, deepLinkURL: nil)
+                  album: nil, artworkData: nil, artworkURL: nil, deepLinkURL: nil,
+                  trackNumber: nil)
     }
 
     // MARK: - Mock catalogue

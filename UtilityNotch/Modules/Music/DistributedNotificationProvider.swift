@@ -106,7 +106,8 @@ final class DistributedNotificationProvider {
             album: album,
             artworkData: nil,
             artworkURL: nil,
-            deepLinkURL: rawURI.isEmpty ? nil : URL(string: rawURI)
+            deepLinkURL: rawURI.isEmpty ? nil : URL(string: rawURI),
+            trackNumber: nil
         )
 
         latestState = NowPlayingState(
@@ -121,7 +122,8 @@ final class DistributedNotificationProvider {
             previous: nil,
             next: nil,
             upNext: [],
-            playbackSourceLabel: "SPOTIFY"
+            playbackSourceLabel: "SPOTIFY",
+            previousHistory: []
         )
         onNowPlayingChanged?()
     }
@@ -187,6 +189,11 @@ final class DistributedNotificationProvider {
         let storeURL = (info["Store URL"] as? String).flatMap { URL(string: $0) }
         let artData: Data? = (info["Artwork"] as? Data)
             ?? (info["Artwork"] as? NSImage)?.tiffRepresentation
+        let trackNumber: Int? = {
+            if let n = info["Track Number"] as? Int    { return n }
+            if let n = info["Track Number"] as? NSNumber { return n.intValue }
+            return nil
+        }()
 
         #if DEBUG
         let keys = info.keys.compactMap { $0 as? String }.sorted()
@@ -207,7 +214,8 @@ final class DistributedNotificationProvider {
             album: album,
             artworkData: artData,
             artworkURL: nil,
-            deepLinkURL: storeURL
+            deepLinkURL: storeURL,
+            trackNumber: trackNumber
         )
 
         latestState = NowPlayingState(
@@ -222,7 +230,8 @@ final class DistributedNotificationProvider {
             previous: nil,
             next: nil,
             upNext: [],
-            playbackSourceLabel: "APPLE MUSIC"
+            playbackSourceLabel: "APPLE MUSIC",
+            previousHistory: []
         )
         onNowPlayingChanged?()
     }
