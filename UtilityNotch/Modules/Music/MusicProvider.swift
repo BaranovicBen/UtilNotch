@@ -3,7 +3,7 @@ import Foundation
 /// Abstraction over any music playback source.
 /// All methods are async to accommodate remote APIs and system calls.
 protocol MusicProvider: AnyObject {
-    var kind: MusicProviderKind { get }
+    @MainActor var kind: MusicProviderKind { get }
     var capabilities: MusicCapabilities { get }
 
     func connect() async
@@ -15,7 +15,7 @@ protocol MusicProvider: AnyObject {
     func next() async
     func previous() async
     func seek(to seconds: Double) async
-    func openNativeApp()
+    @MainActor func openNativeApp()
 }
 
 /// Extended protocol for providers that can supply a full queue preview.

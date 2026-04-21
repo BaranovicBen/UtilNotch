@@ -9,7 +9,7 @@ final class MusicOrchestrator {
 
     // MARK: - Shared instance
 
-    nonisolated(unsafe) static let shared = MusicOrchestrator()
+    nonisolated static let shared = MusicOrchestrator()
 
     // MARK: - Published state
 
@@ -141,7 +141,7 @@ final class MusicOrchestrator {
 // MARK: - SwiftUI Environment
 
 private struct MusicOrchestratorKey: EnvironmentKey {
-    nonisolated(unsafe) static let defaultValue: MusicOrchestrator = MusicOrchestrator.shared
+    static let defaultValue: MusicOrchestrator = MusicOrchestrator.shared
 }
 
 extension EnvironmentValues {

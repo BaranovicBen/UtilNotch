@@ -192,7 +192,9 @@ final class MediaRemoteProvider: MusicProvider {
             let obs = NotificationCenter.default.addObserver(
                 forName: name, object: nil, queue: .main
             ) { [weak self] _ in
-                self?.onNowPlayingChanged?()
+                MainActor.assumeIsolated {
+                    self?.onNowPlayingChanged?()
+                }
             }
             observers.append(obs)
         }

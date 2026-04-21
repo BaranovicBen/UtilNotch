@@ -230,3 +230,13 @@ The app speaks with quiet authority. It does not exclaim. It does not instruct. 
 - **No horizontal divider lines.** Only the sidebar left border is permitted.
 - **No sidebar on the left.** The sidebar is always on the right.
 - **No 40px sidebar.** The sidebar is always 48px. Any reference to 40px is incorrect.
+
+---
+
+## 9. Design Reports
+
+Periodic audits of the live codebase against this design system, Apple HIG, emotional design principles, and animation quality standards. Each report is written for an AI agent performing fixes — structured with explicit file paths, line context, and ranked priority order.
+
+| Report | Date | Scope | File |
+|---|---|---|---|
+| Mid-Development Audit | 2026-04-21 | All modules, shell chrome, panel lifecycle, full animation system | [mid-dev-report.md](Reports/mid-dev-report.md) |

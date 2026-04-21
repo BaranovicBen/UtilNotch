@@ -7,7 +7,7 @@ final class MockMusicProvider: MusicProvider, QueueAwareMusicProvider {
 
     static let shared = MockMusicProvider()
 
-    let kind: MusicProviderKind = .appleMusic
+    @MainActor let kind: MusicProviderKind = .appleMusic
     let capabilities: MusicCapabilities = .full
 
     private let state: MusicPlayerState
@@ -73,7 +73,7 @@ final class MockMusicProvider: MusicProvider, QueueAwareMusicProvider {
 
     func previous() async { state.previous() }
     func seek(to seconds: Double) async { state.seek(to: seconds) }
-    func openNativeApp() {}
+    @MainActor func openNativeApp() {}
 
     // MARK: - QueueAwareMusicProvider
 

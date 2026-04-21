@@ -9,7 +9,7 @@ import Foundation
 @MainActor
 final class SpotifyEnrichment: MusicEnrichmentProvider {
 
-    private static let bundleID = "com.spotify.client"
+    nonisolated private static let bundleID = "com.spotify.client"
     private let auth: SpotifyAuthClient
     private let api = SpotifyWebAPIClient()
 
@@ -19,7 +19,7 @@ final class SpotifyEnrichment: MusicEnrichmentProvider {
 
     // MARK: - MusicEnrichmentProvider
 
-    func canEnrich(bundleID: String) -> Bool {
+    nonisolated func canEnrich(bundleID: String) -> Bool {
         bundleID == Self.bundleID
     }
 
