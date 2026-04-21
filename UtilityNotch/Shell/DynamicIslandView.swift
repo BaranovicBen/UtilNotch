@@ -13,8 +13,8 @@ struct DynamicIslandView: View {
     /// Prevents the race where the expanding panel window causes a spurious hover-exit
     /// on the trigger zone, which would immediately fire the close sequence.
     @State private var suppressClose: Bool = false
-    /// Animated collapsed pill width — 320 when music is playing, 180 otherwise.
-    @State private var pillWidth: CGFloat = 180
+    /// Animated collapsed pill width — 260 when music is playing, 120 otherwise.
+    @State private var pillWidth: CGFloat = 120
 
     // Collapsed pill geometry
     private let collapsedHeight: CGFloat = 36
@@ -167,7 +167,7 @@ struct DynamicIslandView: View {
         .onAppear {
             isExpanded = false
             showContent = false
-            pillWidth = isMusicPlaying ? 320 : 180
+            pillWidth = isMusicPlaying ? 260 : 120
         }
         .onChange(of: isExpanded) { _, expanded in
             if expanded {
@@ -215,7 +215,7 @@ struct DynamicIslandView: View {
             // Only animate pill width when collapsed — expanding takes priority
             guard !isExpanded else { return }
             withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                pillWidth = playing ? 320 : 180
+                pillWidth = playing ? 260 : 120
             }
         }
         .environment(\.colorScheme, .dark)
