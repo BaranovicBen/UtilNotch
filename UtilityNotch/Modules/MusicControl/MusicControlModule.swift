@@ -39,6 +39,7 @@ private struct MusicSettingsView: View {
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.primary)
 
+            // System Media (MediaRemote)
             HStack(spacing: 10) {
                 Image(systemName: orchestrator.isMediaRemoteAvailable ? "checkmark.circle.fill" : "xmark.circle")
                     .font(.system(size: 14))
@@ -68,6 +69,7 @@ private struct MusicSettingsView: View {
 
             Divider()
 
+            // Apple Music queue enrichment
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.circle.fill")
@@ -85,11 +87,85 @@ private struct MusicSettingsView: View {
 
             Divider()
 
-            Text("Spotify queue enrichment coming in a future update.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            // Spotify queue enrichment
+            SpotifySettingsRow(auth: orchestrator.spotifyAuth)
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+// MARK: - Spotify row
+
+private struct SpotifySettingsRow: View {
+    var auth: SpotifyAuthClient
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Image(systemName: statusIcon)
+                    .font(.system(size: 14))
+                    .foregroundStyle(statusColor)
+                    .frame(width: 20)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Spotify Queue")
+                        .font(.system(size: 13))
+                    Text(statusDetail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                if SpotifyConfig.clientID.isEmpty {
+                    // No client ID configured — button not useful
+                } else if auth.isConnected {
+                    Button("Disconnect") { auth.disconnect() }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                } else {
+                    Button(auth.isConnecting ? "Connecting…" : "Connect") {
+                        Task { await auth.connect() }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(auth.isConnecting)
+                }
+            }
+
+            if SpotifyConfig.clientID.isEmpty {
+                Text("Set SpotifyConfig.clientID in the source code to enable Spotify queue preview. Register your app at developer.spotify.com.")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .padding(.leading, 28)
+            } else if let err = auth.connectionError {
+                Text(err)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .padding(.leading, 28)
+            }
+        }
+    }
+
+    private var statusIcon: String {
+        if SpotifyConfig.clientID.isEmpty { return "exclamationmark.circle" }
+        if auth.isConnected { return "checkmark.circle.fill" }
+        if auth.isConnecting { return "arrow.trianglehead.2.clockwise.rotate.90" }
+        return "circle"
+    }
+
+    private var statusColor: Color {
+        if SpotifyConfig.clientID.isEmpty { return .orange }
+        if auth.isConnected { return .green }
+        return .secondary
+    }
+
+    private var statusDetail: String {
+        if SpotifyConfig.clientID.isEmpty { return "Client ID not configured" }
+        if auth.isConnected { return "Connected — upcoming Spotify tracks visible in queue" }
+        if auth.isConnecting { return "Waiting for browser authorization…" }
+        if auth.connectionError != nil { return "Connection failed" }
+        return "Not connected"
     }
 }

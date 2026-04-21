@@ -5,6 +5,7 @@ import SwiftUI
 /// Uses the same ModuleRegistry + AppState as the standard Expanded Panel — no separate data layer.
 struct DynamicIslandView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.musicOrchestrator) private var orchestrator
     @State private var isExpanded: Bool = false
     @State private var showContent: Bool = false
     @State private var isPanelDropTargeted = false
@@ -12,14 +13,19 @@ struct DynamicIslandView: View {
     /// Prevents the race where the expanding panel window causes a spurious hover-exit
     /// on the trigger zone, which would immediately fire the close sequence.
     @State private var suppressClose: Bool = false
+    /// Animated collapsed pill width — 320 when music is playing, 180 otherwise.
+    @State private var pillWidth: CGFloat = 180
 
     // Collapsed pill geometry
-    private let collapsedWidth:  CGFloat = 180
     private let collapsedHeight: CGFloat = 36
 
     // Expanded geometry — narrower than full panel, same height
     private let expandedWidth:   CGFloat = UNConstants.panelWidth
     private let expandedHeight:  CGFloat = UNConstants.panelHeight
+
+    private var isMusicPlaying: Bool {
+        orchestrator.nowPlaying?.isPlaying == true
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -95,14 +101,14 @@ struct DynamicIslandView: View {
             )
             .shadow(color: .black.opacity(isExpanded ? 0.4 : 0.25), radius: isExpanded ? 28 : 12, y: isExpanded ? 8 : 4)
             .frame(
-                width:  isExpanded ? expandedWidth  : collapsedWidth,
+                width:  isExpanded ? expandedWidth  : pillWidth,
                 height: isExpanded ? expandedHeight : collapsedHeight
             )
 
             // ── Collapsed indicator (pill content) ──────────────────
             if !isExpanded {
                 collapsedContent
-                    .frame(width: collapsedWidth, height: collapsedHeight)
+                    .frame(width: pillWidth, height: collapsedHeight)
                     .transition(.opacity)
             }
 
@@ -134,7 +140,7 @@ struct DynamicIslandView: View {
         )
         // Size the frame to the larger of the two states so the animation has room
         .frame(
-            width:  isExpanded ? expandedWidth  : collapsedWidth,
+            width:  isExpanded ? expandedWidth  : pillWidth,
             height: isExpanded ? expandedHeight : collapsedHeight
         )
         .contentShape(Rectangle())
@@ -161,6 +167,7 @@ struct DynamicIslandView: View {
         .onAppear {
             isExpanded = false
             showContent = false
+            pillWidth = isMusicPlaying ? 320 : 180
         }
         .onChange(of: isExpanded) { _, expanded in
             if expanded {
@@ -204,6 +211,13 @@ struct DynamicIslandView: View {
                 showContent = false
             }
         }
+        .onChange(of: isMusicPlaying) { _, playing in
+            // Only animate pill width when collapsed — expanding takes priority
+            guard !isExpanded else { return }
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                pillWidth = playing ? 320 : 180
+            }
+        }
         .environment(\.colorScheme, .dark)
 
         Spacer(minLength: 0)
@@ -213,9 +227,20 @@ struct DynamicIslandView: View {
 
     // MARK: - Collapsed Pill
 
-    /// Shows a small ambient indicator when a background state is active (timer running, music playing).
     @ViewBuilder
     private var collapsedContent: some View {
+        if isMusicPlaying {
+            musicLiveBar
+                .transition(.opacity.animation(.easeInOut(duration: 0.2)))
+        } else {
+            defaultPillContent
+                .transition(.opacity.animation(.easeInOut(duration: 0.2)))
+        }
+    }
+
+    /// Default idle pill: app name + ambient music-active indicator.
+    @ViewBuilder
+    private var defaultPillContent: some View {
         HStack(spacing: 8) {
             Image(systemName: "rectangle.expand.vertical")
                 .font(.system(size: 11, weight: .medium))
@@ -227,10 +252,62 @@ struct DynamicIslandView: View {
 
             Spacer(minLength: 0)
 
-            // Ambient indicator for active states (music or timer)
             ambientIndicator
         }
         .padding(.horizontal, 14)
+    }
+
+    /// Music live bar: artwork thumbnail + title/artist + play-pause button.
+    @ViewBuilder
+    private var musicLiveBar: some View {
+        HStack(spacing: 8) {
+            // Artwork thumbnail
+            Group {
+                if let data = orchestrator.nowPlaying?.current?.artworkData,
+                   let nsImage = NSImage(data: data) {
+                    Image(nsImage: nsImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } else {
+                    LinearGradient(
+                        colors: UNConstants.musicArtPalette[0],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                }
+            }
+            .frame(width: 24, height: 24)
+            .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+
+            // Title + artist
+            VStack(alignment: .leading, spacing: 1) {
+                Text(orchestrator.nowPlaying?.current?.title ?? "")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.9))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+
+                Text(orchestrator.nowPlaying?.current?.artist ?? "")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.white.opacity(0.55))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            // Play / pause
+            Button {
+                Task { await orchestrator.playPause() }
+            } label: {
+                Image(systemName: "pause.fill")
+                    .font(.system(size: 10, weight: .medium))
+                    .frame(width: 22, height: 22)
+                    .background(.white.opacity(0.12), in: Circle())
+                    .foregroundStyle(.white)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 10)
     }
 
     @ViewBuilder

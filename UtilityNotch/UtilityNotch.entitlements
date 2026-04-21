@@ -9,6 +9,12 @@
 	<!-- Automation — needed to send Apple Events to Music.app for now-playing + playback control -->
 	<key>com.apple.security.automation.apple-events</key>
 	<true/>
+	<!-- Network client — Spotify Web API calls -->
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<!-- Network server — local OAuth callback listener on 127.0.0.1:8080 -->
+	<key>com.apple.security.network.server</key>
+	<true/>
 	<!-- Calendar access for Calendar module -->
 	<key>com.apple.security.personal-information.calendars</key>
 	<true/>

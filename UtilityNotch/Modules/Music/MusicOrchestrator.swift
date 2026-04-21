@@ -17,6 +17,7 @@ final class MusicOrchestrator {
     private(set) var activeProviderKind: MusicProviderKind?
     private(set) var providerStatuses: [MusicProviderKind: MusicProviderStatus] = [:]
     private(set) var isMediaRemoteAvailable: Bool = false
+    private(set) var spotifyAuth = SpotifyAuthClient()
 
     // MARK: - Private
 
@@ -36,7 +37,10 @@ final class MusicOrchestrator {
         mediaRemote.onNowPlayingChanged = { [weak self] in
             self?.scheduleRefresh()
         }
+        // Restore any previously-stored Spotify tokens from the Keychain
+        spotifyAuth.loadStoredTokens()
         registerEnricher(AppleMusicEnrichment(), forBundleID: "com.apple.Music")
+        registerEnricher(SpotifyEnrichment(auth: spotifyAuth), forBundleID: "com.spotify.client")
         await _refresh()
     }
 
