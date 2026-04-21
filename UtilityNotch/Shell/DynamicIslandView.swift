@@ -223,7 +223,47 @@ struct DynamicIslandView: View {
         Spacer(minLength: 0)
         } // VStack
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        #if DEBUG
+        .overlay(alignment: .top) { debugGuides }
+        #endif
     }
+
+    // MARK: - Debug Width Guides
+
+    #if DEBUG
+    /// Red lines = current pill edges. Blue lines = full expanded-panel edges.
+    /// Renders outside the clipped ZStack so guides are never clipped.
+    @ViewBuilder
+    private var debugGuides: some View {
+        ZStack(alignment: .top) {
+            // Full panel width — blue vertical edges
+            HStack(spacing: 0) {
+                Rectangle().fill(Color.blue.opacity(0.85)).frame(width: 1)
+                Spacer()
+                Rectangle().fill(Color.blue.opacity(0.85)).frame(width: 1)
+            }
+            .frame(width: expandedWidth, height: expandedHeight)
+
+            // Current pill width — red vertical edges
+            HStack(spacing: 0) {
+                Rectangle().fill(Color.red.opacity(0.9)).frame(width: 1)
+                Spacer()
+                Rectangle().fill(Color.red.opacity(0.9)).frame(width: 1)
+            }
+            .frame(width: pillWidth, height: collapsedHeight)
+
+            // Dimension label just below the pill
+            Text("pill \(Int(pillWidth))pt  |  panel \(Int(expandedWidth))pt")
+                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                .foregroundStyle(.yellow)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 2)
+                .background(.black.opacity(0.65), in: RoundedRectangle(cornerRadius: 3))
+                .offset(y: collapsedHeight + 6)
+        }
+        .allowsHitTesting(false)
+    }
+    #endif
 
     // MARK: - Collapsed Pill
 
