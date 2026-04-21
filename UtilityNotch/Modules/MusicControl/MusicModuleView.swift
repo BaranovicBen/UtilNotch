@@ -355,15 +355,23 @@ struct MusicModuleView: View {
         carouselLocked = true
         let target = forward ? -slotDistance : slotDistance
 
-        withAnimation(.spring(response: 0.45, dampingFraction: 0.78)) {
+        // Slide the carousel to the target position first
+        withAnimation(.spring(response: 0.52, dampingFraction: 0.84)) {
             wheelOffset = target
         }
 
         Task { @MainActor in
-            try? await Task.sleep(for: .seconds(0.38))
+            // Wait for the slide to mostly settle, then trigger the track change
+            try? await Task.sleep(for: .seconds(0.44))
             if forward { await orchestrator.next() }
             else       { await orchestrator.previous() }
-            wheelOffset = 0
+            // Animate back to center — new track is now in the center slot,
+            // text and artwork update simultaneously with this return animation
+            withAnimation(.spring(response: 0.50, dampingFraction: 0.82)) {
+                wheelOffset = 0
+            }
+            // Wait for the return animation to settle before unlocking
+            try? await Task.sleep(for: .seconds(0.46))
             carouselLocked = false
         }
     }
