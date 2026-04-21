@@ -69,7 +69,10 @@ final class DistributedNotificationProvider {
         let title    = (info["Name"]    as? String) ?? "Unknown"
         let artist   = (info["Artist"]  as? String) ?? ""
         let album    = info["Album"]    as? String
-        let trackID  = (info["Track ID"] as? String) ?? "\(title)-\(artist)"
+        let rawURI   = (info["Track ID"] as? String) ?? ""
+        // Normalize to a canonical 22-char Spotify ID; fall back to "title-artist"
+        let trackID  = Self.extractSpotifyID(rawURI) ?? "\(title)-\(artist)"
+
         // Newer Spotify versions use "Player State" string; older ones use "Playing" Bool/NSNumber.
         let isPlaying: Bool = {
             if let state = info["Player State"] as? String { return state == "Playing" }
@@ -82,8 +85,7 @@ final class DistributedNotificationProvider {
             if let n = info["Position"] as? NSNumber { return n.doubleValue }
             return 0
         }()
-        // Duration is sometimes present in ms, sometimes in seconds depending on version.
-        // Heuristic: values > 3600 are in ms (no track is > 1 hr in Spotify usually).
+        // Duration: heuristic for ms vs seconds (no track > 3600s in Spotify)
         let rawDuration: Double? = {
             if let d = info["Duration"] as? Double { return d }
             if let n = info["Duration"] as? NSNumber { return n.doubleValue }
@@ -92,18 +94,19 @@ final class DistributedNotificationProvider {
         let duration: Double? = rawDuration.map { $0 > 3600 ? $0 / 1000 : $0 }
 
         #if DEBUG
-        print("🎵 [DN-Spotify] \"\(title)\" – \(artist) playing=\(isPlaying) pos=\(String(format: "%.1f", position))s")
+        print("🎵 [DN-Spotify] \"\(title)\" – \(artist) playing=\(isPlaying) pos=\(String(format: "%.1f", position))s id=\(trackID)")
         #endif
 
+        // Canonical Spotify card ID: "spotify:<22-char-ID>" or "spotify:<title-artist>"
         let card = TrackCard(
-            id: "spotify:dn:\(trackID)",
+            id: "spotify:\(trackID)",
             provider: .spotify,
             title: title,
             artist: artist,
             album: album,
             artworkData: nil,
             artworkURL: nil,
-            deepLinkURL: URL(string: trackID)
+            deepLinkURL: rawURI.isEmpty ? nil : URL(string: rawURI)
         )
 
         latestState = NowPlayingState(
@@ -121,6 +124,23 @@ final class DistributedNotificationProvider {
             playbackSourceLabel: "SPOTIFY"
         )
         onNowPlayingChanged?()
+    }
+
+    /// Extracts the raw 22-char Spotify track ID from any common URI format.
+    /// Returns nil for unrecognised formats (caller falls back to title-artist).
+    private static func extractSpotifyID(_ uri: String) -> String? {
+        let candidate: String?
+        if uri.hasPrefix("spotify:track:") {
+            candidate = String(uri.dropFirst("spotify:track:".count))
+        } else if uri.contains("open.spotify.com/track/") {
+            let tail = uri.components(separatedBy: "/track/").last ?? ""
+            candidate = tail.components(separatedBy: "?").first
+        } else {
+            candidate = uri
+        }
+        guard let id = candidate, id.count == 22,
+              id.allSatisfy({ $0.isLetter || $0.isNumber }) else { return nil }
+        return id
     }
 
     // MARK: - Apple Music
@@ -143,32 +163,44 @@ final class DistributedNotificationProvider {
         let title    = (info["Name"]    as? String) ?? "Unknown"
         let artist   = (info["Artist"]  as? String) ?? ""
         let album    = info["Album"]    as? String
+        // PersistentID is the stable iTunes library track ID — prefer over title-artist fallback
+        let trackID  = (info["PersistentID"] as? String)
+            ?? (info["PersistentID"] as? NSNumber).map { "\($0)" }
+            ?? "\(title)-\(artist)"
         let isPlaying = playerState == "Playing"
-        // "Total Time" is in milliseconds
+
+        // "Total Time" is milliseconds
         let totalTimeMs: Double? = {
             if let d = info["Total Time"] as? Double { return d }
             if let n = info["Total Time"] as? NSNumber { return n.doubleValue }
             return nil
         }()
         let duration = totalTimeMs.map { $0 / 1000 }
+
+        // Some macOS versions include elapsed position in seconds
+        let elapsedSecs: Double? = {
+            if let d = info["Elapsed Time"] as? Double { return d }
+            if let n = info["Elapsed Time"] as? NSNumber { return n.doubleValue }
+            return nil
+        }()
+
         let storeURL = (info["Store URL"] as? String).flatMap { URL(string: $0) }
-        // Artwork is delivered as NSData or NSImage depending on macOS version
         let artData: Data? = (info["Artwork"] as? Data)
             ?? (info["Artwork"] as? NSImage)?.tiffRepresentation
-        #if DEBUG
-        if let raw = info["Artwork"] {
-            print("🎵 [DN-AppleMusic] artwork key type: \(type(of: raw)), produced data: \(artData?.count ?? 0) bytes")
-        } else {
-            print("🎵 [DN-AppleMusic] artwork key absent")
-        }
-        #endif
 
         #if DEBUG
-        print("🎵 [DN-AppleMusic] \"\(title)\" – \(artist) state=\(playerState)")
+        let keys = info.keys.compactMap { $0 as? String }.sorted()
+        print("🎵 [DN-AppleMusic] keys: \(keys.joined(separator: ", "))")
+        if let raw = info["Artwork"] {
+            print("🎵 [DN-AppleMusic] artwork type=\(type(of: raw)) data=\(artData?.count ?? 0)B")
+        } else {
+            print("🎵 [DN-AppleMusic] artwork absent")
+        }
+        print("🎵 [DN-AppleMusic] \"\(title)\" – \(artist) state=\(playerState) elapsed=\(elapsedSecs.map { String(format: "%.1fs", $0) } ?? "nil")")
         #endif
 
         let card = TrackCard(
-            id: "apple:dn:\(title)-\(artist)",
+            id: "apple:dn:\(trackID)",
             provider: .appleMusic,
             title: title,
             artist: artist,
@@ -182,7 +214,7 @@ final class DistributedNotificationProvider {
             provider: .appleMusic,
             isAvailable: true,
             isPlaying: isPlaying,
-            progressSeconds: nil,   // Apple Music DN doesn't include elapsed position
+            progressSeconds: elapsedSecs,
             durationSeconds: duration,
             playbackRate: isPlaying ? 1.0 : 0,
             refreshedAt: Date(),

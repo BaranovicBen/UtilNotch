@@ -32,6 +32,14 @@ struct TrackCard: Equatable, Identifiable {
     let artworkURL: URL?
     let deepLinkURL: URL?
 
+    /// Returns a copy of this card with `artworkURL` set to the given value.
+    func withArtworkURL(_ url: URL) -> TrackCard {
+        TrackCard(
+            id: id, provider: provider, title: title, artist: artist, album: album,
+            artworkData: artworkData, artworkURL: url, deepLinkURL: deepLinkURL
+        )
+    }
+
     /// Returns a copy of this card with artwork taken from `source` when self has none.
     func preservingArtwork(from source: TrackCard) -> TrackCard {
         guard artworkData == nil && artworkURL == nil else { return self }

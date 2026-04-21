@@ -30,10 +30,14 @@ final class MusicOrchestrator {
     private var pollingTask: Task<Void, Never>?
     private var refreshGeneration: UInt64 = 0
 
-    /// The track that was `nowPlaying.current` before the most recent track change.
-    /// Injected into the `previous` carousel slot when providers don't supply it.
+    /// Previously-playing track injected into the carousel `previous` slot.
     private var previousCard: TrackCard?
     private var lastKnownCurrentID: String?
+
+    /// Bounded Spotify artwork retry — cancelled/replaced on each track change or new retry.
+    private var spotifyRetryTask: Task<Void, Never>?
+    /// How many retries have been attempted for each Spotify track ID.
+    private var spotifyArtworkRetryCount: [String: Int] = [:]
 
     nonisolated private init() {
         Task { await connect() }
@@ -197,22 +201,22 @@ final class MusicOrchestrator {
             if !queue.isEmpty { state = state.withUpNext(queue) }
         }
 
-        // Preserve artwork from the existing nowPlaying state when the same track
-        // re-refreshes without artwork (e.g. after a DN fires before enrichment completes).
+        // Preserve artwork when the same track re-refreshes without artwork
         if let existing = nowPlaying?.current,
            let newCurrent = state.current,
            existing.id == newCurrent.id {
             state = state.withCurrentCard(newCurrent.preservingArtwork(from: existing))
         }
 
-        // Track the previously-playing card so the carousel can show it.
-        // Save the old current BEFORE overwriting nowPlaying.
+        // Track the previously-playing card for the carousel previous slot.
         if let newID = state.current?.id, newID != lastKnownCurrentID {
             previousCard = nowPlaying?.current
             lastKnownCurrentID = newID
+            // Reset Spotify artwork retry count for this new track
+            spotifyArtworkRetryCount.removeValue(forKey: newID)
+            spotifyRetryTask?.cancel()
         }
 
-        // Inject previousCard into the state when providers don't supply a previous slot.
         if state.previous == nil,
            let prev = previousCard,
            prev.id != state.current?.id {
@@ -222,13 +226,77 @@ final class MusicOrchestrator {
         nowPlaying = state.isAvailable ? state : nil
         activeProviderKind = state.isAvailable ? state.provider : nil
         updateProviderStatuses(from: state)
+
         #if DEBUG
         if let np = nowPlaying {
-            print("🎵 [Orch] nowPlaying → \"\(np.current?.title ?? "?")\" playing=\(np.isPlaying) progress=\(String(format: "%.1f", np.progressSeconds ?? 0))s art=\(np.current?.artworkURL != nil || np.current?.artworkData != nil ? "✓" : "–")")
+            let artTag = np.current?.artworkURL != nil ? "url" :
+                         np.current?.artworkData != nil ? "data" : "–"
+            print("🎵 [Orch] \"\(np.current?.title ?? "?")\" playing=\(np.isPlaying) progress=\(String(format: "%.1f", np.progressSeconds ?? 0))s dur=\(String(format: "%.0f", np.durationSeconds ?? 0))s art=\(artTag)")
         } else {
-            print("🎵 [Orch] nowPlaying → nil (unavailable)")
+            print("🎵 [Orch] nowPlaying → nil")
         }
         #endif
+
+        // Spotify: retry enrichment if we have no artwork (stale API data was discarded)
+        if state.isAvailable, state.provider == .spotify,
+           state.current?.artworkURL == nil, state.current?.artworkData == nil {
+            scheduleSpotifyArtworkRetry(for: state.current?.id ?? "")
+        }
+
+        // Apple Music: fetch artwork in background via iTunes Search API
+        // (DN never includes artwork; published state first for immediate title/play display)
+        if state.isAvailable, state.provider == .appleMusic,
+           let card = state.current,
+           card.artworkData == nil, card.artworkURL == nil {
+            spawnAppleMusicArtworkFetch(for: card)
+        }
+    }
+
+    /// Schedules a bounded retry refresh for Spotify when enrichment returned no artwork.
+    /// Cancelled and replaced on each call; max 3 retries per track ID.
+    private func scheduleSpotifyArtworkRetry(for trackID: String) {
+        guard !trackID.isEmpty else { return }
+        let attempt = (spotifyArtworkRetryCount[trackID] ?? 0) + 1
+        guard attempt <= 3 else {
+            #if DEBUG
+            print("🎵 [Orch] Spotify artwork retry limit reached for \(trackID)")
+            #endif
+            return
+        }
+        spotifyArtworkRetryCount[trackID] = attempt
+        spotifyRetryTask?.cancel()
+        spotifyRetryTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(1500))
+            guard let self, !Task.isCancelled else { return }
+            #if DEBUG
+            print("🎵 [Orch] Spotify artwork retry \(attempt) firing")
+            #endif
+            await self._refresh()
+        }
+    }
+
+    /// Fetches Apple Music artwork from the iTunes Search API in a background task.
+    /// Updates `nowPlaying` only if the same track is still playing when the result arrives.
+    private func spawnAppleMusicArtworkFetch(for card: TrackCard) {
+        let trackID = card.id
+        let title   = card.title
+        let artist  = card.artist
+        let album   = card.album
+        Task { [weak self] in
+            guard let self else { return }
+            guard let artURL = await AppleMusicArtworkFetcher.shared.artwork(
+                title: title, artist: artist, album: album
+            ) else { return }
+            // Only apply if same track is still the current one
+            guard let current = self.nowPlaying?.current, current.id == trackID,
+                  current.artworkURL == nil, current.artworkData == nil else { return }
+            if let existing = self.nowPlaying {
+                self.nowPlaying = existing.withCurrentCard(current.withArtworkURL(artURL))
+                #if DEBUG
+                print("🎵 [Orch] Apple Music artwork injected for \"\(title)\"")
+                #endif
+            }
+        }
     }
 
     private func updateProviderStatuses(from state: NowPlayingState) {

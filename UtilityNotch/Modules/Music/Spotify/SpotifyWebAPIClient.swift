@@ -80,7 +80,7 @@ struct SpotifyWebAPIClient {
                 return (w, u)
             }
             .filter { $0.0 >= 64 }
-            .min(by: { $0.0 < $1.0 })
+            .max(by: { $0.0 < $1.0 })   // largest available (640×640 when present)
             .map(\.1)
         let deepLink = item.external_urls?.spotify.flatMap { URL(string: $0) }
         return SpotifyCurrentPlayer(
@@ -141,7 +141,7 @@ private struct QueueItem: Decodable {
                 return (w, u)
             }
             .filter { $0.0 >= 64 }
-            .min(by: { $0.0 < $1.0 })
+            .max(by: { $0.0 < $1.0 })   // largest available (640×640 when present)
             .map(\.1)
         let deepLink = external_urls?.spotify.flatMap { URL(string: $0) }
         return TrackCard(

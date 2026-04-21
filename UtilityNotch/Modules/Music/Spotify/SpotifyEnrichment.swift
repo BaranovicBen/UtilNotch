@@ -44,6 +44,10 @@ final class SpotifyEnrichment: MusicEnrichmentProvider {
 
     /// Enriches a DN-based state with accurate play state, progress, and artwork from the Web API.
     /// Throttled to one Web API call per 2 s for the same track; uses cached result during window.
+    ///
+    /// On track change: waits 500 ms before calling the API so Spotify's backend has settled.
+    /// If the API still returns data for the old track (stale), returns `base` unchanged so the
+    /// orchestrator can schedule a retry rather than displaying wrong artwork.
     func enrichCurrentState(base: NowPlayingState) async -> NowPlayingState {
         guard auth.isConnected else { return base }
 
@@ -53,8 +57,12 @@ final class SpotifyEnrichment: MusicEnrichmentProvider {
         let throttled = lastPlayerFetchAt.map { now.timeIntervalSince($0) < 2.0 } ?? false
 
         if !trackChanged && throttled, let cached = cachedPlayer {
-            // Reuse cached player data during throttle window (same track, recent fetch)
             return merge(cached, into: base)
+        }
+
+        // Give the Spotify backend time to settle after a track change (~300–500 ms typically)
+        if trackChanged {
+            try? await Task.sleep(for: .milliseconds(500))
         }
 
         do {
@@ -62,11 +70,27 @@ final class SpotifyEnrichment: MusicEnrichmentProvider {
             guard let player = try await api.fetchCurrentPlayer(token: token) else {
                 return base
             }
+
+            // Verify the API returned the expected track.
+            // dnTrackID = "spotify:<22-char-ID>" after DN normalization.
+            // player.trackID = "<22-char-ID>" from item.id in the API response.
+            if trackChanged, let apiID = player.trackID {
+                let rawExpected = String(dnTrackID.dropFirst("spotify:".count))
+                let isCanonical = rawExpected.count == 22
+                    && rawExpected.allSatisfy({ $0.isLetter || $0.isNumber })
+                if isCanonical && apiID != rawExpected {
+                    #if DEBUG
+                    print("🎵 [SpotifyEnrich] stale — API=\(apiID) expected=\(rawExpected). Discarding; orchestrator will retry.")
+                    #endif
+                    return base
+                }
+            }
+
             cachedPlayer = player
             cachedPlayerTrackID = dnTrackID
             lastPlayerFetchAt = Date()
             #if DEBUG
-            print("🎵 [SpotifyEnrich] player → isPlaying=\(player.isPlaying) progress=\(player.progressMs)ms art=\(player.artworkURL?.absoluteString ?? "nil")")
+            print("🎵 [SpotifyEnrich] ✓ isPlaying=\(player.isPlaying) progress=\(player.progressMs)ms art=\(player.artworkURL?.absoluteString ?? "nil")")
             #endif
             return merge(player, into: base)
         } catch SpotifyAuthError.unauthorized {
