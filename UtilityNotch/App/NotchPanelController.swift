@@ -34,17 +34,12 @@ final class NotchPanelController {
             forName: NSApplication.didResignActiveNotification,
             object: nil,
             queue: .main
-        ) { _ in
-            print("📴 [UtilityNotch] app DID RESIGN ACTIVE")
-            Thread.callStackSymbols.prefix(8).enumerated().forEach { i, s in print("  [\(i)] \(s)") }
-        }
+        ) { _ in }
         NotificationCenter.default.addObserver(
             forName: NSApplication.didBecomeActiveNotification,
             object: nil,
             queue: .main
-        ) { _ in
-            print("📲 [UtilityNotch] app DID BECOME ACTIVE")
-        }
+        ) { _ in }
     }
 
     deinit {
@@ -212,13 +207,10 @@ private class NotchPanel: NSPanel {
     override class func allowedClasses(forRestorableStateKeyPath keyPath: String) -> [AnyClass] { [] }
 
     override func resignKey() {
-        print("🔑 [UtilityNotch] NotchPanel resignKey — new key window: \(NSApp.keyWindow.map { "\(type(of: $0))" } ?? "nil")")
         super.resignKey()
     }
 
     override func orderOut(_ sender: Any?) {
-        print("🪟 [UtilityNotch] NotchPanel orderOut called")
-        Thread.callStackSymbols.prefix(10).enumerated().forEach { i, s in print("  [\(i)] \(s)") }
         super.orderOut(sender)
     }
 }

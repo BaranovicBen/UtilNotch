@@ -134,7 +134,6 @@ final class FilesTrayStore {
         // close during the setup phase due to a mouse-leave or inactivity fire.
         // If we bail below, the lock is removed synchronously in that branch.
         appState.dismissalLocks.insert(.pickerOpen)
-        print("🔵 [Share] lock inserted — locks: \(appState.dismissalLocks.rawValue), anchorView: \(anchorView != nil), anchorWindow: \(anchorView?.window != nil)")
 
         let panelWindow = anchorView?.window
             ?? NSApp.windows.first(where: { $0.isVisible && $0.level.rawValue >= Int(CGWindowLevelForKey(.mainMenuWindow)) })
@@ -143,9 +142,7 @@ final class FilesTrayStore {
         let fallbackView = panelWindow?.contentView
 
         guard anchorIsValid || fallbackView != nil else {
-            // Can't show picker — release the lock we just inserted.
             appState.dismissalLocks.remove(.pickerOpen)
-            print("🔴 [Share] guard failed — no anchor, no fallback view. Lock released.")
             return
         }
 
@@ -190,13 +187,9 @@ private final class SharingPickerDelegate: NSObject, NSSharingServicePickerDeleg
     }
 
     func sharingServicePicker(_ picker: NSSharingServicePicker, didChoose service: NSSharingService?) {
-        // Fires on both service selection and dismissal (service == nil).
-        // Short delay so the panel can't close while the mouse travels back from the picker.
-        print("🔵 [Share] didChoose fired — service: \(service?.title ?? "nil")")
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
             self?.appState.dismissalLocks.remove(.pickerOpen)
             self?.store?.sharingPickerDidDismiss()
-            print("🔵 [Share] lock released — locks: \(self?.appState.dismissalLocks.rawValue ?? -1)")
         }
     }
 }

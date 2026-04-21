@@ -139,7 +139,6 @@ final class EventTriggerManager {
         } else {
             // Mouse is outside — start grace period if not already started
             if mouseLeaveTimer == nil && !appState.shouldSuppressClose {
-                print("⏱️ [MouseLeave] timer starting — locks: \(appState.dismissalLocks.rawValue), insidePanel: \(appState.isPointerInsidePanel)")
                 mouseLeaveTimer = Timer.scheduledTimer(
                     withTimeInterval: mouseLeaveGracePeriod,
                     repeats: false
