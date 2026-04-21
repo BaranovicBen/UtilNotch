@@ -57,7 +57,9 @@ final class SpotifyEnrichment: MusicEnrichmentProvider {
         let throttled = lastPlayerFetchAt.map { now.timeIntervalSince($0) < 2.0 } ?? false
 
         if !trackChanged && throttled, let cached = cachedPlayer {
-            return merge(cached, into: base)
+            // Same track, within throttle window: preserve DN's isPlaying (real-time).
+            // The cached API value may be stale after a play/pause action.
+            return merge(cached, into: base, trustBasePlayState: true)
         }
 
         // Give the Spotify backend time to settle after a track change (~300–500 ms typically)
@@ -92,7 +94,7 @@ final class SpotifyEnrichment: MusicEnrichmentProvider {
             #if DEBUG
             print("🎵 [SpotifyEnrich] ✓ isPlaying=\(player.isPlaying) progress=\(player.progressMs)ms art=\(player.artworkURL?.absoluteString ?? "nil")")
             #endif
-            return merge(player, into: base)
+            return merge(player, into: base, trustBasePlayState: !trackChanged)
         } catch SpotifyAuthError.unauthorized {
             auth.disconnect()
             return base
@@ -103,7 +105,15 @@ final class SpotifyEnrichment: MusicEnrichmentProvider {
 
     // MARK: - Merge helpers
 
-    private func merge(_ player: SpotifyCurrentPlayer, into base: NowPlayingState) -> NowPlayingState {
+    /// Merges Web API player data into a DN-based state.
+    /// - Parameter trustBasePlayState: When true, preserves `base.isPlaying` rather than
+    ///   overriding with the API value. Use for same-track refreshes where the DN is the
+    ///   ground truth for immediate play/pause changes; the API lags by 1–3 s.
+    private func merge(
+        _ player: SpotifyCurrentPlayer,
+        into base: NowPlayingState,
+        trustBasePlayState: Bool = false
+    ) -> NowPlayingState {
         let card = TrackCard(
             id: player.trackID.map { "spotify:\($0)" } ?? base.current?.id ?? "",
             provider: .spotify,
@@ -117,7 +127,7 @@ final class SpotifyEnrichment: MusicEnrichmentProvider {
         return base
             .withCurrentCard(card)
             .withPlayState(
-                isPlaying: player.isPlaying,
+                isPlaying: trustBasePlayState ? base.isPlaying : player.isPlaying,
                 progressSeconds: Double(player.progressMs) / 1000,
                 durationSeconds: player.durationMs.map { Double($0) / 1000 }
             )

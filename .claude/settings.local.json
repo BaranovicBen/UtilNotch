@@ -53,5 +53,8 @@
       "Bash(python3 .claude/skills/ui-ux-pro-max/scripts/search.py \"macOS notch menubar utility productivity dark minimal\" --design-system -p \"UtilityNotch\")",
       "Bash(python3:*)"
     ]
+  },
+  "enabledPlugins": {
+    "swiftui-pro@swiftui-agent-skill": true
   }
 }

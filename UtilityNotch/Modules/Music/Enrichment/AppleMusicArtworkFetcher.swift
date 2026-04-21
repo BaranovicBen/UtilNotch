@@ -29,12 +29,13 @@ actor AppleMusicArtworkFetcher {
 
     private func fetch(title: String, artist: String, album: String?, key: String) async -> URL? {
         var components = URLComponents(string: "https://itunes.apple.com/search")!
+        // Include all metadata to narrow results; more candidates → better chance of exact match
         var term = "\(title) \(artist)"
         if let album { term += " \(album)" }
         components.queryItems = [
             URLQueryItem(name: "term",   value: term),
             URLQueryItem(name: "entity", value: "song"),
-            URLQueryItem(name: "limit",  value: "5"),
+            URLQueryItem(name: "limit",  value: "10"),
             URLQueryItem(name: "media",  value: "music")
         ]
         guard let url = components.url else {
@@ -51,25 +52,44 @@ actor AppleMusicArtworkFetcher {
             let normalTitle  = title.lowercased().trimmingCharacters(in: .whitespaces)
             let normalArtist = artist.lowercased().trimmingCharacters(in: .whitespaces)
 
-            // Prefer a result whose title/artist starts with or closely matches ours
-            let best = resp.results.first { track in
+            // Require BOTH title AND artist to match (substring both directions).
+            // This prevents returning unrelated tracks that share only a title or artist.
+            let candidates = resp.results.filter { track in
                 let t = (track.trackName  ?? "").lowercased()
                 let a = (track.artistName ?? "").lowercased()
-                return t.hasPrefix(normalTitle) || normalTitle.hasPrefix(t)
-                    || a.hasPrefix(normalArtist) || normalArtist.hasPrefix(a)
-            } ?? resp.results.first
+                let titleMatch  = t.contains(normalTitle)  || normalTitle.contains(t)
+                let artistMatch = a.contains(normalArtist) || normalArtist.contains(a)
+                return titleMatch && artistMatch
+            }
+
+            // Prefer the candidate whose album name also matches, for extra precision
+            var best = candidates.first
+            if candidates.count > 1, let album {
+                let normalAlbum = album.lowercased().trimmingCharacters(in: .whitespaces)
+                best = candidates.first {
+                    ($0.collectionName ?? "").lowercased().contains(normalAlbum)
+                } ?? candidates.first
+            }
 
             guard let artStr = best?.artworkUrl100 else {
+                // No confident match — cache as miss to avoid hammering the API
                 misses.insert(key)
+                #if DEBUG
+                print("🎵 [AppleMusicArt] no confident match for \"\(title)\" – \(artist) (results: \(resp.results.count))")
+                #endif
                 return nil
             }
-            // Upgrade 100×100 thumbnail to 600×600
-            let highRes = artStr.replacingOccurrences(of: "100x100bb", with: "600x600bb")
-            let artURL  = URL(string: highRes)
+
+            // Upgrade any NxNbb thumbnail to 600×600 (handles 100x100bb, 75x75bb, etc.)
+            let highRes = artStr.replacingOccurrences(
+                of: #"\d+x\d+bb"#, with: "600x600bb",
+                options: .regularExpression
+            )
+            let artURL = URL(string: highRes)
             if let u = artURL {
                 hits[key] = u
                 #if DEBUG
-                print("🎵 [AppleMusicArt] ✓ \"\(title)\" → \(u.absoluteString)")
+                print("🎵 [AppleMusicArt] ✓ \"\(title)\" – \(artist) → \(u.absoluteString)")
                 #endif
             } else {
                 misses.insert(key)
@@ -77,9 +97,9 @@ actor AppleMusicArtworkFetcher {
             return artURL
 
         } catch {
-            // Network error — don't cache miss so we can try again later
+            // Network error — don't cache miss so we can retry on the next polling cycle
             #if DEBUG
-            print("🎵 [AppleMusicArt] error for \"\(title)\": \(error.localizedDescription)")
+            print("🎵 [AppleMusicArt] network error for \"\(title)\": \(error.localizedDescription)")
             #endif
             return nil
         }
@@ -89,8 +109,9 @@ actor AppleMusicArtworkFetcher {
         let results: [iTunesTrack]
     }
     private struct iTunesTrack: Decodable {
-        let artworkUrl100: String?
-        let trackName:     String?
-        let artistName:    String?
+        let artworkUrl100:  String?
+        let trackName:      String?
+        let artistName:     String?
+        let collectionName: String?
     }
 }
