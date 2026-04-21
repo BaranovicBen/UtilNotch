@@ -234,9 +234,12 @@ struct MusicModuleView: View {
     // MARK: - Sound wave
 
     private var waveView: some View {
-        MusicWaveView(isPlaying: orchestrator.nowPlaying?.isPlaying ?? false)
-            .frame(maxWidth: .infinity)
-            .frame(height: 24)
+        MusicWaveView(
+            isPlaying: orchestrator.nowPlaying?.isPlaying ?? false,
+            color: orchestrator.waveColor
+        )
+        .frame(maxWidth: .infinity)
+        .frame(height: 24)
     }
 
     // MARK: - Playback controls
@@ -384,19 +387,22 @@ struct MusicModuleView: View {
     }
 }
 
-// MARK: - Sound Wave (30 animated bars)
+// MARK: - Sound Wave (30 animated bars, beat-rhythmic)
 
 private struct MusicWaveView: View {
     let isPlaying: Bool
+    let color: Color
 
-    @State private var barHeights: [CGFloat] = Array(repeating: 3, count: 30)
+    private static let barCount = 30
+    @State private var barHeights: [CGFloat] = Array(repeating: 3, count: barCount)
     @State private var waveTimer: Timer?
+    @State private var beatPhase: Int = 0
 
     var body: some View {
         HStack(spacing: 3) {
-            ForEach(0..<30, id: \.self) { i in
+            ForEach(0..<Self.barCount, id: \.self) { i in
                 Capsule()
-                    .fill(Color.white.opacity(0.30))
+                    .fill(color)
                     .frame(width: 3, height: barHeights[i])
                     .frame(maxHeight: .infinity, alignment: .bottom)
             }
@@ -404,7 +410,7 @@ private struct MusicWaveView: View {
         .frame(maxWidth: .infinity)
         .frame(height: 24)
         .clipped()
-        .onAppear   { if isPlaying { startAnimating() } }
+        .onAppear    { if isPlaying { startAnimating() } }
         .onDisappear { stopAnimating() }
         .onChange(of: isPlaying) { _, playing in
             playing ? startAnimating() : stopAnimating()
@@ -413,21 +419,48 @@ private struct MusicWaveView: View {
 
     private func startAnimating() {
         stopAnimating()
-        let t = Timer.scheduledTimer(withTimeInterval: 0.12, repeats: true) { _ in
-            Task { @MainActor in
-                withAnimation(.easeInOut(duration: 0.12)) {
-                    barHeights = (0..<30).map { _ in CGFloat.random(in: 3...24) }
-                }
+        let t = Timer.scheduledTimer(withTimeInterval: 0.13, repeats: true) { _ in
+            Task { @MainActor in tick() }
+        }
+        RunLoop.main.add(t, forMode: .common)
+        waveTimer = t
+    }
+
+    private func tick() {
+        let n = Self.barCount
+        // 4-phase cycle simulating kick / off-beat / snare / off-beat at ~115 BPM
+        // phase 0 = kick: center bars spike, outer bars mid
+        // phase 1 = off: all bars low
+        // phase 2 = snare: outer bars spike, center bars mid
+        // phase 3 = off: all bars low
+        let newHeights: [CGFloat] = (0..<n).map { i in
+            let center = abs(i - n / 2)          // 0 at middle, 14 at edges
+            let isCenter = center < n / 4        // inner ~half
+            switch beatPhase % 4 {
+            case 0:  // kick — center spike
+                return isCenter
+                    ? CGFloat.random(in: 14...24)
+                    : CGFloat.random(in: 5...13)
+            case 2:  // snare — outer spike
+                return isCenter
+                    ? CGFloat.random(in: 5...13)
+                    : CGFloat.random(in: 14...22)
+            default: // off-beat — all low
+                return CGFloat.random(in: 3...7)
             }
         }
-        waveTimer = t
+        beatPhase += 1
+        withAnimation(.easeInOut(duration: 0.11)) {
+            barHeights = newHeights
+        }
     }
 
     private func stopAnimating() {
         waveTimer?.invalidate()
         waveTimer = nil
+        beatPhase = 0
         withAnimation(.easeInOut(duration: 0.25)) {
-            barHeights = Array(repeating: 3, count: 30)
+            barHeights = Array(repeating: 3, count: Self.barCount)
         }
     }
 }

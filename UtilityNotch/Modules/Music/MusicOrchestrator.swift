@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// Central coordinator for music playback.
 /// Uses MediaRemoteProvider (MRMediaRemote private framework) as the universal base.
@@ -18,6 +19,8 @@ final class MusicOrchestrator {
     private(set) var providerStatuses: [MusicProviderKind: MusicProviderStatus] = [:]
     private(set) var isMediaRemoteAvailable: Bool = false
     private(set) var spotifyAuth = SpotifyAuthClient()
+    /// Dominant color extracted from the current track's artwork. Used to tint the wave bars.
+    private(set) var waveColor: Color = Color.white.opacity(0.5)
 
     // MARK: - Private
 
@@ -303,6 +306,58 @@ final class MusicOrchestrator {
            let card = state.current {
             spawnAppleMusicNextTrackPreFetch(for: card)
         }
+
+        // Extract dominant color from artwork for wave tinting.
+        updateWaveColor(from: state.current)
+    }
+
+    private func updateWaveColor(from card: TrackCard?) {
+        guard let data = card?.artworkData,
+              let color = Self.dominantColor(from: data)
+        else {
+            waveColor = Color.white.opacity(0.5)
+            return
+        }
+        waveColor = color
+    }
+
+    /// Samples an 8×8 thumbnail of the image and returns the most-saturated pixel as a Color.
+    /// Falls back to nil when the image can't be decoded or all pixels are achromatic.
+    private static func dominantColor(from data: Data) -> Color? {
+        guard let nsImage = NSImage(data: data),
+              let cgImage = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        else { return nil }
+
+        let side = 8
+        var pixels = [UInt8](repeating: 0, count: 4 * side * side)
+        guard let ctx = CGContext(
+            data: &pixels,
+            width: side, height: side,
+            bitsPerComponent: 8, bytesPerRow: 4 * side,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
+
+        ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: side, height: side))
+
+        var bestSaturation: CGFloat = 0
+        var bestColor: (CGFloat, CGFloat, CGFloat) = (1, 1, 1)
+
+        for i in stride(from: 0, to: pixels.count, by: 4) {
+            let r = CGFloat(pixels[i])     / 255
+            let g = CGFloat(pixels[i + 1]) / 255
+            let b = CGFloat(pixels[i + 2]) / 255
+            let maxC = max(r, g, b)
+            let minC = min(r, g, b)
+            let sat  = maxC > 0 ? (maxC - minC) / maxC : 0
+            if sat > bestSaturation {
+                bestSaturation = sat
+                bestColor = (r, g, b)
+            }
+        }
+
+        guard bestSaturation > 0.15 else { return nil }
+        return Color(red: bestColor.0, green: bestColor.1, blue: bestColor.2).opacity(0.75)
     }
 
     /// Schedules a bounded retry refresh for Spotify when enrichment returned no artwork.
