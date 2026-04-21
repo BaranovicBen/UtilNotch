@@ -40,9 +40,20 @@ final class MediaRemoteProvider: MusicProvider {
     // MARK: - Connect / disconnect
 
     func connect() async {
-        guard !isRegistered, let fw = framework else { return }
+        guard !isRegistered else { return }
+        guard let fw = framework else {
+            #if DEBUG
+            print("🎵 [MR] framework unavailable — dlopen/dlsym failed")
+            #endif
+            return
+        }
         fw.registerForNowPlaying(.main)
         isRegistered = true
+        #if DEBUG
+        print("🎵 [MR] registered for now-playing notifications — waiting 400ms for XPC handshake")
+        #endif
+        // Give mediaremoted time to complete the XPC registration before we fire the first query
+        try? await Task.sleep(for: .milliseconds(400))
         subscribeToNotifications()
     }
 
@@ -67,21 +78,34 @@ final class MediaRemoteProvider: MusicProvider {
     // MARK: - Now Playing
 
     func refreshNowPlaying() async -> NowPlayingState {
-        guard let fw = framework else { return .unavailable(for: kind) }
+        guard let fw = framework else {
+            #if DEBUG
+            print("🎵 [MR] refreshNowPlaying: no framework")
+            #endif
+            return .unavailable(for: kind)
+        }
 
+        // getAppDisplayID can return nil even when music IS playing (known MRMR quirk).
+        // We store it if present, but never bail out early because of it.
         let bundleID: String? = await withCheckedContinuation { cont in
             fw.getAppDisplayID(.main) { id in
                 cont.resume(returning: id as String?)
             }
         }
         activeAppBundleID = bundleID
-        guard bundleID != nil else { return .unavailable(for: kind) }
+        #if DEBUG
+        print("🎵 [MR] getAppDisplayID → \(bundleID ?? "<nil>")")
+        #endif
 
         let dict: NSDictionary? = await withCheckedContinuation { cont in
             fw.getNowPlayingInfo(.main) { d in
                 cont.resume(returning: d)
             }
         }
+        #if DEBUG
+        let keys = (dict?.allKeys as? [String])?.sorted() ?? []
+        print("🎵 [MR] getNowPlayingInfo → \(dict == nil ? "nil" : "\(dict!.count) keys: \(keys)")")
+        #endif
         guard let info = dict, info.count > 0 else {
             return .unavailable(for: kind)
         }
@@ -95,6 +119,9 @@ final class MediaRemoteProvider: MusicProvider {
         let rate     = (info[MRNowPlayingInfoKey.playbackRate] as? NSNumber)?.doubleValue ?? 0
         let trackUID = (info[MRNowPlayingInfoKey.uniqueIdentifier] as? NSNumber)
                         .map { "\($0)" } ?? "\(title)-\(artist)"
+        #if DEBUG
+        print("🎵 [MR] now playing: \"\(title)\" – \(artist) | rate=\(rate) elapsed=\(elapsed)s")
+        #endif
 
         let artData  = info[MRNowPlayingInfoKey.artworkData] as? Data
         let artURL   = info[MRNowPlayingInfoKey.artworkURL]  as? URL

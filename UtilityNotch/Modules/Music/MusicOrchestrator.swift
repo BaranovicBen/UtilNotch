@@ -24,6 +24,7 @@ final class MusicOrchestrator {
     private let mediaRemote = MediaRemoteProvider.shared
     private var enrichers: [String: any MusicEnrichmentProvider] = [:]
     private var refreshTask: Task<Void, Never>?
+    private var pollingTask: Task<Void, Never>?
 
     nonisolated private init() {
         Task { await connect() }
@@ -32,8 +33,14 @@ final class MusicOrchestrator {
     // MARK: - Setup
 
     private func connect() async {
+        #if DEBUG
+        print("🎵 [Orch] connect() starting")
+        #endif
         await mediaRemote.connect()
         isMediaRemoteAvailable = mediaRemote.isAvailable
+        #if DEBUG
+        print("🎵 [Orch] mediaRemote.isAvailable=\(mediaRemote.isAvailable)")
+        #endif
         mediaRemote.onNowPlayingChanged = { [weak self] in
             self?.scheduleRefresh()
         }
@@ -42,6 +49,24 @@ final class MusicOrchestrator {
         registerEnricher(AppleMusicEnrichment(), forBundleID: "com.apple.Music")
         registerEnricher(SpotifyEnrichment(auth: spotifyAuth), forBundleID: "com.spotify.client")
         await _refresh()
+        startPolling()
+    }
+
+    /// Polls every 5 seconds so we catch state that was active before app launch,
+    /// slowing to 15-second intervals after the first minute.
+    private func startPolling() {
+        pollingTask?.cancel()
+        pollingTask = Task { [weak self] in
+            var ticks = 0
+            let intervals: [Duration] = Array(repeating: .seconds(5), count: 12)
+                + Array(repeating: .seconds(15), count: 1000)
+            for interval in intervals {
+                try? await Task.sleep(for: interval)
+                guard let self, !Task.isCancelled else { break }
+                await self._refresh()
+                ticks += 1
+            }
+        }
     }
 
     // MARK: - Provider registration (compat + enricher registration)
@@ -121,6 +146,13 @@ final class MusicOrchestrator {
         nowPlaying = state.isAvailable ? state : nil
         activeProviderKind = state.isAvailable ? state.provider : nil
         updateProviderStatuses(from: state)
+        #if DEBUG
+        if let np = nowPlaying {
+            print("🎵 [Orch] nowPlaying → \"\(np.current?.title ?? "?")\" playing=\(np.isPlaying)")
+        } else {
+            print("🎵 [Orch] nowPlaying → nil (unavailable)")
+        }
+        #endif
     }
 
     private func updateProviderStatuses(from state: NowPlayingState) {
