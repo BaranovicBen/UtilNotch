@@ -208,6 +208,29 @@ final class MusicOrchestrator {
             state = state.withCurrentCard(newCurrent.preservingArtwork(from: existing))
         }
 
+        // Apple Music DN never sends elapsed position.
+        // Preserve the in-progress interpolated value for same-track refreshes so the
+        // scrubber keeps ticking. For a brand-new track, start at 0.
+        if state.provider == .appleMusic, state.progressSeconds == nil {
+            if let existingNP = nowPlaying,
+               state.current?.id == existingNP.current?.id,
+               existingNP.progressSeconds != nil {
+                let interpolated = existingNP.currentElapsedTime(at: Date())
+                state = state.withPlayState(
+                    isPlaying: state.isPlaying,
+                    progressSeconds: interpolated,
+                    durationSeconds: state.durationSeconds
+                )
+            } else if state.isPlaying, state.current != nil {
+                // New track starting — begin interpolation from 0
+                state = state.withPlayState(
+                    isPlaying: state.isPlaying,
+                    progressSeconds: 0,
+                    durationSeconds: state.durationSeconds
+                )
+            }
+        }
+
         // Track the previously-playing card for the carousel previous slot.
         if let newID = state.current?.id, newID != lastKnownCurrentID {
             previousCard = nowPlaying?.current
@@ -278,16 +301,16 @@ final class MusicOrchestrator {
     /// Fetches Apple Music artwork from the iTunes Search API in a background task.
     /// Updates `nowPlaying` only if the same track is still playing when the result arrives.
     private func spawnAppleMusicArtworkFetch(for card: TrackCard) {
-        let trackID = card.id
-        let title   = card.title
-        let artist  = card.artist
-        let album   = card.album
+        let trackID  = card.id
+        let title    = card.title
+        let artist   = card.artist
+        let album    = card.album
+        let storeURL = card.deepLinkURL  // Apple Music Store URL contains ?i=<trackID>
         Task { [weak self] in
             guard let self else { return }
             guard let artURL = await AppleMusicArtworkFetcher.shared.artwork(
-                title: title, artist: artist, album: album
+                title: title, artist: artist, album: album, storeURL: storeURL
             ) else { return }
-            // Only apply if same track is still the current one
             guard let current = self.nowPlaying?.current, current.id == trackID,
                   current.artworkURL == nil, current.artworkData == nil else { return }
             if let existing = self.nowPlaying {
