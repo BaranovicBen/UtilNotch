@@ -60,19 +60,23 @@ final class NotchPanelController {
         }
         guard let panel else { return }
 
-        // Always reset to a clean pre-show state
-        NSAnimationContext.beginGrouping()
-        NSAnimationContext.current.duration = 0
-        panel.animator().alphaValue = 0
-        NSAnimationContext.endGrouping()
-
         repositionPanel()
         panel.orderFrontRegardless()
 
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = UNConstants.animationDuration
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            panel.animator().alphaValue = 1
+        if appState.panelStyle == .dynamicIsland {
+            panel.alphaValue = 1
+        } else {
+            // Expanded Panel intentionally uses a simple fade instead of DI morph behavior.
+            NSAnimationContext.beginGrouping()
+            NSAnimationContext.current.duration = 0
+            panel.animator().alphaValue = 0
+            NSAnimationContext.endGrouping()
+
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = UNConstants.animationDuration
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                panel.animator().alphaValue = 1
+            }
         }
     }
 
@@ -82,11 +86,22 @@ final class NotchPanelController {
         // Cancel any previous pending hide
         hideWorkItem?.cancel()
 
-        let workItem = DispatchWorkItem { [weak self] in
-            self?.panel?.orderOut(nil)
-            self?.hideWorkItem = nil
+        var workItem: DispatchWorkItem!
+        workItem = DispatchWorkItem { [weak self] in
+            guard let self, !workItem.isCancelled else { return }
+            self.panel?.orderOut(nil)
+            self.hideWorkItem = nil
         }
         hideWorkItem = workItem
+
+        if appState.panelStyle == .dynamicIsland {
+            panel.alphaValue = 1
+            DispatchQueue.main.asyncAfter(
+                deadline: .now() + UNConstants.dynamicIslandCloseDuration,
+                execute: workItem
+            )
+            return
+        }
 
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = UNConstants.animationDuration * 0.8
@@ -94,7 +109,9 @@ final class NotchPanelController {
             panel.animator().alphaValue = 0
         }, completionHandler: {
             // Only order out if this hide was not cancelled by a subsequent show
-            workItem.perform()
+            if !workItem.isCancelled {
+                workItem.perform()
+            }
         })
     }
 

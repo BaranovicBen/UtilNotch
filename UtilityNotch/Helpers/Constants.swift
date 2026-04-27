@@ -89,6 +89,7 @@ enum UNConstants {
     // MARK: - Timing
 
     static let animationDuration: Double = 0.28
+    static let dynamicIslandCloseDuration: Double = 0.52
     static let contentFadeDelay: Double = 0.08
     static let hoverOpenDelay: Double = 0.3
     static let defaultInactivityTimeout: Double = 8.0

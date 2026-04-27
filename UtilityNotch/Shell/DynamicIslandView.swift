@@ -9,12 +9,10 @@ struct DynamicIslandView: View {
     @State private var isExpanded: Bool = false
     @State private var showContent: Bool = false
     @State private var isPanelDropTargeted = false
-    /// Suppresses close-on-hover-exit for 600ms after an open sequence begins.
-    /// Prevents the race where the expanding panel window causes a spurious hover-exit
-    /// on the trigger zone, which would immediately fire the close sequence.
-    @State private var suppressClose: Bool = false
     /// Animated collapsed pill width — 260 when music is playing, 120 otherwise.
     @State private var pillWidth: CGFloat = 120
+    /// Invalidates delayed animation callbacks when show/hide changes rapidly.
+    @State private var animationGeneration: Int = 0
 
     // Collapsed pill geometry
     private let collapsedHeight: CGFloat = 36
@@ -146,12 +144,8 @@ struct DynamicIslandView: View {
         .contentShape(Rectangle())
         .onHover { hovering in
             appState.isPointerInsidePanel = hovering
-            // Suppress close during the 600ms lock window that follows every open.
-            // This prevents the race where the panel window appearing causes a
-            // spurious hover-exit event that would immediately collapse the panel.
-            if !hovering && suppressClose { return }
-            withAnimation(.spring(response: 0.38, dampingFraction: 0.78)) {
-                isExpanded = hovering
+            if hovering {
+                expandFromNotch()
             }
         }
         .onDrop(of: [.fileURL], isTargeted: $isPanelDropTargeted) { providers in
@@ -161,54 +155,23 @@ struct DynamicIslandView: View {
             if targeted { appState.dismissalLocks.insert(.dragDrop) }
             else { appState.dismissalLocks.remove(.dragDrop) }
             if targeted, !isExpanded {
-                withAnimation(.spring(response: 0.38, dampingFraction: 0.78)) { isExpanded = true }
+                expandFromNotch()
             }
         }
         .onAppear {
+            animationGeneration &+= 1
             isExpanded = false
             showContent = false
             pillWidth = isMusicPlaying ? 260 : 120
-        }
-        .onChange(of: isExpanded) { _, expanded in
-            if expanded {
-                // Start 600ms close-suppression lock — prevents spurious hover-exit
-                // events from the appearing panel window from collapsing the panel.
-                suppressClose = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                    suppressClose = false
-                }
-                // Rule 11: frame expands first (spring response=0.38, ~80% settled at 0.30s),
-                // then content fades in UNConstants.contentFadeDelay (0.08s) after that.
-                let delay = 0.30 + UNConstants.contentFadeDelay
-                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                    showContent = true
-                }
-            } else {
-                // Rule 11 close: content fades out first, then frame collapses
-                showContent = false
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-                    isExpanded = false
-                }
+            if appState.isPanelVisible {
+                expandFromNotch(after: 0.05)
             }
         }
         .onChange(of: appState.isPanelVisible) { _, visible in
             if visible {
-                isExpanded = false
-                showContent = false
-                // Start 600ms close-suppression lock on programmatic open too
-                suppressClose = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                    suppressClose = false
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                    withAnimation(.spring(response: 0.38, dampingFraction: 0.78)) {
-                        isExpanded = true
-                    }
-                }
+                expandFromNotch(after: 0.05)
             } else {
-                suppressClose = false
-                isExpanded = false
-                showContent = false
+                collapseIntoNotch()
             }
         }
         .onChange(of: isMusicPlaying) { _, playing in
@@ -218,11 +181,17 @@ struct DynamicIslandView: View {
                 pillWidth = playing ? 260 : 120
             }
         }
+        .onDisappear {
+            animationGeneration &+= 1
+        }
         .environment(\.colorScheme, .dark)
 
         Spacer(minLength: 0)
         } // VStack
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .overlay(alignment: .top) {
+            debugNotchGuides
+        }
     }
 
     // MARK: - Collapsed Pill
@@ -331,6 +300,96 @@ struct DynamicIslandView: View {
             ActiveModuleContainerView()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private var debugNotchGuides: some View {
+        #if DEBUG
+        let currentWidth = isExpanded ? expandedWidth : pillWidth
+        let currentHeight = isExpanded ? expandedHeight : collapsedHeight
+        let guideHeight = max(ScreenGeometry.triggerZoneHeight, collapsedHeight)
+
+        ZStack(alignment: .top) {
+            Rectangle()
+                .fill(Color.cyan.opacity(0.85))
+                .frame(width: 1, height: guideHeight + 24)
+
+            Rectangle()
+                .fill(Color.red.opacity(0.85))
+                .frame(width: UNConstants.panelWidth, height: 1)
+
+            RoundedRectangle(cornerRadius: collapsedHeight / 2, style: .continuous)
+                .stroke(Color.yellow.opacity(0.95), style: StrokeStyle(lineWidth: 1, dash: [6, 4]))
+                .frame(width: ScreenGeometry.triggerZoneWidth, height: guideHeight)
+
+            RoundedRectangle(
+                cornerRadius: isExpanded ? UNConstants.panelCornerRadius : collapsedHeight / 2,
+                style: .continuous
+            )
+            .stroke(Color.green.opacity(0.95), style: StrokeStyle(lineWidth: 1.5, dash: [3, 3]))
+            .frame(width: currentWidth, height: currentHeight)
+
+            VStack(spacing: 2) {
+                Text("pill \(Int(currentWidth))×\(Int(currentHeight))")
+                    .foregroundStyle(Color.green)
+                Text("guide \(Int(ScreenGeometry.triggerZoneWidth))×\(Int(guideHeight))")
+                    .foregroundStyle(Color.yellow)
+            }
+            .font(.system(size: 9, weight: .medium, design: .monospaced))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(Color.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .offset(y: guideHeight + 6)
+        }
+        .allowsHitTesting(false)
+        #endif
+    }
+
+    // MARK: - Motion
+
+    private func expandFromNotch(after delay: Double = 0) {
+        animationGeneration &+= 1
+        let generation = animationGeneration
+
+        showContent = false
+
+        let expand = {
+            guard animationGeneration == generation else { return }
+            withAnimation(.spring(response: 0.38, dampingFraction: 0.78)) {
+                isExpanded = true
+            }
+
+            // Rule 11: frame expands first, then content fades in after it settles.
+            let contentDelay = 0.30 + UNConstants.contentFadeDelay
+            DispatchQueue.main.asyncAfter(deadline: .now() + contentDelay) {
+                guard animationGeneration == generation, isExpanded else { return }
+                withAnimation(.easeIn(duration: 0.12)) {
+                    showContent = true
+                }
+            }
+        }
+
+        if delay > 0 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: expand)
+        } else {
+            expand()
+        }
+    }
+
+    private func collapseIntoNotch() {
+        animationGeneration &+= 1
+        let generation = animationGeneration
+
+        withAnimation(.easeOut(duration: 0.10)) {
+            showContent = false
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            guard animationGeneration == generation else { return }
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                isExpanded = false
+            }
+        }
     }
 
     // MARK: - Drop Handling

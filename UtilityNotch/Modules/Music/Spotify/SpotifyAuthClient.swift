@@ -3,6 +3,7 @@ import CryptoKit
 import Network
 import AppKit
 import Security
+@preconcurrency import Dispatch
 
 // MARK: - Token Storage Model
 
@@ -223,48 +224,35 @@ private enum CallbackServer {
                 return
             }
 
-            // Guards against double-resume if multiple connections arrive
-            var resumed = false
+            // Guards against double-resume if multiple connections arrive.
+            let resumeGate = CallbackResumeGate(continuation: cont, listener: listener)
 
             // Timeout after 5 minutes
-            let timeout = DispatchWorkItem {
-                guard !resumed else { return }
-                resumed = true
-                listener.cancel()
-                cont.resume(throwing: SpotifyAuthError.authTimeout)
+            let timeoutTask = Task {
+                try? await Task.sleep(for: .seconds(300))
+                guard !Task.isCancelled else { return }
+                resumeGate.resume(throwing: SpotifyAuthError.authTimeout)
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 300, execute: timeout)
+            resumeGate.setTimeoutTask(timeoutTask)
 
             listener.stateUpdateHandler = { state in
-                if case .failed(let err) = state, !resumed {
-                    resumed = true
-                    timeout.cancel()
-                    listener.cancel()
-                    cont.resume(throwing: SpotifyAuthError.listenerFailed(err.localizedDescription))
+                if case .failed(let err) = state {
+                    resumeGate.resume(throwing: SpotifyAuthError.listenerFailed(err.localizedDescription))
                 }
             }
 
             listener.newConnectionHandler = { conn in
                 conn.start(queue: .main)
                 conn.receive(minimumIncompleteLength: 1, maximumLength: 4096) { data, _, _, _ in
-                    guard !resumed,
-                          let data,
+                    guard let data,
                           let raw = String(data: data, encoding: .utf8),
                           let code = extractCode(from: raw) else {
-                        if !resumed {
-                            resumed = true
-                            timeout.cancel()
-                            listener.cancel()
-                            cont.resume(throwing: SpotifyAuthError.missingCode)
-                        }
+                        resumeGate.resume(throwing: SpotifyAuthError.missingCode)
                         sendResponse(to: conn, success: false)
                         return
                     }
-                    resumed = true
-                    timeout.cancel()
-                    listener.cancel()
                     sendResponse(to: conn, success: true)
-                    cont.resume(returning: code)
+                    resumeGate.resume(returning: code)
                 }
             }
 
@@ -289,6 +277,58 @@ private enum CallbackServer {
         let html = "<!DOCTYPE html><html><body>\(body)</body></html>"
         let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: \(html.utf8.count)\r\nConnection: close\r\n\r\n\(html)"
         conn.send(content: response.data(using: .utf8), completion: .contentProcessed { _ in conn.cancel() })
+    }
+}
+
+private final class CallbackResumeGate: @unchecked Sendable {
+    private let continuation: CheckedContinuation<String, Error>
+    private let listener: NWListener
+    private let lock = NSLock()
+    private var didResume = false
+    private var timeoutTask: Task<Void, Never>?
+
+    init(continuation: CheckedContinuation<String, Error>, listener: NWListener) {
+        self.continuation = continuation
+        self.listener = listener
+    }
+
+    func setTimeoutTask(_ task: Task<Void, Never>) {
+        lock.lock()
+        if didResume {
+            lock.unlock()
+            task.cancel()
+            return
+        }
+        timeoutTask = task
+        lock.unlock()
+    }
+
+    func resume(returning code: String) {
+        finish {
+            continuation.resume(returning: code)
+        }
+    }
+
+    func resume(throwing error: Error) {
+        finish {
+            continuation.resume(throwing: error)
+        }
+    }
+
+    private func finish(_ resumeContinuation: () -> Void) {
+        lock.lock()
+        guard !didResume else {
+            lock.unlock()
+            return
+        }
+        didResume = true
+        let task = timeoutTask
+        timeoutTask = nil
+        lock.unlock()
+
+        task?.cancel()
+        listener.cancel()
+        resumeContinuation()
     }
 }
 
