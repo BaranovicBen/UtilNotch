@@ -13,7 +13,7 @@ struct DynamicIslandView: View {
 
     // Collapsed pill geometry
     private let collapsedWidth: CGFloat = 220
-    private let collapsedHeight: CGFloat = 40
+    private let collapsedHeight: CGFloat = 38
     private let collapsedCornerRadius: CGFloat = 12
 
     // Expanded geometry — narrower than full panel, same height
