@@ -2,13 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- Sandbox OFF for Debug builds so MRMediaRemote works without TCC prompts.
-	     Dev-signed Xcode builds are invisible to System Settings privacy UI,
-	     making it impossible to grant Media & Apple Music permission interactively.
-	     Sandbox entitlements (calendar, files, network, apple-events) are
-	     not needed when the sandbox is disabled — they are unrestricted.
-	     Release builds use UtilityNotch.entitlements (sandbox ON) unchanged. -->
+	<!-- Sandbox OFF for Debug builds so MRMediaRemote has the best chance to work.
+	     Apple Events still need the Automation entitlement and TCC approval
+	     when querying Music.app/Spotify via AppleScript. -->
 	<key>com.apple.security.app-sandbox</key>
 	<false/>
+	<key>com.apple.security.automation.apple-events</key>
+	<true/>
 </dict>
 </plist>
