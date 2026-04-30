@@ -31,6 +31,7 @@ final class MusicOrchestrator {
     private var enrichers: [String: any MusicEnrichmentProvider] = [:]
     private var refreshTask: Task<Void, Never>?
     private var refreshGeneration: UInt64 = 0
+    private var startupSeedState: NowPlayingState?
 
     /// Previously-playing track injected into the carousel `previous` slot.
     private var recentHistory: [TrackCard] = []  // oldest first, max 10
@@ -48,6 +49,11 @@ final class MusicOrchestrator {
     }
 
     // MARK: - Setup
+
+    func seedStartupState(_ state: NowPlayingState) {
+        startupSeedState = state
+        publish(state)
+    }
 
     private func connect() async {
         #if DEBUG
@@ -75,7 +81,11 @@ final class MusicOrchestrator {
         spotifyEnricher = se
         registerEnricher(appleMusicEnricher, forBundleID: "com.apple.Music")
         registerEnricher(se, forBundleID: "com.spotify.client")
-        dnWatcher.primeFromRunningPlayers()
+        if let startupSeedState {
+            dnWatcher.seedLatestState(startupSeedState)
+        } else {
+            dnWatcher.primeFromRunningPlayers()
+        }
         await _refresh()
     }
 
@@ -254,9 +264,7 @@ final class MusicOrchestrator {
             state = state.withNext(existingNext)
         }
 
-        nowPlaying = state.isAvailable ? state : nil
-        activeProviderKind = state.isAvailable ? state.provider : nil
-        updateProviderStatuses(from: state)
+        publish(state)
 
         #if DEBUG
         if let np = nowPlaying {
@@ -301,6 +309,13 @@ final class MusicOrchestrator {
             return
         }
         waveColor = color
+    }
+
+    private func publish(_ state: NowPlayingState) {
+        nowPlaying = state.isAvailable ? state : nil
+        activeProviderKind = state.isAvailable ? state.provider : nil
+        updateProviderStatuses(from: state)
+        updateWaveColor(from: state.current)
     }
 
     /// Samples an 8×8 thumbnail of the image and returns the most-saturated pixel as a Color.

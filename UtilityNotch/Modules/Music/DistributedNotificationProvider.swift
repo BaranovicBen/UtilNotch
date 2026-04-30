@@ -33,6 +33,10 @@ final class DistributedNotificationProvider {
         observers.removeAll()
     }
 
+    func seedLatestState(_ state: NowPlayingState) {
+        latestState = state
+    }
+
     /// Distributed notifications only report future changes. On app launch, query
     /// already-running players once so music that started before Utility Notch is
     /// visible without requiring a pause/play toggle.

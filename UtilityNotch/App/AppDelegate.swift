@@ -90,8 +90,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func startMusicOnlyIfPlaybackIsActive() {
         guard appState.enabledModuleIDs.contains("musicControl") else { return }
         Task { @MainActor in
-            if await MusicStartupProbe.hasActivePlayback() {
-                _ = MusicOrchestrator.shared
+            if let state = await MusicStartupProbe.activePlaybackState() {
+                MusicOrchestrator.shared.seedStartupState(state)
             }
         }
     }
