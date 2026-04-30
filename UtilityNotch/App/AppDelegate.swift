@@ -3,6 +3,7 @@ import Combine
 
 /// AppDelegate that owns the NotchPanelController and observes AppState
 /// to show/hide the floating panel. Bridges SwiftUI ↔ AppKit.
+
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     
@@ -18,7 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         UserDefaults.standard.set(false, forKey: "NSQuitAlwaysKeepsWindows")
         
         panelController = NotchPanelController(appState: appState)
-        
+
         // Install hover trigger zone at top-center of screen
         hoverTrigger = HoverTriggerZone(appState: appState)
         hoverTrigger?.install()

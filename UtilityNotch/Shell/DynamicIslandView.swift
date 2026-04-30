@@ -12,8 +12,9 @@ struct DynamicIslandView: View {
     @State private var animationGeneration: Int = 0
 
     // Collapsed pill geometry
-    private let collapsedWidth: CGFloat = 280
-    private let collapsedHeight: CGFloat = 36
+    private let collapsedWidth: CGFloat = 220
+    private let collapsedHeight: CGFloat = 40
+    private let collapsedCornerRadius: CGFloat = 12
 
     // Expanded geometry — narrower than full panel, same height
     private let expandedWidth:   CGFloat = UNConstants.panelWidth
@@ -26,19 +27,19 @@ struct DynamicIslandView: View {
             // DI expanded: sharp top corners (flush with notch/bezel), rounded bottom.
             // Collapsed pill: uniform corner radius.
             UnevenRoundedRectangle(
-                topLeadingRadius:     isExpanded ? 0 : collapsedHeight / 2,
-                bottomLeadingRadius:  isExpanded ? UNConstants.panelCornerRadius : collapsedHeight / 2,
-                bottomTrailingRadius: isExpanded ? UNConstants.panelCornerRadius : collapsedHeight / 2,
-                topTrailingRadius:    isExpanded ? 0 : collapsedHeight / 2,
+                topLeadingRadius:     isExpanded ? 0 : collapsedCornerRadius,
+                bottomLeadingRadius:  isExpanded ? UNConstants.panelCornerRadius : collapsedCornerRadius,
+                bottomTrailingRadius: isExpanded ? UNConstants.panelCornerRadius : collapsedCornerRadius,
+                topTrailingRadius:    isExpanded ? 0 : collapsedCornerRadius,
                 style: .continuous
             )
             .fill(.ultraThinMaterial)
             .overlay(
                 UnevenRoundedRectangle(
-                    topLeadingRadius:     isExpanded ? 0 : collapsedHeight / 2,
-                    bottomLeadingRadius:  isExpanded ? UNConstants.panelCornerRadius : collapsedHeight / 2,
-                    bottomTrailingRadius: isExpanded ? UNConstants.panelCornerRadius : collapsedHeight / 2,
-                    topTrailingRadius:    isExpanded ? 0 : collapsedHeight / 2,
+                    topLeadingRadius:     isExpanded ? 0 : collapsedCornerRadius,
+                    bottomLeadingRadius:  isExpanded ? UNConstants.panelCornerRadius : collapsedCornerRadius,
+                    bottomTrailingRadius: isExpanded ? UNConstants.panelCornerRadius : collapsedCornerRadius,
+                    topTrailingRadius:    isExpanded ? 0 : collapsedCornerRadius,
                     style: .continuous
                 )
                 .fill(UNConstants.panelBackground)
@@ -57,10 +58,10 @@ struct DynamicIslandView: View {
                     } else {
                         // Floating pill: all four edges need the specular highlight
                         UnevenRoundedRectangle(
-                            topLeadingRadius:     collapsedHeight / 2,
-                            bottomLeadingRadius:  collapsedHeight / 2,
-                            bottomTrailingRadius: collapsedHeight / 2,
-                            topTrailingRadius:    collapsedHeight / 2,
+                            topLeadingRadius:     collapsedCornerRadius,
+                            bottomLeadingRadius:  collapsedCornerRadius,
+                            bottomTrailingRadius: collapsedCornerRadius,
+                            topTrailingRadius:    collapsedCornerRadius,
                             style: .continuous
                         )
                         .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
@@ -123,10 +124,10 @@ struct DynamicIslandView: View {
                     invertedCornerRadius: UNConstants.invertedCornerRadius
                   ))
                 : AnyShape(UnevenRoundedRectangle(
-                    topLeadingRadius:     collapsedHeight / 2,
-                    bottomLeadingRadius:  collapsedHeight / 2,
-                    bottomTrailingRadius: collapsedHeight / 2,
-                    topTrailingRadius:    collapsedHeight / 2,
+                    topLeadingRadius:     collapsedCornerRadius,
+                    bottomLeadingRadius:  collapsedCornerRadius,
+                    bottomTrailingRadius: collapsedCornerRadius,
+                    topTrailingRadius:    collapsedCornerRadius,
                     style: .continuous
                   ))
         )
@@ -175,9 +176,6 @@ struct DynamicIslandView: View {
         Spacer(minLength: 0)
         } // VStack
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .overlay(alignment: .top) {
-            debugNotchGuides
-        }
     }
 
     // MARK: - Collapsed Pill
@@ -228,49 +226,6 @@ struct DynamicIslandView: View {
             ActiveModuleContainerView()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    @ViewBuilder
-    private var debugNotchGuides: some View {
-        #if DEBUG
-        let currentWidth = isExpanded ? expandedWidth : collapsedWidth
-        let currentHeight = isExpanded ? expandedHeight : collapsedHeight
-        let guideHeight = max(ScreenGeometry.triggerZoneHeight, collapsedHeight)
-
-        ZStack(alignment: .top) {
-            Rectangle()
-                .fill(Color.cyan.opacity(0.85))
-                .frame(width: 1, height: guideHeight + 24)
-
-            Rectangle()
-                .fill(Color.red.opacity(0.85))
-                .frame(width: UNConstants.panelWidth, height: 1)
-
-            RoundedRectangle(cornerRadius: collapsedHeight / 2, style: .continuous)
-                .stroke(Color.yellow.opacity(0.95), style: StrokeStyle(lineWidth: 1, dash: [6, 4]))
-                .frame(width: ScreenGeometry.triggerZoneWidth, height: guideHeight)
-
-            RoundedRectangle(
-                cornerRadius: isExpanded ? UNConstants.panelCornerRadius : collapsedHeight / 2,
-                style: .continuous
-            )
-            .stroke(Color.green.opacity(0.95), style: StrokeStyle(lineWidth: 1.5, dash: [3, 3]))
-            .frame(width: currentWidth, height: currentHeight)
-
-            VStack(spacing: 2) {
-                Text("pill \(Int(currentWidth))×\(Int(currentHeight))")
-                    .foregroundStyle(Color.green)
-                Text("guide \(Int(ScreenGeometry.triggerZoneWidth))×\(Int(guideHeight))")
-                    .foregroundStyle(Color.yellow)
-            }
-            .font(.system(size: 9, weight: .medium, design: .monospaced))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
-            .background(Color.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-            .offset(y: guideHeight + 6)
-        }
-        .allowsHitTesting(false)
-        #endif
     }
 
     // MARK: - Motion
