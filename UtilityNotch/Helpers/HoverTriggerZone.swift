@@ -56,7 +56,10 @@ final class HoverTriggerZone {
         window.level = NSWindow.Level(
             rawValue: Int(CGWindowLevelForKey(.mainMenuWindow)) + 2
         )
-        window.collectionBehavior = [.canJoinAllSpaces, .stationary]
+        // Do not join full-screen/game Spaces. A top-level invisible trigger there
+        // can steal focus or switch the user back to the desktop when the cursor
+        // touches the top edge.
+        window.collectionBehavior = [.stationary]
         window.hasShadow = false
 
         let trackingView = HoverTrackingView(
@@ -72,13 +75,15 @@ final class HoverTriggerZone {
     // MARK: - Hover Handling
 
     private func handleMouseEntered() {
+        guard !shouldSuppressHoverOpen else { return }
         hoverTimer?.invalidate()
         hoverTimer = Timer.scheduledTimer(
             withTimeInterval: UNConstants.hoverOpenDelay,
             repeats: false
         ) { [weak self] _ in
             DispatchQueue.main.async {
-                self?.appState.showPanel()
+                guard let self, !self.shouldSuppressHoverOpen else { return }
+                self.appState.showPanel()
             }
         }
     }
@@ -86,6 +91,11 @@ final class HoverTriggerZone {
     private func handleMouseExited() {
         hoverTimer?.invalidate()
         hoverTimer = nil
+    }
+
+    private var shouldSuppressHoverOpen: Bool {
+        let options = NSApplication.shared.currentSystemPresentationOptions
+        return options.contains(.fullScreen) || options.contains(.hideMenuBar)
     }
 }
 
