@@ -33,6 +33,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             eventManager = EventTriggerManager(appState: appState, panelController: panelController)
             eventManager?.install()
         }
+
+        if appState.enabledModuleIDs.contains("musicControl") {
+            _ = MusicOrchestrator.shared
+        }
         
         startObservingPanelVisibility()
     }

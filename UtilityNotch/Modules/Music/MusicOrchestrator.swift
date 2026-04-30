@@ -75,6 +75,7 @@ final class MusicOrchestrator {
         spotifyEnricher = se
         registerEnricher(appleMusicEnricher, forBundleID: "com.apple.Music")
         registerEnricher(se, forBundleID: "com.spotify.client")
+        dnWatcher.primeFromRunningPlayers()
         await _refresh()
     }
 

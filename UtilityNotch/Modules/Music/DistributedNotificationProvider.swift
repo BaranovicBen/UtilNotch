@@ -33,6 +33,26 @@ final class DistributedNotificationProvider {
         observers.removeAll()
     }
 
+    /// Distributed notifications only report future changes. On app launch, query
+    /// already-running players once so music that started before Utility Notch is
+    /// visible without requiring a pause/play toggle.
+    func primeFromRunningPlayers() {
+        if let spotifyState = querySpotifyCurrentState() {
+            latestState = spotifyState
+            #if DEBUG
+            print("🎵 [DN-Prime] using current Spotify playback")
+            #endif
+            return
+        }
+
+        if let appleMusicState = queryAppleMusicCurrentState() {
+            latestState = appleMusicState
+            #if DEBUG
+            print("🎵 [DN-Prime] using current Apple Music playback")
+            #endif
+        }
+    }
+
     // MARK: - Private
 
     private func subscribe(_ name: String, handler: @escaping (Notification) -> Void) {
@@ -49,6 +69,132 @@ final class DistributedNotificationProvider {
             }
         )
         observers.append(obs)
+    }
+
+    private func querySpotifyCurrentState() -> NowPlayingState? {
+        guard isAppRunning(bundleID: "com.spotify.client") else { return nil }
+        let script = """
+        tell application "Spotify"
+            if player state is stopped then return ""
+            set t to current track
+            set d to {name of t, artist of t, album of t, spotify url of t, duration of t, player position, player state as string}
+            set AppleScript's text item delimiters to "|||"
+            return d as text
+        end tell
+        """
+        guard let fields = runAppleScript(script), fields.count >= 7 else { return nil }
+
+        let title = fields[0].isEmpty ? "Unknown" : fields[0]
+        let artist = fields[1]
+        let album = fields[2].isEmpty ? nil : fields[2]
+        let rawURI = fields[3]
+        let trackID = Self.extractSpotifyID(rawURI) ?? "\(title)-\(artist)"
+        let duration = Double(fields[4]).map { $0 > 3600 ? $0 / 1000 : $0 }
+        let position = Double(fields[5]) ?? 0
+        let isPlaying = fields[6].lowercased() == "playing"
+
+        let card = TrackCard(
+            id: "spotify:\(trackID)",
+            provider: .spotify,
+            title: title,
+            artist: artist,
+            album: album,
+            artworkData: nil,
+            artworkURL: nil,
+            deepLinkURL: rawURI.isEmpty ? nil : URL(string: rawURI),
+            trackNumber: nil
+        )
+
+        return NowPlayingState(
+            provider: .spotify,
+            isAvailable: true,
+            isPlaying: isPlaying,
+            progressSeconds: position,
+            durationSeconds: duration,
+            playbackRate: isPlaying ? 1.0 : 0,
+            refreshedAt: Date(),
+            current: card,
+            previous: nil,
+            next: nil,
+            upNext: [],
+            playbackSourceLabel: "SPOTIFY",
+            previousHistory: []
+        )
+    }
+
+    private func queryAppleMusicCurrentState() -> NowPlayingState? {
+        guard isAppRunning(bundleID: "com.apple.Music") else { return nil }
+        let script = """
+        tell application "Music"
+            if player state is stopped then return ""
+            set t to current track
+            set storeValue to ""
+            try
+                set storeValue to address of t
+            end try
+            set d to {name of t, artist of t, album of t, persistent ID of t, duration of t, player position, player state as string, storeValue, track number of t}
+            set AppleScript's text item delimiters to "|||"
+            return d as text
+        end tell
+        """
+        guard let fields = runAppleScript(script), fields.count >= 9 else { return nil }
+
+        let title = fields[0].isEmpty ? "Unknown" : fields[0]
+        let artist = fields[1]
+        let album = fields[2].isEmpty ? nil : fields[2]
+        let trackID = fields[3].isEmpty ? "\(title)-\(artist)" : fields[3]
+        let duration = Double(fields[4])
+        let position = Double(fields[5]) ?? 0
+        let isPlaying = fields[6].lowercased() == "playing"
+        let storeURL = fields[7].isEmpty ? nil : URL(string: fields[7])
+        let trackNumber = Int(fields[8])
+
+        let card = TrackCard(
+            id: "apple:dn:\(trackID)",
+            provider: .appleMusic,
+            title: title,
+            artist: artist,
+            album: album,
+            artworkData: nil,
+            artworkURL: nil,
+            deepLinkURL: storeURL,
+            trackNumber: trackNumber
+        )
+
+        return NowPlayingState(
+            provider: .appleMusic,
+            isAvailable: true,
+            isPlaying: isPlaying,
+            progressSeconds: position,
+            durationSeconds: duration,
+            playbackRate: isPlaying ? 1.0 : 0,
+            refreshedAt: Date(),
+            current: card,
+            previous: nil,
+            next: nil,
+            upNext: [],
+            playbackSourceLabel: "APPLE MUSIC",
+            previousHistory: []
+        )
+    }
+
+    private func runAppleScript(_ source: String) -> [String]? {
+        var error: NSDictionary?
+        guard let result = NSAppleScript(source: source)?.executeAndReturnError(&error).stringValue,
+              !result.isEmpty
+        else {
+            #if DEBUG
+            if let error {
+                print("🎵 [DN-Prime] AppleScript failed: \(error)")
+            }
+            #endif
+            return nil
+        }
+        return result.components(separatedBy: "|||")
+    }
+
+    private func isAppRunning(bundleID: String) -> Bool {
+        !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty
     }
 
     // MARK: - Spotify
