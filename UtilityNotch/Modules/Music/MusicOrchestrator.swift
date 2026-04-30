@@ -30,7 +30,6 @@ final class MusicOrchestrator {
     private var spotifyEnricher: SpotifyEnrichment?
     private var enrichers: [String: any MusicEnrichmentProvider] = [:]
     private var refreshTask: Task<Void, Never>?
-    private var pollingTask: Task<Void, Never>?
     private var refreshGeneration: UInt64 = 0
 
     /// Previously-playing track injected into the carousel `previous` slot.
@@ -77,24 +76,6 @@ final class MusicOrchestrator {
         registerEnricher(appleMusicEnricher, forBundleID: "com.apple.Music")
         registerEnricher(se, forBundleID: "com.spotify.client")
         await _refresh()
-        startPolling()
-    }
-
-    /// Polls every 5 seconds so we catch state that was active before app launch,
-    /// slowing to 15-second intervals after the first minute.
-    private func startPolling() {
-        pollingTask?.cancel()
-        pollingTask = Task { [weak self] in
-            var ticks = 0
-            let intervals: [Duration] = Array(repeating: .seconds(5), count: 12)
-                + Array(repeating: .seconds(15), count: 1000)
-            for interval in intervals {
-                try? await Task.sleep(for: interval)
-                guard let self, !Task.isCancelled else { break }
-                await self._refresh()
-                ticks += 1
-            }
-        }
     }
 
     // MARK: - Provider registration (compat + enricher registration)
