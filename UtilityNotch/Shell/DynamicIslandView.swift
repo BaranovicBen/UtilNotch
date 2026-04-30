@@ -12,7 +12,7 @@ struct DynamicIslandView: View {
     @State private var animationGeneration: Int = 0
 
     // Collapsed pill geometry
-    private let collapsedWidth: CGFloat = 160
+    private let collapsedWidth: CGFloat = 200
     private let collapsedHeight: CGFloat = 36
 
     // Expanded geometry — narrower than full panel, same height
