@@ -15,6 +15,7 @@ final class EventTriggerManager {
     private var globalKeyMonitor: Any?
     private var localKeyMonitor: Any?
     private var globalClickMonitor: Any?
+    private var localClickMonitor: Any?
     private var mouseMoveMonitor: Any?
     private var inactivityTimer: Timer?
     private var mouseLeaveTimer: Timer?
@@ -42,6 +43,7 @@ final class EventTriggerManager {
         if let globalKeyMonitor { NSEvent.removeMonitor(globalKeyMonitor) }
         if let localKeyMonitor { NSEvent.removeMonitor(localKeyMonitor) }
         if let globalClickMonitor { NSEvent.removeMonitor(globalClickMonitor) }
+        if let localClickMonitor { NSEvent.removeMonitor(localClickMonitor) }
         if let mouseMoveMonitor { NSEvent.removeMonitor(mouseMoveMonitor) }
         inactivityTimer?.invalidate()
         mouseLeaveTimer?.invalidate()
@@ -49,6 +51,7 @@ final class EventTriggerManager {
         globalKeyMonitor = nil
         localKeyMonitor = nil
         globalClickMonitor = nil
+        localClickMonitor = nil
         mouseMoveMonitor = nil
     }
 
@@ -91,19 +94,26 @@ final class EventTriggerManager {
             // Capture screen point at time of event — before any async delay
             let screenPoint = NSEvent.mouseLocation
             Task { @MainActor [weak self] in
-                guard let self else { return }
-                guard self.appState.isPanelVisible else { return }
-
-                // Only active drag or ongoing task should block click-outside dismiss.
-                // isInteracting intentionally excluded: clicking outside should ALWAYS dismiss
-                // even if a text field is focused — the field loses focus anyway.
-                guard !self.appState.shouldSuppressClickOutside else { return }
-
-                guard let panelWindow = self.panelController?.panelWindow else { return }
-                if !panelWindow.frame.contains(screenPoint) {
-                    self.appState.forceHidePanel()
-                }
+                self?.closeIfClickIsOutsidePanel(at: screenPoint)
             }
+        }
+
+        localClickMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        ) { [weak self] event in
+            let screenPoint = NSEvent.mouseLocation
+            Task { @MainActor [weak self] in
+                self?.closeIfClickIsOutsidePanel(at: screenPoint)
+            }
+            return event
+        }
+    }
+
+    private func closeIfClickIsOutsidePanel(at screenPoint: CGPoint) {
+        guard appState.isPanelVisible else { return }
+        guard let panelWindow = panelController?.panelWindow else { return }
+        if !panelWindow.frame.contains(screenPoint) {
+            appState.forceHidePanel()
         }
     }
 
