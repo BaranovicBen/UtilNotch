@@ -7,8 +7,8 @@ import AppKit
 @MainActor
 enum MusicStartupProbe {
     static func activePlaybackState() async -> NowPlayingState? {
-        if let spotifyState = await spotifyPlaybackState() { return spotifyState }
         if let appleMusicState = appleMusicPlaybackState() { return appleMusicState }
+        if let spotifyState = await spotifyPlaybackState() { return spotifyState }
         return nil
     }
 
@@ -61,11 +61,41 @@ enum MusicStartupProbe {
         tell application "Music"
             if player state is not playing then return ""
             set t to current track
+            set titleValue to "Unknown"
+            set artistValue to ""
+            set albumValue to ""
+            set idValue to ""
+            set durationValue to ""
+            set positionValue to "0"
             set storeValue to ""
+            set trackNumberValue to ""
+
             try
-                set storeValue to address of t
+                set titleValue to name of t as string
             end try
-            set d to {name of t, artist of t, album of t, persistent ID of t, duration of t, player position, player state as string, storeValue, track number of t}
+            try
+                set artistValue to artist of t as string
+            end try
+            try
+                set albumValue to album of t as string
+            end try
+            try
+                set idValue to persistent ID of t as string
+            end try
+            try
+                set durationValue to duration of t as string
+            end try
+            try
+                set positionValue to player position as string
+            end try
+            try
+                set storeValue to address of t as string
+            end try
+            try
+                set trackNumberValue to track number of t as string
+            end try
+
+            set d to {titleValue, artistValue, albumValue, idValue, durationValue, positionValue, "playing", storeValue, trackNumberValue}
             set AppleScript's text item delimiters to "|||"
             return d as text
         end tell
