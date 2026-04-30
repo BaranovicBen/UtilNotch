@@ -34,9 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             eventManager?.install()
         }
 
-        if appState.enabledModuleIDs.contains("musicControl") {
-            _ = MusicOrchestrator.shared
-        }
+        startMusicOnlyIfPlaybackIsActive()
         
         startObservingPanelVisibility()
     }
@@ -86,6 +84,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             panelController.showPanel()
         } else {
             panelController.hidePanel()
+        }
+    }
+
+    private func startMusicOnlyIfPlaybackIsActive() {
+        guard appState.enabledModuleIDs.contains("musicControl") else { return }
+        Task { @MainActor in
+            if await MusicStartupProbe.hasActivePlayback() {
+                _ = MusicOrchestrator.shared
+            }
         }
     }
     
