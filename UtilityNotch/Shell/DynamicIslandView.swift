@@ -168,6 +168,10 @@ struct DynamicIslandView: View {
                 collapseIntoNotch()
             }
         }
+        .onChange(of: appState.panelPresentationRevision) { _, _ in
+            guard appState.isPanelVisible else { return }
+            expandFromNotch(after: 0.05)
+        }
         .onDisappear {
             animationGeneration &+= 1
         }
@@ -282,8 +286,8 @@ struct DynamicIslandView: View {
         provider.loadItem(forTypeIdentifier: "public.file-url", options: nil) { item, _ in
             if let data = item as? Data, let url = URL(dataRepresentation: data, relativeTo: nil) {
                 DispatchQueue.main.async {
-                    appState.pendingFileURL = url
-                    appState.selectModule("fileConverter")
+                    appState.pendingTrayURLs.append(url)
+                    appState.selectModule("filesTray")
                     appState.showPanel()
                 }
             }
