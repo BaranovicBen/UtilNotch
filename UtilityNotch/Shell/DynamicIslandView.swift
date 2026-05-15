@@ -238,10 +238,22 @@ struct DynamicIslandView: View {
         animationGeneration &+= 1
         let generation = animationGeneration
 
-        showContent = false
-
         let expand = {
             guard animationGeneration == generation else { return }
+
+            if isExpanded {
+                // Re-shows can arrive while a close is still in flight (for example
+                // when the cursor skims the edge of the panel). If the shell is
+                // already open, keep the module content alive instead of blanking
+                // the whole panel while waiting on an expansion that is not needed.
+                withAnimation(.easeIn(duration: 0.12)) {
+                    showContent = true
+                }
+                return
+            }
+
+            showContent = false
+
             withAnimation(.spring(response: 0.38, dampingFraction: 0.78)) {
                 isExpanded = true
             }
