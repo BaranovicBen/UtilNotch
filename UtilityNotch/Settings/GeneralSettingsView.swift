@@ -24,14 +24,11 @@ struct GeneralSettingsView: View {
             }
             
             Section("System") {
-                Toggle("Launch at login", isOn: .constant(false))
-                    .disabled(true)
-                    .overlay(alignment: .trailing) {
-                        Text("Coming soon")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .padding(.trailing, 4)
-                    }
+                Toggle("Launch at login", isOn: $state.launchAtLogin)
+
+                Text(state.launchAtLoginStatusText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
 
                 Text("Keyboard shortcut: ⌥ Space")
                     .foregroundStyle(.secondary)

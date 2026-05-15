@@ -11,7 +11,6 @@ enum ModuleRegistry {
         QuickNotesModule(),
         ClipboardHistoryModule(),
         MusicControlModule(),
-        FileConverterModule(),
         CalendarModule(),
         FilesTrayModule()
     ]

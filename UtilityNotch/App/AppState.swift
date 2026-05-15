@@ -1,4 +1,5 @@
 import SwiftUI
+import ServiceManagement
 
 /// Centralized app state — single source of truth for the shell.
 /// Owns: active utility, enabled utilities, panel visibility, all settings.
@@ -13,6 +14,7 @@ final class AppState {
 
     private let defaults = UserDefaults.standard
     private let persistence = PersistenceManager.shared
+    @ObservationIgnored private var todoCleanupTimer: Timer?
 
     private init() {
         // Load persisted data
@@ -28,7 +30,7 @@ final class AppState {
         _quickNotes = savedNotes ?? []
 
         // Apply module order
-        let defaultOrder = ["todoList", "quickNotes", "clipboardHistory", "musicControl", "fileConverter", "calendar", "filesTray"]
+        let defaultOrder = ["todoList", "quickNotes", "clipboardHistory", "musicControl", "calendar", "filesTray"]
         _enabledModuleIDs = savedOrder ?? defaultOrder
 
         // Apply settings
@@ -40,16 +42,24 @@ final class AppState {
             _activeModuleID = s.activeModuleID
             _showMusicWaveform = s.showMusicWaveform
             _panelStyle = PanelStyle(rawValue: s.panelStyle ?? "") ?? .expandedPanel
+            _deleteCompletedTodosEndOfDay = s.deleteCompletedTodosEndOfDay ?? false
+            _lastTodoCleanupDay = s.lastTodoCleanupDay
         } else if let raw = defaults.string(forKey: "menuBarSummaryMode"),
                   let mode = TodoSummaryMode(rawValue: raw) {
             // Migrate from old UserDefaults
             _menuBarSummaryMode = mode
         }
+
+        _launchAtLogin = Self.isLaunchAtLoginEnabled
+        cleanupCompletedTodosIfNeeded()
+        scheduleTodoCleanupTimer()
+        validateActiveModule()
     }
 
     // MARK: - Panel State
 
     var isPanelVisible: Bool = false
+    var panelPresentationRevision: Int = 0
 
     /// True when the cursor is inside the panel bounds (used to defer close while hovering within UI)
     var isPointerInsidePanel: Bool = false
@@ -77,7 +87,7 @@ final class AppState {
         set { _activeModuleID = newValue; saveSettings() }
     }
 
-    private var _enabledModuleIDs: [String] = ["todoList", "quickNotes", "clipboardHistory", "musicControl", "fileConverter", "calendar", "filesTray"]
+    private var _enabledModuleIDs: [String] = ["todoList", "quickNotes", "clipboardHistory", "musicControl", "calendar", "filesTray"]
     /// Ordered list of enabled module IDs (also defines rail order)
     var enabledModuleIDs: [String] {
         get { _enabledModuleIDs }
@@ -95,7 +105,32 @@ final class AppState {
     private var _launchAtLogin: Bool = false
     var launchAtLogin: Bool {
         get { _launchAtLogin }
-        set { _launchAtLogin = newValue }
+        set {
+            do {
+                if newValue {
+                    if SMAppService.mainApp.status != .enabled {
+                        try SMAppService.mainApp.register()
+                    }
+                } else if SMAppService.mainApp.status == .enabled {
+                    try SMAppService.mainApp.unregister()
+                }
+            } catch {
+                #if DEBUG
+                print("Launch at login update failed: \(error)")
+                #endif
+            }
+            _launchAtLogin = Self.isLaunchAtLoginEnabled
+        }
+    }
+
+    var launchAtLoginStatusText: String {
+        switch SMAppService.mainApp.status {
+        case .enabled: return "Enabled"
+        case .requiresApproval: return "Requires approval in System Settings"
+        case .notRegistered: return "Off"
+        case .notFound: return "Unavailable"
+        @unknown default: return "Unknown"
+        }
     }
 
     private var _inactivityTimeout: Double = 0
@@ -132,6 +167,19 @@ final class AppState {
         get { _panelStyle }
         set { _panelStyle = newValue; saveSettings() }
     }
+
+    private var _deleteCompletedTodosEndOfDay: Bool = false
+    var deleteCompletedTodosEndOfDay: Bool {
+        get { _deleteCompletedTodosEndOfDay }
+        set {
+            _deleteCompletedTodosEndOfDay = newValue
+            cleanupCompletedTodosIfNeeded()
+            scheduleTodoCleanupTimer()
+            saveSettings()
+        }
+    }
+
+    private var _lastTodoCleanupDay: String?
 
     // MARK: - Todo State (shared for menu bar)
 
@@ -191,8 +239,6 @@ final class AppState {
         set { _quickNotes = newValue; persistence.save(newValue, key: .notes) }
     }
 
-    var pendingFileURL: URL?
-
     /// URLs captured by FileDragReceiverZone when files are dropped at the notch before
     /// the Files Tray panel finishes opening. FilesTrayModuleView drains this on appear/change.
     var pendingTrayURLs: [URL] = []
@@ -200,11 +246,16 @@ final class AppState {
     // MARK: - Helpers
 
     func togglePanel() {
-        isPanelVisible.toggle()
+        if isPanelVisible {
+            forceHidePanel()
+        } else {
+            showPanel()
+        }
     }
 
     func showPanel() {
         isPanelVisible = true
+        panelPresentationRevision &+= 1
     }
 
     func hidePanel() {
@@ -235,13 +286,68 @@ final class AppState {
 
     /// Ensure activeModuleID is still valid after enable/disable changes
     func validateActiveModule() {
-        if !enabledModuleIDs.contains(activeModuleID) {
+        _enabledModuleIDs = _enabledModuleIDs.filter { ModuleRegistry.module(for: $0) != nil }
+
+        if _enabledModuleIDs.isEmpty {
+            _enabledModuleIDs = ["todoList", "quickNotes", "clipboardHistory", "musicControl", "calendar", "filesTray"]
+        }
+
+        if let defaultModuleID,
+           !enabledModuleIDs.contains(defaultModuleID) || ModuleRegistry.module(for: defaultModuleID) == nil {
+            _defaultModuleID = nil
+        }
+
+        if !enabledModuleIDs.contains(activeModuleID) || ModuleRegistry.module(for: activeModuleID) == nil {
             activeModuleID = defaultModuleID ?? enabledModuleIDs.first ?? "todoList"
         }
     }
 
     func summaryTextForMenuBar() -> String {
         menuBarSummaryMode.render(done: completedCount, remaining: remainingCount, next: nextPendingTask)
+    }
+
+    private static var isLaunchAtLoginEnabled: Bool {
+        SMAppService.mainApp.status == .enabled
+    }
+
+    private func cleanupCompletedTodosIfNeeded(now: Date = Date()) {
+        guard _deleteCompletedTodosEndOfDay else { return }
+
+        let today = Self.todoCleanupDayString(for: now)
+        guard _lastTodoCleanupDay != today else { return }
+
+        if _lastTodoCleanupDay != nil {
+            _todoItems.removeAll { $0.isDone }
+            persistence.save(_todoItems, key: .todos)
+        }
+
+        _lastTodoCleanupDay = today
+        saveSettings()
+    }
+
+    private func scheduleTodoCleanupTimer() {
+        todoCleanupTimer?.invalidate()
+        todoCleanupTimer = nil
+        guard _deleteCompletedTodosEndOfDay else { return }
+
+        let calendar = Calendar.current
+        let nextMidnight = calendar.nextDate(
+            after: Date(),
+            matching: DateComponents(hour: 0, minute: 0, second: 1),
+            matchingPolicy: .nextTime
+        ) ?? Date().addingTimeInterval(24 * 60 * 60)
+
+        let timer = Timer(fire: nextMidnight, interval: 0, repeats: false) { _ in
+            AppState.shared.cleanupCompletedTodosIfNeeded()
+            AppState.shared.scheduleTodoCleanupTimer()
+        }
+        todoCleanupTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    private static func todoCleanupDayString(for date: Date) -> String {
+        let components = Calendar.current.dateComponents([.year, .month, .day], from: date)
+        return "\(components.year ?? 0)-\(components.month ?? 0)-\(components.day ?? 0)"
     }
 
     // MARK: - Settings Persistence
@@ -254,7 +360,9 @@ final class AppState {
             defaultModuleID: _defaultModuleID,
             activeModuleID: _activeModuleID,
             showMusicWaveform: _showMusicWaveform,
-            panelStyle: _panelStyle.rawValue
+            panelStyle: _panelStyle.rawValue,
+            deleteCompletedTodosEndOfDay: _deleteCompletedTodosEndOfDay,
+            lastTodoCleanupDay: _lastTodoCleanupDay
         )
         persistence.save(snapshot, key: .settings)
     }
@@ -369,4 +477,3 @@ struct QuickNote: Identifiable, Codable, Equatable {
         self.createdAt = createdAt
     }
 }
-

@@ -51,6 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         func observe() {
             withObservationTracking {
                 _ = appState.isPanelVisible
+                _ = appState.panelPresentationRevision
             } onChange: { [weak self] in
                 Task { @MainActor in
                     self?.handlePanelVisibilityChange()

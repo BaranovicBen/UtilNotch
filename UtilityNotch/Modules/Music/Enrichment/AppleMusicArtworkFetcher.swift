@@ -17,15 +17,23 @@ actor AppleMusicArtworkFetcher {
     /// Caches both hits and misses in-memory so subsequent calls for the same track are instant.
     func artwork(title: String, artist: String, album: String? = nil, storeURL: URL? = nil) async -> URL? {
         let key = cacheKey(title: title, artist: artist)
-        if let cached = hits[key]  { return cached }
-        if misses.contains(key)    { return nil    }
+        if let cached = hits[key] {
+            debugLog("artwork.cacheHit", fields: ["title": title, "artist": artist])
+            return cached
+        }
+        if misses.contains(key) {
+            debugLog("artwork.cacheMiss", fields: ["title": title, "artist": artist])
+            return nil
+        }
 
         // Prefer exact lookup via track ID from the Apple Music Store URL (?i=XXXXXXX)
         if let storeURL,
            let trackID = Self.extractAppleMusicTrackID(from: storeURL) {
+            debugLog("artwork.lookup.begin", fields: ["trackID": trackID, "title": title])
             if let url = await artworkByLookup(trackID: trackID, key: key) { return url }
         }
 
+        debugLog("artwork.search.begin", fields: ["title": title, "artist": artist])
         return await fetch(title: title, artist: artist, album: album, key: key)
     }
 
@@ -160,6 +168,7 @@ actor AppleMusicArtworkFetcher {
     /// doesn't recognize the album ID.  This is a heuristic — it is wrong for playlists,
     /// shuffle, and autoplay radio; use only as a cache-warming hint.
     func nextTrackInAlbum(albumID: String, afterTrackNumber: Int) async -> TrackCard? {
+        debugLog("nextTrackInAlbum.begin", fields: ["albumID": albumID, "afterTrackNumber": "\(afterTrackNumber)"])
         var comps = URLComponents(string: "https://itunes.apple.com/lookup")!
         comps.queryItems = [
             URLQueryItem(name: "id",     value: albumID),
@@ -173,7 +182,10 @@ actor AppleMusicArtworkFetcher {
             let resp = try JSONDecoder().decode(iTunesAlbumResponse.self, from: data)
             let tracks = resp.results.filter { $0.wrapperType == "track" }
             guard let nextTrack = tracks.first(where: { ($0.trackNumber ?? 0) == afterTrackNumber + 1 })
-            else { return nil }
+            else {
+                debugLog("nextTrackInAlbum.miss", fields: ["albumID": albumID, "trackCount": "\(tracks.count)"])
+                return nil
+            }
 
             // Build a minimal card. Pre-warm the hits cache so artwork is instant when current.
             let title  = nextTrack.trackName  ?? ""
@@ -188,7 +200,7 @@ actor AppleMusicArtworkFetcher {
             }
 
             let trackID = nextTrack.trackId.map { "\($0)" } ?? "\(albumID)-\(afterTrackNumber+1)"
-            return TrackCard(
+            let card = TrackCard(
                 id: "apple:next:\(trackID)",
                 provider: .appleMusic,
                 title: title,
@@ -199,10 +211,13 @@ actor AppleMusicArtworkFetcher {
                 deepLinkURL: nextTrack.trackViewUrl.flatMap { URL(string: $0) },
                 trackNumber: nextTrack.trackNumber
             )
+            debugLog("nextTrackInAlbum.hit", fields: ["albumID": albumID, "nextID": card.id, "title": title])
+            return card
         } catch {
             #if DEBUG
             print("🎵 [AppleMusicArt] album lookup error id=\(albumID): \(error.localizedDescription)")
             #endif
+            debugLog("nextTrackInAlbum.error", fields: ["albumID": albumID, "error": error.localizedDescription])
             return nil
         }
     }
@@ -229,5 +244,15 @@ actor AppleMusicArtworkFetcher {
         let trackName:      String?
         let artistName:     String?
         let collectionName: String?
+    }
+
+    private func debugLog(_ event: String, fields: [String: String] = [:]) {
+        #if DEBUG
+        let body = fields
+            .sorted { $0.key < $1.key }
+            .map { "\($0.key)=\($0.value)" }
+            .joined(separator: " ")
+        print("🎵 [Music][AppleMusicArt] event=\(event)\(body.isEmpty ? "" : " \(body)")")
+        #endif
     }
 }

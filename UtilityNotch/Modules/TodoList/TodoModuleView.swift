@@ -11,6 +11,7 @@ struct TodoModuleView: View {
     @State private var editingID: UUID? = nil
     @State private var editDraft: String = ""
     @State private var draggingID: UUID? = nil
+    @State private var dropTargetID: UUID? = nil
 
     // Dummy tasks shown when data source is empty
     private static let dummyTasks: [(text: String, timestamp: String, isDone: Bool)] = [
@@ -68,31 +69,44 @@ struct TodoModuleView: View {
                         }
                     }
                 } else {
-                    // Live list — ScrollView + LazyVStack with onDrag/onDrop reorder.
-                    // .clipped() constrains dragged rows within the module frame.
-                    // Spring animation on the container drives gap-open animation during drag.
+                    // Live list — stable stack with a visible source row and gap indicator.
+                    // This avoids the disappearing-row glitches caused by hiding the
+                    // source while SwiftUI is also animating repeated dropEntered moves.
                     ScrollView(.vertical, showsIndicators: false) {
-                        LazyVStack(spacing: 8) {
+                        VStack(spacing: 8) {
                             ForEach(appState.todoItems) { item in
                                 let isDragged = draggingID == item.id
+                                let isDropTarget = dropTargetID == item.id && !isDragged
                                 liveRow(item)
-                                    // Hide the source row while dragging — the system
-                                    // drag preview is the only visible representation.
-                                    .opacity(isDragged ? 0.0 : 1.0)
+                                    .opacity(isDragged ? 0.62 : 1.0)
+                                    .scaleEffect(isDragged ? 0.985 : 1.0)
+                                    .overlay(alignment: .top) {
+                                        if isDropTarget {
+                                            Capsule()
+                                                .fill(UNConstants.iconActiveTint.opacity(0.78))
+                                                .frame(height: 2)
+                                                .padding(.horizontal, 10)
+                                                .offset(y: -5)
+                                                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                                        }
+                                    }
+                                    .overlay {
+                                        if isDragged {
+                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                                .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
+                                        }
+                                    }
                                     .animation(
-                                        .spring(response: 0.25, dampingFraction: 0.65),
+                                        .spring(response: 0.24, dampingFraction: 0.82),
                                         value: draggingID
                                     )
-                                    .transition(.asymmetric(
-                                        insertion: .scale(scale: 0.97).combined(with: .opacity),
-                                        removal:   .scale(scale: 0.97).combined(with: .opacity)
-                                    ))
+                                    .animation(.spring(response: 0.22, dampingFraction: 0.84), value: dropTargetID)
                                     // Drag-to-reorder — only undone items
-                                    .if(!item.isDone) { view in
+                                    .if(!item.isDone && editingID == nil) { view in
                                         view.onDrag {
-                                            self.draggingID = item.id
-                                            appState.dismissalLocks.insert(.dragDrop)
-                                            return NSItemProvider(object: item.id.uuidString as NSString)
+                                            startDrag(item)
+                                        } preview: {
+                                            dragPreview(for: item)
                                         }
                                     }
                                     .onDrop(
@@ -101,6 +115,7 @@ struct TodoModuleView: View {
                                             target: item,
                                             items: Bindable(appState).todoItems,
                                             draggingID: $draggingID,
+                                            dropTargetID: $dropTargetID,
                                             onCleanup: { cleanupDrag() }
                                         )
                                     )
@@ -244,6 +259,22 @@ struct TodoModuleView: View {
         )
     }
 
+    private func dragPreview(for item: TodoItem) -> some View {
+        LiveTaskRowView(
+            item: item,
+            isEditing: false,
+            editDraft: .constant(""),
+            onToggle: {},
+            onDelete: {},
+            onEdit: {},
+            onSaveEdit: { _ in },
+            onCancelEdit: {}
+        )
+        .frame(width: 520)
+        .background(Color.black.opacity(0.82), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
     // MARK: - Actions
 
     private func confirmAdd() {
@@ -280,8 +311,20 @@ struct TodoModuleView: View {
     }
 
     private func cleanupDrag() {
-        draggingID = nil
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            draggingID = nil
+            dropTargetID = nil
+        }
         appState.dismissalLocks.remove(.dragDrop)
+    }
+
+    private func startDrag(_ item: TodoItem) -> NSItemProvider {
+        draggingID = item.id
+        dropTargetID = item.id
+        appState.dismissalLocks.insert(.dragDrop)
+        return NSItemProvider(object: item.id.uuidString as NSString)
     }
 
     /// Toggle done/undone, then re-sort so undone items always precede done items.
@@ -320,10 +363,14 @@ private struct TodoDropDelegate: DropDelegate {
     let target: TodoItem
     @Binding var items: [TodoItem]
     @Binding var draggingID: UUID?
+    @Binding var dropTargetID: UUID?
     let onCleanup: () -> Void
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
-        DropProposal(operation: .move)
+        if draggingID != target.id, !target.isDone {
+            dropTargetID = target.id
+        }
+        return DropProposal(operation: .move)
     }
 
     func performDrop(info: DropInfo) -> Bool {
@@ -332,7 +379,9 @@ private struct TodoDropDelegate: DropDelegate {
     }
 
     func dropExited(info: DropInfo) {
-        // Clean up if the drag leaves without dropping on a valid target
+        if dropTargetID == target.id {
+            dropTargetID = nil
+        }
     }
 
     func dropEntered(info: DropInfo) {
@@ -345,7 +394,9 @@ private struct TodoDropDelegate: DropDelegate {
             !items[from].isDone
         else { return }
 
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+        dropTargetID = target.id
+
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
             items.move(
                 fromOffsets: IndexSet(integer: from),
                 toOffset: to > from ? to + 1 : to

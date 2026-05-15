@@ -17,15 +17,25 @@ final class AppleMusicEnrichment: MusicEnrichmentProvider {
     // MARK: - MusicEnrichmentProvider
 
     func canEnrich(bundleID: String) -> Bool {
-        bundleID == Self.bundleID
+        Self.debugLog("canEnrich", fields: ["bundleID": bundleID, "result": "\(bundleID == Self.bundleID)"])
+        return bundleID == Self.bundleID
     }
 
     func enrichQueue() async -> [TrackCard] {
-        guard isRunning else { return [] }
-        guard let raw = await runScript(queueScript), !raw.isEmpty else { return [] }
+        guard isRunning else {
+            Self.debugLog("enrichQueue.skipped", fields: ["reason": "notRunning"])
+            return []
+        }
+        Self.debugLog("enrichQueue.begin")
+        guard let raw = await runScript(queueScript), !raw.isEmpty else {
+            Self.debugLog("enrichQueue.miss")
+            return []
+        }
 
         let rows = raw.components(separatedBy: "\u{001E}").filter { !$0.isEmpty }
-        return rows.compactMap { parseRow($0) }
+        let cards = rows.compactMap { parseRow($0) }
+        Self.debugLog("enrichQueue.end", fields: ["rowCount": "\(rows.count)", "cardCount": "\(cards.count)"])
+        return cards
     }
 
     // MARK: - Private helpers
@@ -89,18 +99,35 @@ final class AppleMusicEnrichment: MusicEnrichmentProvider {
 
     @discardableResult
     private func runScript(_ source: String) async -> String? {
-        await withCheckedContinuation { cont in
+        let started = Date()
+        Self.debugLog("runScript.queued")
+        return await withCheckedContinuation { cont in
             // Use the serial queue so concurrent callers queue up rather than
             // running NSAppleScript in parallel (NSAppleScript is not thread-safe).
             Self.scriptQueue.async {
+                Self.debugLog("runScript.begin")
                 let script = NSAppleScript(source: source)
                 var err: NSDictionary?
                 let result = script?.executeAndReturnError(&err)
                 #if DEBUG
                 if let e = err { print("🎵 [AppleScript] error: \(e)") }
                 #endif
+                Self.debugLog(err == nil ? "runScript.end" : "runScript.failed", fields: [
+                    "elapsedMs": "\(Int(Date().timeIntervalSince(started) * 1000))",
+                    "hasResult": "\(result?.stringValue?.isEmpty == false)"
+                ])
                 cont.resume(returning: result?.stringValue)
             }
         }
+    }
+
+    private static func debugLog(_ event: String, fields: [String: String] = [:]) {
+        #if DEBUG
+        let body = fields
+            .sorted { $0.key < $1.key }
+            .map { "\($0.key)=\($0.value)" }
+            .joined(separator: " ")
+        print("🎵 [Music][AppleMusicEnrich] event=\(event)\(body.isEmpty ? "" : " \(body)")")
+        #endif
     }
 }

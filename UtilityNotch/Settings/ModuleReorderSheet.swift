@@ -93,6 +93,6 @@ struct ModuleReorderSheet: View {
     }
 
     private func resetToDefault() {
-        workingOrder = ["todoList", "quickNotes", "clipboardHistory", "musicControl", "fileConverter", "timer"]
+        workingOrder = ["todoList", "quickNotes", "clipboardHistory", "musicControl", "calendar", "filesTray"]
     }
 }

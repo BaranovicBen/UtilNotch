@@ -5,8 +5,15 @@ import SwiftUI
 
 struct ScreenGeometry {
 
+    /// Display that should host the notch UI.
+    /// Prefer the notched built-in panel when it is present; external displays can
+    /// become `NSScreen.main` and otherwise leave the hover zone on the wrong screen.
     static var screen: NSScreen {
-        NSScreen.main ?? NSScreen.screens[0]
+        notchedScreen ?? NSScreen.main ?? NSScreen.screens[0]
+    }
+
+    private static var notchedScreen: NSScreen? {
+        NSScreen.screens.first { $0.safeAreaInsets.top > 0 }
     }
 
     /// Physical top of the display in screen coordinates.

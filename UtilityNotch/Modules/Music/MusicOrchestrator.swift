@@ -18,6 +18,7 @@ final class MusicOrchestrator {
     private(set) var activeProviderKind: MusicProviderKind?
     private(set) var providerStatuses: [MusicProviderKind: MusicProviderStatus] = [:]
     private(set) var isMediaRemoteAvailable: Bool = false
+    private(set) var isTransportCommandInFlight: Bool = false
     private(set) var spotifyAuth = SpotifyAuthClient()
     /// Dominant color extracted from the current track's artwork. Used to tint the wave bars.
     private(set) var waveColor: Color = Color.white.opacity(0.5)
@@ -38,6 +39,7 @@ final class MusicOrchestrator {
     private var lastKnownCurrentID: String?
     /// Set to true before calling `previous()` so `_refresh` knows not to append to history.
     private var pendingNavBackward = false
+    private var lastPublishedDebugSnapshot: String?
 
     /// Bounded Spotify artwork retry — cancelled/replaced on each track change or new retry.
     private var spotifyRetryTask: Task<Void, Never>?
@@ -51,6 +53,7 @@ final class MusicOrchestrator {
     // MARK: - Setup
 
     func seedStartupState(_ state: NowPlayingState) {
+        debugLog("seedStartupState", fields: debugFields(for: state))
         startupSeedState = state
         publish(state)
     }
@@ -63,6 +66,7 @@ final class MusicOrchestrator {
         // Distributed notifications — primary source, works on all macOS versions
         dnWatcher.start()
         dnWatcher.onNowPlayingChanged = { [weak self] in
+            self?.debugLog("dnWatcher.onNowPlayingChanged")
             self?.scheduleRefresh()
         }
 
@@ -73,6 +77,7 @@ final class MusicOrchestrator {
         print("🎵 [Orch] mediaRemote.isAvailable=\(mediaRemote.isAvailable)")
         #endif
         mediaRemote.onNowPlayingChanged = { [weak self] in
+            self?.debugLog("mediaRemote.onNowPlayingChanged")
             self?.scheduleRefresh()
         }
 
@@ -96,6 +101,7 @@ final class MusicOrchestrator {
     }
 
     func registerEnricher(_ enricher: any MusicEnrichmentProvider, forBundleID bundleID: String) {
+        debugLog("registerEnricher", fields: ["bundleID": bundleID])
         enrichers[bundleID] = enricher
     }
 
@@ -112,6 +118,17 @@ final class MusicOrchestrator {
     // MARK: - Actions
 
     func playPause() async {
+        guard !isTransportCommandInFlight else {
+            debugLog("playPause.ignored", fields: ["reason": "commandInFlight"])
+            return
+        }
+        isTransportCommandInFlight = true
+        debugLog("playPause.begin", fields: debugFields(for: nowPlaying))
+        defer {
+            isTransportCommandInFlight = false
+            debugLog("playPause.end", fields: debugFields(for: nowPlaying))
+        }
+
         // Optimistic toggle — keeps UI snappy while command + refresh are in-flight
         if let np = nowPlaying {
             nowPlaying = np.withPlayState(
@@ -125,12 +142,44 @@ final class MusicOrchestrator {
     }
 
     func next() async {
+        guard !isTransportCommandInFlight else {
+            debugLog("next.ignored", fields: ["reason": "commandInFlight"])
+            return
+        }
+        isTransportCommandInFlight = true
+        let startingID = nowPlaying?.current?.id
+        debugLog("next.begin", fields: debugFields(for: nowPlaying))
+        defer {
+            isTransportCommandInFlight = false
+            debugLog("next.end", fields: debugFields(for: nowPlaying).merging([
+                "changed": "\(startingID != nowPlaying?.current?.id)"
+            ]) { _, new in new })
+        }
+
         await mediaRemote.next()
         try? await Task.sleep(for: .milliseconds(350))
         await _refresh()
     }
 
     func previous() async {
+        guard !isTransportCommandInFlight else {
+            debugLog("previous.ignored", fields: ["reason": "commandInFlight"])
+            return
+        }
+        isTransportCommandInFlight = true
+        let startingID = nowPlaying?.current?.id
+        debugLog("previous.begin", fields: debugFields(for: nowPlaying))
+        defer {
+            if startingID == nowPlaying?.current?.id {
+                pendingNavBackward = false
+            }
+            isTransportCommandInFlight = false
+            debugLog("previous.end", fields: debugFields(for: nowPlaying).merging([
+                "changed": "\(startingID != nowPlaying?.current?.id)",
+                "pendingNavBackward": "\(pendingNavBackward)"
+            ]) { _, new in new })
+        }
+
         pendingNavBackward = true
         await mediaRemote.previous()
         try? await Task.sleep(for: .milliseconds(350))
@@ -138,10 +187,12 @@ final class MusicOrchestrator {
     }
 
     func seek(to seconds: Double) async {
+        debugLog("seek", fields: ["seconds": String(format: "%.2f", seconds)])
         await mediaRemote.seek(to: seconds)
     }
 
     func openCurrentProviderApp() {
+        debugLog("openCurrentProviderApp", fields: ["bundleID": mediaRemote.activeAppBundleID ?? "nil"])
         mediaRemote.openNativeApp()
     }
 
@@ -149,6 +200,7 @@ final class MusicOrchestrator {
 
     /// Schedules a debounced refresh. Cancels any in-flight refresh before starting a new one.
     func scheduleRefresh() {
+        debugLog("scheduleRefresh", fields: ["cancellingExisting": "\(refreshTask != nil)"])
         refreshTask?.cancel()
         refreshTask = Task { [weak self] in
             guard let self, !Task.isCancelled else { return }
@@ -165,15 +217,21 @@ final class MusicOrchestrator {
 
         let gen: UInt64 = refreshGeneration &+ 1
         refreshGeneration = gen
+        debugLog("refresh.begin", fields: ["generation": "\(gen)"])
 
         var state = await mediaRemote.refreshNowPlaying()
-        guard refreshGeneration == gen else { return }
+        debugLog("refresh.mediaRemoteState", fields: debugFields(for: state).merging(["generation": "\(gen)"]) { _, new in new })
+        guard refreshGeneration == gen else {
+            debugLog("refresh.cancelledAfterMediaRemote", fields: ["generation": "\(gen)", "currentGeneration": "\(refreshGeneration)"])
+            return
+        }
 
         if !state.isAvailable, let dnState = dnWatcher.latestState {
             state = dnState
             #if DEBUG
             print("🎵 [Orch] using DN state (MRMediaRemote unavailable)")
             #endif
+            debugLog("refresh.usingDistributedNotificationState", fields: debugFields(for: state).merging(["generation": "\(gen)"]) { _, new in new })
         }
 
         let activeBundleID: String? = {
@@ -186,16 +244,26 @@ final class MusicOrchestrator {
 
         // Enrich Spotify state with real play state, progress, and artwork via Web API
         if state.isAvailable, state.provider == .spotify, let se = spotifyEnricher {
+            debugLog("refresh.spotifyEnrich.begin", fields: ["generation": "\(gen)", "trackID": state.current?.id ?? "nil"])
             state = await se.enrichCurrentState(base: state)
-            guard refreshGeneration == gen else { return }
+            debugLog("refresh.spotifyEnrich.end", fields: debugFields(for: state).merging(["generation": "\(gen)"]) { _, new in new })
+            guard refreshGeneration == gen else {
+                debugLog("refresh.cancelledAfterSpotifyEnrich", fields: ["generation": "\(gen)", "currentGeneration": "\(refreshGeneration)"])
+                return
+            }
         }
 
         // Queue enrichment (next / upNext carousel slots)
         if state.isAvailable,
            let bundleID = activeBundleID,
            let enricher = enrichers[bundleID] {
+            debugLog("refresh.queueEnrich.begin", fields: ["generation": "\(gen)", "bundleID": bundleID])
             let queue = await enricher.enrichQueue()
-            guard refreshGeneration == gen else { return }
+            debugLog("refresh.queueEnrich.end", fields: ["generation": "\(gen)", "bundleID": bundleID, "count": "\(queue.count)"])
+            guard refreshGeneration == gen else {
+                debugLog("refresh.cancelledAfterQueueEnrich", fields: ["generation": "\(gen)", "currentGeneration": "\(refreshGeneration)"])
+                return
+            }
             if !queue.isEmpty { state = state.withUpNext(queue) }
         }
 
@@ -231,12 +299,19 @@ final class MusicOrchestrator {
 
         // Track the previously-playing card for the carousel previous slot.
         if let newID = state.current?.id, newID != lastKnownCurrentID {
+            debugLog("refresh.trackChanged", fields: [
+                "generation": "\(gen)",
+                "from": lastKnownCurrentID ?? "nil",
+                "to": newID,
+                "pendingNavBackward": "\(pendingNavBackward)"
+            ])
             // Only push to history on forward/natural navigation — not when pressing previous.
             // Backward nav restores from history; appending would corrupt carousel order.
             if !pendingNavBackward,
                let departing = nowPlaying?.current, departing.id != newID {
                 recentHistory.append(departing)
                 if recentHistory.count > 10 { recentHistory.removeFirst() }
+                debugLog("history.append", fields: ["trackID": departing.id, "count": "\(recentHistory.count)"])
             }
             pendingNavBackward = false
             lastKnownCurrentID = newID
@@ -262,9 +337,11 @@ final class MusicOrchestrator {
            let existingNext = nowPlaying?.next,
            state.current?.id == nowPlaying?.current?.id {
             state = state.withNext(existingNext)
+            debugLog("refresh.preservedExistingNext", fields: ["trackID": existingNext.id])
         }
 
         publish(state)
+        debugLog("refresh.published", fields: debugFields(for: nowPlaying).merging(["generation": "\(gen)"]) { _, new in new })
 
         #if DEBUG
         if let np = nowPlaying {
@@ -306,12 +383,19 @@ final class MusicOrchestrator {
               let color = Self.dominantColor(from: data)
         else {
             waveColor = Color.white.opacity(0.5)
+            debugLog("waveColor.fallback", fields: ["trackID": card?.id ?? "nil"])
             return
         }
         waveColor = color
+        debugLog("waveColor.updated", fields: ["trackID": card?.id ?? "nil"])
     }
 
     private func publish(_ state: NowPlayingState) {
+        let snapshot = debugSnapshot(for: state)
+        if snapshot != lastPublishedDebugSnapshot {
+            debugLog("publish.stateTransition", fields: debugFields(for: state))
+            lastPublishedDebugSnapshot = snapshot
+        }
         nowPlaying = state.isAvailable ? state : nil
         activeProviderKind = state.isAvailable ? state.provider : nil
         updateProviderStatuses(from: state)
@@ -370,6 +454,7 @@ final class MusicOrchestrator {
         }
         spotifyArtworkRetryCount[trackID] = attempt
         spotifyRetryTask?.cancel()
+        debugLog("spotifyArtworkRetry.scheduled", fields: ["trackID": trackID, "attempt": "\(attempt)"])
         spotifyRetryTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(1500))
             guard let self, !Task.isCancelled else { return }
@@ -389,11 +474,15 @@ final class MusicOrchestrator {
         let artist   = card.artist
         let album    = card.album
         let storeURL = card.deepLinkURL
+        debugLog("appleMusicArtworkFetch.spawn", fields: ["trackID": trackID, "title": title, "artist": artist])
         Task { [weak self] in
             guard let self else { return }
             guard let artURL = await AppleMusicArtworkFetcher.shared.artwork(
                 title: title, artist: artist, album: album, storeURL: storeURL
-            ) else { return }
+            ) else {
+                self.debugLog("appleMusicArtworkFetch.miss", fields: ["trackID": trackID, "title": title])
+                return
+            }
 
             // Inject into current card if it's still current.
             if let current = self.nowPlaying?.current, current.id == trackID,
@@ -403,6 +492,7 @@ final class MusicOrchestrator {
                 #if DEBUG
                 print("🎵 [Orch] Apple Music artwork injected for \"\(title)\"")
                 #endif
+                self.debugLog("appleMusicArtworkFetch.injectCurrent", fields: ["trackID": trackID, "url": artURL.absoluteString])
             }
 
             // Also patch any history entry that was pushed before artwork arrived.
@@ -418,6 +508,7 @@ final class MusicOrchestrator {
                         patched = patched.withPrevious(prevCard)
                     }
                     self.nowPlaying = patched
+                    self.debugLog("appleMusicArtworkFetch.patchHistory", fields: ["trackID": trackID])
                 }
             }
         }
@@ -431,23 +522,38 @@ final class MusicOrchestrator {
         guard let trackNumber = card.trackNumber,
               let storeURL = card.deepLinkURL,
               let albumID = Self.extractAlbumID(from: storeURL)
-        else { return }
+        else {
+            debugLog("appleMusicNextPrefetch.skipped", fields: [
+                "trackID": card.id,
+                "hasTrackNumber": "\(card.trackNumber != nil)",
+                "hasStoreURL": "\(card.deepLinkURL != nil)"
+            ])
+            return
+        }
 
         let currentID = card.id
+        debugLog("appleMusicNextPrefetch.spawn", fields: ["trackID": currentID, "albumID": albumID, "trackNumber": "\(trackNumber)"])
         Task { [weak self] in
             guard let self else { return }
             guard let nextCard = await AppleMusicArtworkFetcher.shared
                     .nextTrackInAlbum(albumID: albumID, afterTrackNumber: trackNumber)
-            else { return }
+            else {
+                self.debugLog("appleMusicNextPrefetch.miss", fields: ["trackID": currentID, "albumID": albumID])
+                return
+            }
             // Only inject if same track is still current and next slot is still empty.
             guard self.nowPlaying?.current?.id == currentID,
                   self.nowPlaying?.next == nil,
                   let existing = self.nowPlaying
-            else { return }
+            else {
+                self.debugLog("appleMusicNextPrefetch.stale", fields: ["trackID": currentID, "nextID": nextCard.id])
+                return
+            }
             self.nowPlaying = existing.withNext(nextCard)
             #if DEBUG
             print("🎵 [Orch] Apple Music next-track pre-fetched: \"\(nextCard.title)\"")
             #endif
+            self.debugLog("appleMusicNextPrefetch.injected", fields: ["trackID": currentID, "nextID": nextCard.id])
         }
     }
 
@@ -464,6 +570,11 @@ final class MusicOrchestrator {
     }
 
     private func updateProviderStatuses(from state: NowPlayingState) {
+        debugLog("providerStatuses.update", fields: [
+            "available": "\(state.isAvailable)",
+            "provider": state.provider.rawValue,
+            "mediaRemoteAvailable": "\(isMediaRemoteAvailable)"
+        ])
         let status = MusicProviderStatus(
             isAuthorized: isMediaRemoteAvailable,
             isInstalled: true,
@@ -475,6 +586,50 @@ final class MusicOrchestrator {
         for kind in MusicProviderKind.allCases {
             providerStatuses[kind] = status
         }
+    }
+
+    private func debugFields(for state: NowPlayingState?) -> [String: String] {
+        guard let state else { return ["available": "false", "state": "nil"] }
+        return debugFields(for: state)
+    }
+
+    private func debugFields(for state: NowPlayingState) -> [String: String] {
+        [
+            "available": "\(state.isAvailable)",
+            "provider": state.provider.rawValue,
+            "playing": "\(state.isPlaying)",
+            "currentID": state.current?.id ?? "nil",
+            "title": state.current?.title ?? "nil",
+            "previousID": state.previous?.id ?? "nil",
+            "nextID": state.next?.id ?? "nil",
+            "upNextCount": "\(state.upNext.count)",
+            "historyCount": "\(state.previousHistory.count)",
+            "progress": state.progressSeconds.map { String(format: "%.2f", $0) } ?? "nil",
+            "duration": state.durationSeconds.map { String(format: "%.2f", $0) } ?? "nil"
+        ]
+    }
+
+    private func debugSnapshot(for state: NowPlayingState) -> String {
+        [
+            "\(state.isAvailable)",
+            state.provider.rawValue,
+            "\(state.isPlaying)",
+            state.current?.id ?? "nil",
+            state.previous?.id ?? "nil",
+            state.next?.id ?? "nil",
+            "\(state.upNext.count)",
+            "\(state.previousHistory.count)"
+        ].joined(separator: "|")
+    }
+
+    private func debugLog(_ event: String, fields: [String: String] = [:]) {
+        #if DEBUG
+        let body = fields
+            .sorted { $0.key < $1.key }
+            .map { "\($0.key)=\($0.value)" }
+            .joined(separator: " ")
+        print("🎵 [Music][Orch] event=\(event)\(body.isEmpty ? "" : " \(body)")")
+        #endif
     }
 }
 

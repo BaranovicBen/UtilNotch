@@ -1,45 +1,13 @@
-import SwiftUI
 import AppKit
+import SwiftUI
 
-/// Clipboard History module — full-shell Figma implementation, wired to NSPasteboard.
-/// CSS source: template.css + DESIGN.md (no dedicated clipboard.css)
+/// Clipboard History module - showcases recent text, links, files, and image clipboard items.
 struct ClipboardModuleView: View {
     @Environment(AppState.self) private var appState
 
-    enum ClipType { case code, url, image, text }
-
-    struct ClipItem: Identifiable {
-        let id: UUID
-        let type: ClipType
-        let primary: String
-        let meta: String
-        let timestamp: String
-        var imageSize: String? = nil
-        var isDummy: Bool = false
-    }
-
-    // 4 dummy items shown when pasteboard is empty / on first launch
-    private static let dummyItems: [ClipItem] = [
-        ClipItem(id: UUID(), type: .code,
-                 primary: "export const useClipboard = () => { return useContext(Clipboa…",
-                 meta: "Code Snippet", timestamp: "12:45:02", isDummy: true),
-        ClipItem(id: UUID(), type: .url,
-                 primary: "https://developer.apple.com/design/human-interface-guidel...",
-                 meta: "URL", timestamp: "11:20:15", isDummy: true),
-        ClipItem(id: UUID(), type: .image,
-                 primary: "ui_concept_v4_final.png",
-                 meta: "Image", timestamp: "10:05:44", imageSize: "2.4MB", isDummy: true),
-        ClipItem(id: UUID(), type: .text,
-                 primary: "The Obsidian Instrument treats the interface as a high-fidelity instrument…",
-                 meta: "Text", timestamp: "09:30:11", isDummy: true),
-    ]
-
-    @State private var items: [ClipItem] = Self.dummyItems
-    @State private var flashingID: UUID? = nil
-    @State private var clearConfirmActive: Bool = false
-    @State private var clearConfirmTimer: Timer? = nil
-    @State private var pbChangeCount: Int = NSPasteboard.general.changeCount
-    @State private var pollTimer: Timer? = nil
+    @State private var store = ClipboardHistoryStore()
+    @State private var clearConfirmActive = false
+    @State private var clearConfirmTimer: Timer?
 
     var body: some View {
         ModuleShellView(
@@ -52,228 +20,288 @@ struct ClipboardModuleView: View {
                     appState.selectModule(id)
                 }
             },
-            statusDotColor: Color(hex: "32D74B"),
-            statusLeft: "CLIPBOARD SYNC ACTIVE",
-            statusRight: "\(items.filter { !$0.isDummy }.count + (items.allSatisfy(\.isDummy) ? items.count : 0)) ITEMS STORED",
+            statusDotColor: store.isMonitoring ? Color(hex: "32D74B") : Color.white.opacity(0.2),
+            statusLeft: store.isMonitoring ? "CLIPBOARD SYNC ACTIVE" : "CLIPBOARD SYNC PAUSED",
+            statusRight: store.isShowingDemoItems ? "\(store.storedItemCount) EXAMPLES" : "\(store.storedItemCount) ITEMS STORED",
             actionButton: {
-                AnyView(
-                    Button {
-                        if clearConfirmActive {
-                            clearAll()
-                        } else {
-                            activateClearConfirm()
-                        }
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "trash")
-                                .font(.system(size: 10, weight: .medium))
-                            Text(clearConfirmActive ? "CONFIRM?" : "CLEAR ALL")
-                                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                .textCase(.uppercase)
-                                .kerning(0.55)
-                        }
-                        .foregroundStyle(Color(red: 1.0, green: 0.271, blue: 0.227))
-                        .padding(.vertical, 4)
-                        .padding(.horizontal, 12)
-                        .background(
-                            Capsule()
-                                .fill(Color(red: 1.0, green: 0.271, blue: 0.227).opacity(0.15))
-                        )
-                    }
-                    .buttonStyle(.plain)
-                )
+                AnyView(headerActions)
             }
         ) {
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 8) {
-                    ForEach(items) { item in
-                        clipCard(item)
+            VStack(spacing: 10) {
+                searchField
+
+                ScrollView(.vertical, showsIndicators: false) {
+                    LazyVStack(spacing: 8) {
+                        ForEach(store.visibleItems) { item in
+                            ClipboardHistoryCard(
+                                item: item,
+                                isCopied: store.recentlyCopiedID == item.id,
+                                onCopy: { store.copy(item) },
+                                onDelete: { store.delete(item) }
+                            )
+                        }
+
+                        if store.visibleItems.isEmpty {
+                            emptySearchState
+                        }
                     }
+                    .padding(.bottom, 2)
                 }
             }
         }
         .onAppear {
-            pbChangeCount = NSPasteboard.general.changeCount
-            startPolling()
+            store.onAppear()
         }
         .onDisappear {
-            pollTimer?.invalidate(); pollTimer = nil
-            clearConfirmTimer?.invalidate(); clearConfirmTimer = nil
+            store.onDisappear()
+            clearConfirmTimer?.invalidate()
+            clearConfirmTimer = nil
+        }
+        .onChange(of: clearConfirmActive) { _, _ in
+            appState.setModuleActionButton { AnyView(headerActions) }
+        }
+        .onChange(of: store.isShowingDemoItems) { _, _ in
+            appState.setModuleActionButton { AnyView(headerActions) }
         }
     }
 
-    // MARK: - Polling
+    private var headerActions: some View {
+        HStack(spacing: 6) {
+            Button {
+                store.onAppear()
+            } label: {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.68))
+                    .frame(width: 24, height: 24)
+                    .background(Circle().fill(Color.white.opacity(0.08)))
+            }
+            .buttonStyle(.plain)
+            .help("Refresh clipboard")
 
-    private func startPolling() {
-        pollTimer?.invalidate()
-        pollTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-            Task { @MainActor in
-                let current = NSPasteboard.general.changeCount
-                if current != pbChangeCount {
-                    pbChangeCount = current
-                    checkNewClipboardContent()
+            Button {
+                if clearConfirmActive {
+                    clearHistory()
+                } else {
+                    activateClearConfirm()
                 }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: clearConfirmActive ? "exclamationmark.triangle" : "trash")
+                        .font(.system(size: 10, weight: .medium))
+                    Text(clearConfirmActive ? "CONFIRM" : "CLEAR")
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .textCase(.uppercase)
+                        .kerning(0.55)
+                }
+                .foregroundStyle(Color(red: 1.0, green: 0.271, blue: 0.227))
+                .padding(.vertical, 4)
+                .padding(.horizontal, 12)
+                .background(
+                    Capsule()
+                        .fill(Color(red: 1.0, green: 0.271, blue: 0.227).opacity(0.15))
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(store.isShowingDemoItems && !clearConfirmActive)
+            .opacity(store.isShowingDemoItems && !clearConfirmActive ? 0.45 : 1)
+        }
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Color.white.opacity(0.36))
+
+            TextField("", text: Binding(
+                get: { store.searchText },
+                set: { store.searchText = $0 }
+            ))
+                .textFieldStyle(.plain)
+                .font(.system(size: 13, weight: .regular))
+                .foregroundStyle(Color.white.opacity(0.82))
+                .overlay(alignment: .leading) {
+                    if store.searchText.isEmpty {
+                        Text("Search clipboard history...")
+                            .font(.system(size: 13, weight: .regular))
+                            .foregroundStyle(Color.white.opacity(0.28))
+                            .allowsHitTesting(false)
+                    }
+                }
+
+            if !store.searchText.isEmpty {
+                Button {
+                    store.searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Color.white.opacity(0.35))
+                }
+                .buttonStyle(.plain)
             }
         }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.white.opacity(0.04))
+        )
     }
 
-    private func checkNewClipboardContent() {
-        guard let str = NSPasteboard.general.string(forType: .string), !str.isEmpty else { return }
-        let trimmed = str.prefix(200).description
-        let type: ClipType
-        let meta: String
-        if trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://") {
-            type = .url; meta = "URL"
-        } else if trimmed.contains("\n") || trimmed.count > 80 {
-            type = .text; meta = "Text"
-        } else {
-            type = .code; meta = "Code Snippet"
+    private var emptySearchState: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "doc.text.magnifyingglass")
+                .font(.system(size: 18, weight: .regular))
+                .foregroundStyle(Color.white.opacity(0.25))
+            Text("No matching clips")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Color.white.opacity(0.42))
         }
-        let formatter = DateFormatter(); formatter.dateFormat = "HH:mm:ss"
-        let newItem = ClipItem(id: UUID(), type: type, primary: trimmed,
-                               meta: meta, timestamp: formatter.string(from: Date()), isDummy: false)
-        withAnimation(.easeOut(duration: 0.2)) {
-            // Replace dummy data on first real capture
-            if items.allSatisfy(\.isDummy) { items = [] }
-            items.insert(newItem, at: 0)
-            if items.count > 20 { items.removeLast() }
-        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 34)
     }
-
-    // MARK: - CLEAR ALL
 
     private func activateClearConfirm() {
         clearConfirmActive = true
         clearConfirmTimer?.invalidate()
         clearConfirmTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { _ in
-            Task { @MainActor in clearConfirmActive = false }
-        }
-    }
-
-    private func clearAll() {
-        clearConfirmTimer?.invalidate()
-        clearConfirmActive = false
-        withAnimation(.easeOut(duration: 0.2)) {
-            items = Self.dummyItems
-        }
-    }
-
-    // MARK: - Clip Card
-    // Card: bg rgba(255,255,255,0.03), radius 8px, padding 12px (from template/todo CSS)
-    // Flash on tap: white 8% for 150ms then returns
-
-    @ViewBuilder
-    private func clipCard(_ item: ClipItem) -> some View {
-        HStack(spacing: 12) {
-            if item.type == .image {
-                imageCard(item)
-            } else {
-                textCard(item)
+            Task { @MainActor in
+                clearConfirmActive = false
             }
+        }
+    }
+
+    private func clearHistory() {
+        clearConfirmTimer?.invalidate()
+        clearConfirmTimer = nil
+        clearConfirmActive = false
+        store.clearHistory()
+    }
+}
+
+private struct ClipboardHistoryCard: View {
+    let item: ClipboardHistoryItem
+    let isCopied: Bool
+    let onCopy: () -> Void
+    let onDelete: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            thumbnail
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(item.preview)
+                    .font(item.kind == .code
+                        ? .system(size: 13, weight: .regular, design: .monospaced)
+                        : .system(size: 13, weight: .regular)
+                    )
+                    .foregroundStyle(item.kind == .url ? item.accentColor : Color.white.opacity(0.85))
+                    .lineLimit(item.kind == .text ? 2 : 1)
+                    .truncationMode(.tail)
+
+                HStack(spacing: 5) {
+                    Text(item.timestamp)
+                    Circle()
+                        .fill(Color.white.opacity(0.2))
+                        .frame(width: 3, height: 3)
+                    Text(item.detail.uppercased())
+                    if item.isDemo {
+                        Circle()
+                            .fill(Color.white.opacity(0.2))
+                            .frame(width: 3, height: 3)
+                        Text("DEMO")
+                    }
+                }
+                .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                .foregroundStyle(Color.white.opacity(0.34))
+                .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            trailingActions
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(flashingID == item.id
-                      ? Color.white.opacity(0.08)
-                      : Color.white.opacity(0.03))
+                .fill(isCopied ? Color.white.opacity(0.09) : Color.white.opacity(isHovering ? 0.055 : 0.03))
         )
-        .overlay(alignment: .topTrailing) {
-            if item.isDummy {
-                Text("DEMO")
-                    .font(.system(size: 7, weight: .bold, design: .monospaced))
-                    .foregroundStyle(Color.white.opacity(0.3))
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 2)
-                    .background(
-                        Capsule().fill(Color.white.opacity(0.07))
-                    )
-                    .padding(6)
-            }
-        }
         .contentShape(Rectangle())
-        .onTapGesture { copyItem(item) }
-    }
-
-    // TEXT / CODE / URL variant
-    @ViewBuilder
-    private func textCard(_ item: ClipItem) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            switch item.type {
-            case .code:
-                Text(item.primary)
-                    .font(.system(size: 13, design: .monospaced))
-                    .foregroundStyle(Color.white.opacity(0.85))
-                    .lineLimit(1).truncationMode(.tail)
-            case .url:
-                Text(item.primary)
-                    .font(.system(size: 13, weight: .regular))
-                    .foregroundStyle(Color(hex: "0A84FF"))
-                    .lineLimit(1).truncationMode(.tail)
-            default:
-                Text(item.primary)
-                    .font(.system(size: 13, weight: .regular))
-                    .foregroundStyle(Color.white.opacity(0.85))
-                    .lineLimit(2).truncationMode(.tail)
+        .onTapGesture(perform: onCopy)
+        .onHover { isHovering = $0 }
+        .contextMenu {
+            Button {
+                onCopy()
+            } label: {
+                Label("Copy", systemImage: "doc.on.doc")
             }
-            HStack(spacing: 4) {
-                Text(item.timestamp)
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(Color.white.opacity(0.35))
-                Circle().fill(Color.white.opacity(0.2)).frame(width: 3, height: 3)
-                Text(item.meta)
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(Color.white.opacity(0.35))
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
 
-    // IMAGE variant: thumbnail placeholder + info
-    @ViewBuilder
-    private func imageCard(_ item: ClipItem) -> some View {
-        RoundedRectangle(cornerRadius: 6, style: .continuous)
-            .fill(LinearGradient(colors: [Color(hex: "1C3A5E"), Color(hex: "0A1628")],
-                                 startPoint: .topLeading, endPoint: .bottomTrailing))
-            .overlay(Image(systemName: "photo").font(.system(size: 14)).foregroundStyle(Color.white.opacity(0.4)))
-            .frame(width: 48, height: 48)
-
-        VStack(alignment: .leading, spacing: 4) {
-            Text(item.primary)
-                .font(.system(size: 13, weight: .regular))
-                .foregroundStyle(Color.white.opacity(0.85))
-                .lineLimit(1)
-            HStack(spacing: 4) {
-                Text(item.timestamp)
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(Color.white.opacity(0.35))
-                if let size = item.imageSize {
-                    Circle().fill(Color.white.opacity(0.2)).frame(width: 3, height: 3)
-                    Text(size)
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(Color.white.opacity(0.35))
+            if !item.isDemo {
+                Button(role: .destructive) {
+                    onDelete()
+                } label: {
+                    Label("Delete", systemImage: "trash")
                 }
-                Circle().fill(Color.white.opacity(0.2)).frame(width: 3, height: 3)
-                Text(item.meta)
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(Color.white.opacity(0.35))
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    // MARK: - Copy Action
+    @ViewBuilder
+    private var thumbnail: some View {
+        if item.kind == .image, let data = item.imageData, let image = NSImage(data: data) {
+            Image(nsImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 42, height: 42)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        } else {
+            ZStack {
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(item.accentColor.opacity(item.kind == .text ? 0.1 : 0.16))
+                Image(systemName: item.icon)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(item.accentColor)
+            }
+            .frame(width: 42, height: 42)
+        }
+    }
 
-    private func copyItem(_ item: ClipItem) {
-        guard !item.isDummy else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(item.primary, forType: .string)
-        // Flash: white 8% for 150ms
-        withAnimation(.easeOut(duration: 0.05)) { flashingID = item.id }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            withAnimation(.easeOut(duration: 0.1)) { flashingID = nil }
+    @ViewBuilder
+    private var trailingActions: some View {
+        if isCopied {
+            Image(systemName: "checkmark")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(Color(hex: "32D74B"))
+                .frame(width: 24, height: 24)
+        } else if isHovering {
+            HStack(spacing: 6) {
+                Button(action: onCopy) {
+                    Image(systemName: "doc.on.doc")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Color.white.opacity(0.62))
+                        .frame(width: 24, height: 24)
+                        .background(Circle().fill(Color.white.opacity(0.07)))
+                }
+                .buttonStyle(.plain)
+                .help("Copy")
+
+                if !item.isDemo {
+                    Button(action: onDelete) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Color(red: 1.0, green: 0.271, blue: 0.227).opacity(0.82))
+                            .frame(width: 24, height: 24)
+                            .background(Circle().fill(Color(red: 1.0, green: 0.271, blue: 0.227).opacity(0.12)))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Delete")
+                }
+            }
+            .transition(.opacity.combined(with: .scale(scale: 0.96)))
         }
     }
 }

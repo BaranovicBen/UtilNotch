@@ -36,18 +36,22 @@ final class HoverTriggerZone {
     // MARK: - Private
 
     private func makeWindow() -> NSWindow {
+        let screen = ScreenGeometry.screen
+        let triggerZoneWidth = ScreenGeometry.triggerZoneWidth
+        let triggerZoneHeight = ScreenGeometry.triggerZoneHeight
         let triggerFrame = CGRect(
-            x: ScreenGeometry.triggerZoneOriginX,
-            y: ScreenGeometry.triggerZoneOriginY,
-            width: ScreenGeometry.triggerZoneWidth,
-            height: ScreenGeometry.triggerZoneHeight
+            x: screen.frame.midX - (triggerZoneWidth / 2),
+            y: screen.frame.maxY - triggerZoneHeight,
+            width: triggerZoneWidth,
+            height: triggerZoneHeight
         )
 
         let window = NSWindow(
             contentRect: triggerFrame,
             styleMask: .borderless,
             backing: .buffered,
-            defer: false
+            defer: false,
+            screen: screen
         )
         window.isOpaque = false
         window.backgroundColor = .clear
@@ -56,10 +60,9 @@ final class HoverTriggerZone {
         window.level = NSWindow.Level(
             rawValue: Int(CGWindowLevelForKey(.mainMenuWindow)) + 2
         )
-        // Do not join full-screen/game Spaces. A top-level invisible trigger there
-        // can steal focus or switch the user back to the desktop when the cursor
-        // touches the top edge.
-        window.collectionBehavior = [.stationary]
+        // The trigger must follow every desktop Space. Otherwise the app can become
+        // active on another Space without receiving the hover/click that opens the panel.
+        window.collectionBehavior = [.canJoinAllSpaces, .stationary]
         window.hasShadow = false
 
         let trackingView = HoverTrackingView(
@@ -67,6 +70,7 @@ final class HoverTriggerZone {
         )
         trackingView.onMouseEntered = { [weak self] in self?.handleMouseEntered() }
         trackingView.onMouseExited  = { [weak self] in self?.handleMouseExited() }
+        trackingView.onMouseDown = { [weak self] in self?.handleMouseDown() }
 
         window.contentView = trackingView
         return window
@@ -93,6 +97,13 @@ final class HoverTriggerZone {
         hoverTimer = nil
     }
 
+    private func handleMouseDown() {
+        guard !shouldSuppressHoverOpen else { return }
+        hoverTimer?.invalidate()
+        hoverTimer = nil
+        appState.showPanel()
+    }
+
     private var shouldSuppressHoverOpen: Bool {
         let options = NSApplication.shared.currentSystemPresentationOptions
         return options.contains(.fullScreen) || options.contains(.hideMenuBar)
@@ -105,6 +116,7 @@ private class HoverTrackingView: NSView {
 
     var onMouseEntered: (() -> Void)?
     var onMouseExited: (() -> Void)?
+    var onMouseDown: (() -> Void)?
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -125,5 +137,9 @@ private class HoverTrackingView: NSView {
 
     override func mouseExited(with event: NSEvent) {
         onMouseExited?()
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        onMouseDown?()
     }
 }

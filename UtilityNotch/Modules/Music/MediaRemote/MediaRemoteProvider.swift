@@ -35,18 +35,24 @@ final class MediaRemoteProvider: MusicProvider {
 
     /// Cached previous card — populated when MRMR reports a new track ID.
     private var lastSeenTrackID: String?
+    private var lastSeenCard: TrackCard?
     private var cachedPrevious: TrackCard?
 
     // MARK: - Connect / disconnect
 
     func connect() async {
-        guard !isRegistered else { return }
+        guard !isRegistered else {
+            debugLog("connect.skipped", fields: ["reason": "alreadyRegistered"])
+            return
+        }
         guard let fw = framework else {
             #if DEBUG
             print("🎵 [MR] framework unavailable — dlopen/dlsym failed")
             #endif
+            debugLog("connect.failed", fields: ["reason": "frameworkUnavailable"])
             return
         }
+        debugLog("connect.begin")
         fw.registerForNowPlaying(.main)
         isRegistered = true
         #if DEBUG
@@ -55,9 +61,11 @@ final class MediaRemoteProvider: MusicProvider {
         // Give mediaremoted time to complete the XPC registration before we fire the first query
         try? await Task.sleep(for: .milliseconds(400))
         subscribeToNotifications()
+        debugLog("connect.end", fields: ["observerCount": "\(observers.count)"])
     }
 
     func disconnect() async {
+        debugLog("disconnect", fields: ["observerCount": "\(observers.count)"])
         observers.forEach { NotificationCenter.default.removeObserver($0) }
         observers.removeAll()
         isRegistered = false
@@ -66,7 +74,11 @@ final class MediaRemoteProvider: MusicProvider {
     // MARK: - Status
 
     func refreshStatus() async -> MusicProviderStatus {
-        MusicProviderStatus(
+        debugLog("refreshStatus", fields: [
+            "frameworkAvailable": "\(framework != nil)",
+            "activeAppBundleID": activeAppBundleID ?? "nil"
+        ])
+        return MusicProviderStatus(
             isAuthorized: framework != nil,
             isInstalled: true,
             hasActiveSession: activeAppBundleID != nil,
@@ -82,8 +94,10 @@ final class MediaRemoteProvider: MusicProvider {
             #if DEBUG
             print("🎵 [MR] refreshNowPlaying: no framework")
             #endif
+            debugLog("refreshNowPlaying.unavailable", fields: ["reason": "frameworkUnavailable"])
             return .unavailable(for: kind)
         }
+        debugLog("refreshNowPlaying.begin")
 
         // getAppDisplayID can return nil even when music IS playing (known MRMR quirk).
         // We store it if present, but never bail out early because of it.
@@ -96,6 +110,7 @@ final class MediaRemoteProvider: MusicProvider {
         #if DEBUG
         print("🎵 [MR] getAppDisplayID → \(bundleID ?? "<nil>")")
         #endif
+        debugLog("refreshNowPlaying.appDisplayID", fields: ["bundleID": bundleID ?? "nil"])
 
         let dict: NSDictionary? = await withCheckedContinuation { cont in
             fw.getNowPlayingInfo(.main) { d in
@@ -106,7 +121,12 @@ final class MediaRemoteProvider: MusicProvider {
         let keys = (dict?.allKeys as? [String])?.sorted() ?? []
         print("🎵 [MR] getNowPlayingInfo → \(dict == nil ? "nil" : "\(dict!.count) keys: \(keys)")")
         #endif
+        debugLog("refreshNowPlaying.info", fields: [
+            "isNil": "\(dict == nil)",
+            "keyCount": "\(dict?.count ?? 0)"
+        ])
         guard let info = dict, info.count > 0 else {
+            debugLog("refreshNowPlaying.unavailable", fields: ["reason": "emptyInfo"])
             return .unavailable(for: kind)
         }
 
@@ -119,12 +139,20 @@ final class MediaRemoteProvider: MusicProvider {
         let rate     = (info[MRNowPlayingInfoKey.playbackRate] as? NSNumber)?.doubleValue ?? 0
         let trackUID = (info[MRNowPlayingInfoKey.uniqueIdentifier] as? NSNumber)
                         .map { "\($0)" } ?? "\(title)-\(artist)"
+        let artData  = info[MRNowPlayingInfoKey.artworkData] as? Data
+        let artURL   = info[MRNowPlayingInfoKey.artworkURL]  as? URL
         #if DEBUG
         print("🎵 [MR] now playing: \"\(title)\" – \(artist) | rate=\(rate) elapsed=\(elapsed)s")
         #endif
-
-        let artData  = info[MRNowPlayingInfoKey.artworkData] as? Data
-        let artURL   = info[MRNowPlayingInfoKey.artworkURL]  as? URL
+        debugLog("refreshNowPlaying.current", fields: [
+            "trackUID": trackUID,
+            "title": title,
+            "artist": artist,
+            "rate": "\(rate)",
+            "elapsed": String(format: "%.2f", elapsed),
+            "hasArtworkData": "\(artData != nil)",
+            "hasArtworkURL": "\(artURL != nil)"
+        ])
 
         let current = TrackCard(
             id: "mrmr:\(trackUID)",
@@ -139,16 +167,15 @@ final class MediaRemoteProvider: MusicProvider {
         )
 
         if trackUID != lastSeenTrackID {
-            cachedPrevious = lastSeenTrackID != nil
-                ? TrackCard(
-                    id: "mrmr:prev:\(lastSeenTrackID!)",
-                    provider: kind, title: title, artist: artist,
-                    album: album, artworkData: nil, artworkURL: nil, deepLinkURL: nil,
-                    trackNumber: nil
-                )
-                : nil
+            cachedPrevious = lastSeenCard
+            debugLog("refreshNowPlaying.trackChanged", fields: [
+                "from": lastSeenTrackID ?? "nil",
+                "to": trackUID,
+                "cachedPreviousID": cachedPrevious?.id ?? "nil"
+            ])
             lastSeenTrackID = trackUID
         }
+        lastSeenCard = current
 
         let sourceLabel: String? = {
             switch activeAppBundleID {
@@ -183,26 +210,34 @@ final class MediaRemoteProvider: MusicProvider {
     // MARK: - Playback commands
 
     func playPause() async {
-        _ = framework?.sendCommand(MRCommand.togglePlayPause.rawValue, nil)
+        let sent = framework?.sendCommand(MRCommand.togglePlayPause.rawValue, nil) ?? false
+        debugLog("command.playPause", fields: ["sent": "\(sent)"])
     }
 
     func next() async {
-        _ = framework?.sendCommand(MRCommand.nextTrack.rawValue, nil)
+        let sent = framework?.sendCommand(MRCommand.nextTrack.rawValue, nil) ?? false
+        debugLog("command.next", fields: ["sent": "\(sent)"])
     }
 
     func previous() async {
-        _ = framework?.sendCommand(MRCommand.previousTrack.rawValue, nil)
+        let sent = framework?.sendCommand(MRCommand.previousTrack.rawValue, nil) ?? false
+        debugLog("command.previous", fields: ["sent": "\(sent)"])
     }
 
     func seek(to seconds: Double) async {
-        _ = framework?.sendCommand(
+        let sent = framework?.sendCommand(
             MRCommand.seekToPosition.rawValue,
             [kMRMediaRemoteOptionPlaybackPosition: seconds] as NSDictionary
-        )
+        ) ?? false
+        debugLog("command.seek", fields: ["sent": "\(sent)", "seconds": String(format: "%.2f", seconds)])
     }
 
     func openNativeApp() {
-        guard let bundleID = activeAppBundleID else { return }
+        guard let bundleID = activeAppBundleID else {
+            debugLog("openNativeApp.skipped", fields: ["reason": "missingBundleID"])
+            return
+        }
+        debugLog("openNativeApp", fields: ["bundleID": bundleID])
         if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
             let cfg = NSWorkspace.OpenConfiguration()
             cfg.activates = true
@@ -223,10 +258,21 @@ final class MediaRemoteProvider: MusicProvider {
                 forName: name, object: nil, queue: .main
             ) { [weak self] _ in
                 MainActor.assumeIsolated {
+                    self?.debugLog("notification", fields: ["name": name.rawValue])
                     self?.onNowPlayingChanged?()
                 }
             }
             observers.append(obs)
         }
+    }
+
+    private func debugLog(_ event: String, fields: [String: String] = [:]) {
+        #if DEBUG
+        let body = fields
+            .sorted { $0.key < $1.key }
+            .map { "\($0.key)=\($0.value)" }
+            .joined(separator: " ")
+        print("🎵 [Music][MR] event=\(event)\(body.isEmpty ? "" : " \(body)")")
+        #endif
     }
 }

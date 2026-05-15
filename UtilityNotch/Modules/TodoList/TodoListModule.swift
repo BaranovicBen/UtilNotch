@@ -36,6 +36,12 @@ private struct TodoListSettingsView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
+            Toggle("Delete completed todos at end of day", isOn: $state.deleteCompletedTodosEndOfDay)
+
+            Text("Completed todos are removed after midnight. Pending todos are kept.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
             Text("Local storage only in beta. Persistent storage and sync will be added later.")
                 .font(.caption)
                 .foregroundStyle(.secondary)

@@ -198,19 +198,6 @@ struct FilesTrayModuleView: View {
             onSelect: { store.toggleSelection(item) }
         )
         .contextMenu {
-            Button {
-                if let url = item.resolvedURL() {
-                    appState.pendingFileURL = url
-                    withAnimation(.spring(duration: 0.28, bounce: 0.16)) {
-                        appState.selectModule("fileConverter")
-                    }
-                }
-            } label: {
-                Label("Send to File Converter", systemImage: "arrow.2.squarepath")
-            }
-
-            Divider()
-
             Button(role: .destructive) {
                 store.removeItem(item)
             } label: {

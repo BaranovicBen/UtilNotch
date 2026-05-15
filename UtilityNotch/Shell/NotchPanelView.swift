@@ -59,8 +59,8 @@ struct NotchPanelView: View {
         provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
             if let data = item as? Data, let url = URL(dataRepresentation: data, relativeTo: nil) {
                 DispatchQueue.main.async {
-                    appState.pendingFileURL = url
-                    appState.selectModule("fileConverter")
+                    appState.pendingTrayURLs.append(url)
+                    appState.selectModule("filesTray")
                     appState.showPanel()
                 }
             }

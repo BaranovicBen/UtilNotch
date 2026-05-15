@@ -17,9 +17,25 @@ final class FileDragReceiverZone {
 
     private var receiverWindow: NSWindow?
     private let appState: AppState
+    private var screenObserver: Any?
 
     init(appState: AppState) {
         self.appState = appState
+        screenObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.reinstall()
+            }
+        }
+    }
+
+    deinit {
+        if let screenObserver {
+            NotificationCenter.default.removeObserver(screenObserver)
+        }
     }
 
     func install() {
@@ -34,10 +50,15 @@ final class FileDragReceiverZone {
         appState.dismissalLocks.remove(.externalDragDrop)
     }
 
+    private func reinstall() {
+        uninstall()
+        install()
+    }
+
     // MARK: - Private
 
     private func makeWindow() -> NSWindow {
-        guard let screen = NSScreen.main ?? NSScreen.screens.first else { return NSWindow() }
+        let screen = ScreenGeometry.screen
 
         // Centered strip wider than the notch, extending further down for easier drag targeting.
         let zoneWidth  = ScreenGeometry.triggerZoneWidth + 50
@@ -54,7 +75,8 @@ final class FileDragReceiverZone {
             contentRect: frame,
             styleMask: .borderless,
             backing: .buffered,
-            defer: false
+            defer: false,
+            screen: screen
         )
         window.isOpaque = false
         window.backgroundColor = .clear

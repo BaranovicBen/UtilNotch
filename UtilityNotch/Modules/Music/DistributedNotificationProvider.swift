@@ -20,20 +20,26 @@ final class DistributedNotificationProvider {
     // MARK: - Lifecycle
 
     func start() {
-        guard observers.isEmpty else { return }
+        guard observers.isEmpty else {
+            debugLog("start.skipped", fields: ["reason": "alreadyStarted"])
+            return
+        }
         subscribe("com.spotify.client.PlaybackStateChanged", handler: handleSpotify)
         subscribe("com.apple.Music.playerInfo",              handler: handleAppleMusic)
         #if DEBUG
         print("🎵 [DN] distributed notification listeners registered")
         #endif
+        debugLog("start", fields: ["observerCount": "\(observers.count)"])
     }
 
     func stop() {
+        debugLog("stop", fields: ["observerCount": "\(observers.count)"])
         observers.forEach { DistributedNotificationCenter.default().removeObserver($0) }
         observers.removeAll()
     }
 
     func seedLatestState(_ state: NowPlayingState) {
+        debugLog("seedLatestState", fields: ["provider": state.provider.rawValue, "currentID": state.current?.id ?? "nil"])
         latestState = state
     }
 
@@ -41,11 +47,13 @@ final class DistributedNotificationProvider {
     /// already-running players once so music that started before Utility Notch is
     /// visible without requiring a pause/play toggle.
     func primeFromRunningPlayers() {
+        debugLog("primeFromRunningPlayers.begin")
         if let spotifyState = querySpotifyCurrentState() {
             latestState = spotifyState
             #if DEBUG
             print("🎵 [DN-Prime] using current Spotify playback")
             #endif
+            debugLog("primeFromRunningPlayers.hit", fields: ["provider": "spotify", "currentID": spotifyState.current?.id ?? "nil"])
             return
         }
 
@@ -54,6 +62,9 @@ final class DistributedNotificationProvider {
             #if DEBUG
             print("🎵 [DN-Prime] using current Apple Music playback")
             #endif
+            debugLog("primeFromRunningPlayers.hit", fields: ["provider": "appleMusic", "currentID": appleMusicState.current?.id ?? "nil"])
+        } else {
+            debugLog("primeFromRunningPlayers.miss")
         }
     }
 
@@ -69,14 +80,21 @@ final class DistributedNotificationProvider {
             queue: .main,
             using: { [weak self] note in
                 guard self != nil else { return }
-                MainActor.assumeIsolated { handler(note) }
+                MainActor.assumeIsolated {
+                    self?.debugLog("notification", fields: ["name": name])
+                    handler(note)
+                }
             }
         )
         observers.append(obs)
     }
 
     private func querySpotifyCurrentState() -> NowPlayingState? {
-        guard isAppRunning(bundleID: "com.spotify.client") else { return nil }
+        guard isAppRunning(bundleID: "com.spotify.client") else {
+            debugLog("querySpotifyCurrentState.skipped", fields: ["reason": "notRunning"])
+            return nil
+        }
+        debugLog("querySpotifyCurrentState.begin")
         let script = """
         tell application "Spotify"
             if player state is stopped then return ""
@@ -86,7 +104,10 @@ final class DistributedNotificationProvider {
             return d as text
         end tell
         """
-        guard let fields = runAppleScript(script), fields.count >= 7 else { return nil }
+        guard let fields = runAppleScript(script), fields.count >= 7 else {
+            debugLog("querySpotifyCurrentState.miss")
+            return nil
+        }
 
         let title = fields[0].isEmpty ? "Unknown" : fields[0]
         let artist = fields[1]
@@ -127,7 +148,11 @@ final class DistributedNotificationProvider {
     }
 
     private func queryAppleMusicCurrentState() -> NowPlayingState? {
-        guard isAppRunning(bundleID: "com.apple.Music") else { return nil }
+        guard isAppRunning(bundleID: "com.apple.Music") else {
+            debugLog("queryAppleMusicCurrentState.skipped", fields: ["reason": "notRunning"])
+            return nil
+        }
+        debugLog("queryAppleMusicCurrentState.begin")
         let script = """
         tell application "Music"
             if player state is stopped then return ""
@@ -141,7 +166,10 @@ final class DistributedNotificationProvider {
             return d as text
         end tell
         """
-        guard let fields = runAppleScript(script), fields.count >= 9 else { return nil }
+        guard let fields = runAppleScript(script), fields.count >= 9 else {
+            debugLog("queryAppleMusicCurrentState.miss")
+            return nil
+        }
 
         let title = fields[0].isEmpty ? "Unknown" : fields[0]
         let artist = fields[1]
@@ -183,6 +211,8 @@ final class DistributedNotificationProvider {
     }
 
     private func runAppleScript(_ source: String) -> [String]? {
+        let started = Date()
+        debugLog("runAppleScript.begin")
         var error: NSDictionary?
         guard let result = NSAppleScript(source: source)?.executeAndReturnError(&error).stringValue,
               !result.isEmpty
@@ -192,8 +222,16 @@ final class DistributedNotificationProvider {
                 print("🎵 [DN-Prime] AppleScript failed: \(error)")
             }
             #endif
+            debugLog("runAppleScript.failed", fields: [
+                "elapsedMs": "\(Int(Date().timeIntervalSince(started) * 1000))",
+                "hasError": "\(error != nil)"
+            ])
             return nil
         }
+        debugLog("runAppleScript.end", fields: [
+            "elapsedMs": "\(Int(Date().timeIntervalSince(started) * 1000))",
+            "resultLength": "\(result.count)"
+        ])
         return result.components(separatedBy: "|||")
     }
 
@@ -204,7 +242,10 @@ final class DistributedNotificationProvider {
     // MARK: - Spotify
 
     private func handleSpotify(_ notification: Notification) {
-        guard let info = notification.userInfo else { return }
+        guard let info = notification.userInfo else {
+            debugLog("handleSpotify.skipped", fields: ["reason": "missingUserInfo"])
+            return
+        }
 
         let running = (info["Running"] as? Bool) ?? true
         guard running else {
@@ -213,6 +254,7 @@ final class DistributedNotificationProvider {
             #endif
             latestState = nil
             onNowPlayingChanged?()
+            debugLog("handleSpotify.clear", fields: ["reason": "notRunning"])
             return
         }
 
@@ -275,6 +317,12 @@ final class DistributedNotificationProvider {
             playbackSourceLabel: "SPOTIFY",
             previousHistory: []
         )
+        debugLog("handleSpotify.state", fields: [
+            "currentID": card.id,
+            "title": title,
+            "playing": "\(isPlaying)",
+            "position": String(format: "%.2f", position)
+        ])
         onNowPlayingChanged?()
     }
 
@@ -298,7 +346,10 @@ final class DistributedNotificationProvider {
     // MARK: - Apple Music
 
     private func handleAppleMusic(_ notification: Notification) {
-        guard let info = notification.userInfo else { return }
+        guard let info = notification.userInfo else {
+            debugLog("handleAppleMusic.skipped", fields: ["reason": "missingUserInfo"])
+            return
+        }
 
         let playerState = (info["Player State"] as? String) ?? "Stopped"
         guard playerState != "Stopped" else {
@@ -308,6 +359,7 @@ final class DistributedNotificationProvider {
                 #endif
                 latestState = nil
                 onNowPlayingChanged?()
+                debugLog("handleAppleMusic.clear", fields: ["reason": "stopped"])
             }
             return
         }
@@ -383,6 +435,25 @@ final class DistributedNotificationProvider {
             playbackSourceLabel: "APPLE MUSIC",
             previousHistory: []
         )
+        debugLog("handleAppleMusic.state", fields: [
+            "currentID": card.id,
+            "title": title,
+            "playing": "\(isPlaying)",
+            "elapsed": elapsedSecs.map { String(format: "%.2f", $0) } ?? "nil",
+            "hasArtwork": "\(artData != nil)",
+            "hasStoreURL": "\(storeURL != nil)",
+            "trackNumber": trackNumber.map(String.init) ?? "nil"
+        ])
         onNowPlayingChanged?()
+    }
+
+    private func debugLog(_ event: String, fields: [String: String] = [:]) {
+        #if DEBUG
+        let body = fields
+            .sorted { $0.key < $1.key }
+            .map { "\($0.key)=\($0.value)" }
+            .joined(separator: " ")
+        print("🎵 [Music][DN] event=\(event)\(body.isEmpty ? "" : " \(body)")")
+        #endif
     }
 }

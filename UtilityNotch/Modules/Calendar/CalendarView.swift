@@ -428,7 +428,7 @@ struct CalendarSettingsView: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Calendar Settings")
                 .font(.headline)
-                .foregroundStyle(.white)
+                .foregroundStyle(.primary)
 
             // Lookahead picker
             VStack(alignment: .leading, spacing: 6) {
@@ -444,7 +444,7 @@ struct CalendarSettingsView: View {
                 .labelsHidden()
             }
 
-            Divider().background(Color.white.opacity(0.06))
+            Divider()
 
             // Calendar multi-select
             VStack(alignment: .leading, spacing: 6) {
@@ -488,7 +488,7 @@ private struct CalendarToggleRow: View {
                 .frame(width: 8, height: 8)
             Text(calendar.title)
                 .font(.callout)
-                .foregroundStyle(.white)
+                .foregroundStyle(.primary)
             Spacer()
             Toggle("", isOn: Binding(
                 get: { isEnabled },

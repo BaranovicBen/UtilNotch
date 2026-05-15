@@ -11,6 +11,7 @@ macOS notch-panel / menubar app. SwiftUI + AppKit. macOS 14+. Swift 6 concurrenc
 | `.claude/rules/architecture.md` | Layer map, state rules, concurrency rules, exact dimensions, color/animation rules |
 | `.claude/rules/module-contract.md` | How to add a module — protocol, file layout, registration, persistence, checklist |
 | `.claude/rules/design-tokens.md` | All UNConstants values, inline color palette, typography, spring presets |
+| `.claude/rules/figma-design-system.md` | Figma MCP integration — required workflow, SwiftUI translation guide, all tokens, surface rules |
 
 **Read the relevant rule file before touching any code.** These are derived from the live source — they are authoritative.
 

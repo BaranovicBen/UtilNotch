@@ -51,7 +51,14 @@
       "Bash(DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -scheme UtilityNotch -destination \"platform=macOS\" build)",
       "Bash(log show:*)",
       "Bash(python3 .claude/skills/ui-ux-pro-max/scripts/search.py \"macOS notch menubar utility productivity dark minimal\" --design-system -p \"UtilityNotch\")",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "mcp__plugin_figma_figma__whoami",
+      "mcp__plugin_figma_figma__create_design_system_rules",
+      "mcp__plugin_figma_figma__create_new_file",
+      "mcp__plugin_figma_figma__use_figma",
+      "mcp__plugin_figma_figma__get_design_context",
+      "mcp__plugin_figma_figma__get_screenshot",
+      "Bash(curl *)"
     ]
   },
   "enabledPlugins": {

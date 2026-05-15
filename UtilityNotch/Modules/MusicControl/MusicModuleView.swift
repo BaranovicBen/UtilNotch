@@ -248,20 +248,20 @@ struct MusicModuleView: View {
         let caps = orchestrator.capabilities
         return HStack(spacing: 16) {
             controlButton(icon: "backward.fill", size: 13, diameter: 30,
-                          disabled: !caps.canSkipPrevious) {
+                          disabled: !caps.canSkipPrevious || orchestrator.isTransportCommandInFlight || carouselLocked) {
                 triggerCarousel(forward: false)
             }
 
             controlButton(
                 icon: orchestrator.nowPlaying?.isPlaying == true ? "pause.fill" : "play.fill",
                 size: 16, diameter: 34, fillOpacity: 0.22,
-                disabled: !caps.canPlayPause
+                disabled: !caps.canPlayPause || orchestrator.isTransportCommandInFlight
             ) {
                 Task { await orchestrator.playPause() }
             }
 
             controlButton(icon: "forward.fill", size: 13, diameter: 30,
-                          disabled: !caps.canSkipNext) {
+                          disabled: !caps.canSkipNext || orchestrator.isTransportCommandInFlight || carouselLocked) {
                 triggerCarousel(forward: true)
             }
         }
@@ -356,25 +356,10 @@ struct MusicModuleView: View {
     private func triggerCarousel(forward: Bool) {
         guard !carouselLocked else { return }
         carouselLocked = true
-        let target = forward ? -slotDistance : slotDistance
-
-        // Slide the carousel to the target position first
-        withAnimation(.spring(response: 0.52, dampingFraction: 0.84)) {
-            wheelOffset = target
-        }
 
         Task { @MainActor in
-            // Wait for the slide to mostly settle, then trigger the track change
-            try? await Task.sleep(for: .seconds(0.44))
             if forward { await orchestrator.next() }
             else       { await orchestrator.previous() }
-            // Animate back to center — new track is now in the center slot,
-            // text and artwork update simultaneously with this return animation
-            withAnimation(.spring(response: 0.50, dampingFraction: 0.82)) {
-                wheelOffset = 0
-            }
-            // Wait for the return animation to settle before unlocking
-            try? await Task.sleep(for: .seconds(0.46))
             carouselLocked = false
         }
     }

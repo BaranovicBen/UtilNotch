@@ -14,6 +14,9 @@ final class NotchPanelController {
     /// Tracks the pending orderOut so we can cancel it if show is called mid-hide.
     private var hideWorkItem: DispatchWorkItem?
 
+    /// Invalidates stale animation completions when show/hide calls overlap.
+    private var transitionGeneration = 0
+
     /// Observer token for display configuration changes.
     private var screenObserver: Any?
 
@@ -51,6 +54,9 @@ final class NotchPanelController {
     // MARK: - Panel Lifecycle
 
     func showPanel() {
+        transitionGeneration &+= 1
+        let generation = transitionGeneration
+
         // Cancel any pending hide completion — this is the race-fix
         hideWorkItem?.cancel()
         hideWorkItem = nil
@@ -60,22 +66,25 @@ final class NotchPanelController {
         }
         guard let panel else { return }
 
+        let shouldFadeIn = !panel.isVisible || panel.alphaValue < 0.99
         repositionPanel()
+        panel.alphaValue = shouldFadeIn ? 0 : 1
         panel.orderFrontRegardless()
 
         if appState.panelStyle == .dynamicIsland {
             panel.alphaValue = 1
         } else {
-            // Expanded Panel intentionally uses a simple fade instead of DI morph behavior.
-            NSAnimationContext.beginGrouping()
-            NSAnimationContext.current.duration = 0
-            panel.animator().alphaValue = 0
-            NSAnimationContext.endGrouping()
+            guard shouldFadeIn else { return }
 
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = UNConstants.animationDuration
                 ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
                 panel.animator().alphaValue = 1
+            } completionHandler: { [weak self, weak panel] in
+                Task { @MainActor in
+                    guard let self, generation == self.transitionGeneration else { return }
+                    panel?.alphaValue = 1
+                }
             }
         }
     }
@@ -83,13 +92,20 @@ final class NotchPanelController {
     func hidePanel() {
         guard let panel else { return }
 
+        transitionGeneration &+= 1
+        let generation = transitionGeneration
+
         // Cancel any previous pending hide
         hideWorkItem?.cancel()
 
         var workItem: DispatchWorkItem!
         workItem = DispatchWorkItem { [weak self] in
-            guard let self, !workItem.isCancelled else { return }
+            guard let self,
+                  !workItem.isCancelled,
+                  generation == self.transitionGeneration,
+                  !self.appState.isPanelVisible else { return }
             self.panel?.orderOut(nil)
+            self.panel?.alphaValue = 1
             self.hideWorkItem = nil
         }
         hideWorkItem = workItem
@@ -107,10 +123,15 @@ final class NotchPanelController {
             ctx.duration = UNConstants.animationDuration * 0.8
             ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
             panel.animator().alphaValue = 0
-        }, completionHandler: {
+        }, completionHandler: { [weak self] in
             // Only order out if this hide was not cancelled by a subsequent show
-            if !workItem.isCancelled {
-                workItem.perform()
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if !workItem.isCancelled,
+                   generation == self.transitionGeneration,
+                   !self.appState.isPanelVisible {
+                    workItem.perform()
+                }
             }
         })
     }
@@ -144,16 +165,18 @@ final class NotchPanelController {
     // MARK: - Private
 
     private func createPanel() {
+        let screen = ScreenGeometry.screen
         let panel = NotchPanel(
             contentRect: NSRect(
-                x: ScreenGeometry.panelOriginX,
+                x: screen.frame.midX - (UNConstants.panelWidth / 2),
                 y: panelOriginY(),
                 width: UNConstants.panelWidth,
                 height: UNConstants.panelHeight
             ),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
-            defer: false
+            defer: false,
+            screen: screen
         )
 
         panel.isFloatingPanel = true
@@ -188,18 +211,29 @@ final class NotchPanelController {
                 rootView: AnyView(DynamicIslandView().environment(appState))
             )
         }
-        hostingView.frame = panel.contentView?.bounds ?? .zero
+        hostingView.frame = NSRect(
+            x: 0,
+            y: 0,
+            width: UNConstants.panelWidth,
+            height: UNConstants.panelHeight
+        )
         hostingView.autoresizingMask = [.width, .height]
-        panel.contentView?.addSubview(hostingView)
+        panel.contentView = hostingView
 
         self.panel = panel
     }
 
     /// Rebuild the panel with the new style. Call after `appState.panelStyle` changes.
     func rebuildPanel() {
+        transitionGeneration &+= 1
+        hideWorkItem?.cancel()
+        hideWorkItem = nil
+        let wasVisible = appState.isPanelVisible
         panel?.orderOut(nil)
         panel = nil
-        // createPanel() is called lazily on next showPanel()
+        if wasVisible {
+            showPanel()
+        }
     }
 
     /// Register the HoverTriggerZone so the controller can reposition it on display changes.

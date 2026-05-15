@@ -41,10 +41,11 @@ final class PersistenceManager {
 // MARK: - Keys
 
 enum PersistenceKey: String {
-    case todos          = "todos"
-    case notes          = "notes"
-    case moduleOrder    = "moduleOrder"
-    case settings       = "settings"
+    case todos            = "todos"
+    case notes            = "notes"
+    case clipboardHistory = "clipboardHistory"
+    case moduleOrder      = "moduleOrder"
+    case settings         = "settings"
 }
 
 // MARK: - Persisted Settings Snapshot
@@ -57,4 +58,6 @@ struct PersistedSettings: Codable {
     var activeModuleID: String
     var showMusicWaveform: Bool
     var panelStyle: String?         // Optional for backward compat with old saves
+    var deleteCompletedTodosEndOfDay: Bool?
+    var lastTodoCleanupDay: String?
 }
