@@ -1,0 +1,327 @@
+<!-- Utility Notch — split view / mix-and-match concept -->
+<style>
+  :root {
+    --shell-w: 600px; --shell-h: 320px;
+    --header-h: 42px; --footer-h: 26px; --rail-w: 46px;
+    --content-h: 252px; --content-w: 554px;
+    --bg: #0c0d0f; --bg-card: #14161a;
+    --accent: #5b8def; --accent-dim: rgba(91,141,239,0.14);
+    --w-04: rgba(255,255,255,0.04); --w-06: rgba(255,255,255,0.06); --w-08: rgba(255,255,255,0.08);
+    --w-10: rgba(255,255,255,0.10); --w-14: rgba(255,255,255,0.14); --w-25: rgba(255,255,255,0.25);
+    --w-30: rgba(255,255,255,0.30); --w-40: rgba(255,255,255,0.40); --w-50: rgba(255,255,255,0.50);
+    --w-60: rgba(255,255,255,0.60); --w-70: rgba(255,255,255,0.70); --w-90: rgba(255,255,255,0.90);
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+    --sans: -apple-system, "SF Pro Text", "Inter", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: var(--sans);
+    background: radial-gradient(900px 500px at 20% -5%, #1a2430 0, transparent 55%), radial-gradient(700px 500px at 90% 110%, #15181d 0, transparent 55%), #07090b;
+    min-height: 100vh; color: var(--w-70); -webkit-font-smoothing: antialiased; padding-bottom: 60px;
+  }
+  .desktop { width:100%; display:flex; flex-direction:column; align-items:center; overflow:hidden; }
+  .menubar { width:100%; height:26px; background: rgba(0,0,0,.3); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    display:flex; align-items:center; justify-content:flex-end; gap:18px; padding:0 18px; font-family: var(--mono); font-size:10.5px; color: var(--w-50); }
+  .menubar .left { margin-right:auto; color: var(--w-70); }
+
+  .shell { position:relative; width: var(--shell-w); height: var(--shell-h); border-radius: 0 0 24px 24px;
+    background: radial-gradient(620px 320px at 8% 0%, rgba(120,150,200,.05) 0, transparent 60%), var(--bg);
+    backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px); border:1px solid var(--w-08); border-top:none;
+    overflow:hidden; display:flex; box-shadow: 0 34px 100px rgba(0,0,0,.6); }
+  .main { width: var(--content-w); height:100%; display:flex; flex-direction:column; }
+
+  .header { height: var(--header-h); flex-shrink:0; display:flex; align-items:center; justify-content:space-between; padding: 0 18px; }
+  .h-title { font-size:14px; font-weight:500; color: var(--w-90); }
+  .h-title .sub { font-family: var(--mono); font-size:9px; text-transform:uppercase; letter-spacing:.1em; color: var(--w-30); margin-left:8px; }
+  .layout-toggle { display:flex; gap:2px; background: var(--w-04); border-radius:7px; padding:2px; }
+  .lt-btn { width:28px; height:22px; border:none; background:transparent; cursor:pointer; border-radius:5px; color: var(--w-40); display:flex; align-items:center; justify-content:center; transition: all .15s; }
+  .lt-btn:hover { color: var(--w-70); }
+  .lt-btn.on { background: var(--w-08); color: var(--w-90); }
+  .lt-btn svg { width:14px; height:14px; }
+
+  .content { height: var(--content-h); position:relative; overflow:hidden; display:flex; }
+
+  .footer { height: var(--footer-h); flex-shrink:0; display:flex; align-items:center; justify-content:space-between; padding: 0 18px;
+    font-family: var(--mono); font-size:9px; text-transform:uppercase; letter-spacing:.1em; color: var(--w-30); }
+  .footer .f-left { color: var(--w-40); }
+  .tick { display:inline-block; width:4px; height:4px; border-radius:50%; margin-right:7px; vertical-align:middle; background: var(--accent); }
+
+  /* panes */
+  .pane { flex:1; min-width:0; display:flex; flex-direction:column; position:relative; transition: background .15s; }
+  .pane + .pane { border-left: 1px solid var(--w-08); }
+  .pane.focused { background: rgba(91,141,239,0.03); }
+  .pane.focused::after { content:""; position:absolute; left:0; right:0; top:0; height:2px; background: var(--accent); opacity:.7; }
+  .pane-head { height:30px; flex-shrink:0; display:flex; align-items:center; justify-content:space-between; padding: 0 14px; cursor:pointer; }
+  .pane-title { font-size:11.5px; font-weight:500; color: var(--w-60); letter-spacing:.01em; }
+  .pane.focused .pane-title { color: var(--w-90); }
+  .pane-swap { font-family: var(--mono); font-size:8px; text-transform:uppercase; letter-spacing:.08em; color: var(--w-25); }
+  .pane.focused .pane-swap { color: var(--accent); }
+  .pane-body { flex:1; min-height:0; overflow:hidden; }
+  .single .pane + .pane { display:none; }
+  .single .pane { flex: 1 1 100%; }
+
+  /* rail */
+  .rail { width: var(--rail-w); height:100%; border-left:1px solid var(--w-08); display:flex; flex-direction:column; flex-shrink:0; }
+  .rail-top { height: var(--header-h); flex-shrink:0; }
+  .rail-scroll { flex:1; overflow-y:auto; display:flex; flex-direction:column; align-items:center; gap:1px; padding:2px 0;
+    mask-image: linear-gradient(180deg, transparent 0, #000 10%, #000 90%, transparent 100%); -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 10%, #000 90%, transparent 100%); }
+  .rail-scroll::-webkit-scrollbar { display:none; }
+  .rail-foot { height: var(--footer-h); flex-shrink:0; display:flex; align-items:center; justify-content:center; }
+  .rbtn { width:30px; height:30px; border:none; background:transparent; cursor:pointer; border-radius:7px; display:flex; align-items:center; justify-content:center; color: var(--w-30); transition: all .16s; position:relative; }
+  .rbtn:hover { color: var(--w-90); background: var(--w-06); }
+  .rbtn.inpane { color: var(--w-60); }
+  .rbtn.active { color: var(--accent); }
+  .rbtn.active::before { content:""; position:absolute; left:-1px; top:50%; transform:translateY(-50%); width:2px; height:14px; border-radius:1px; background: var(--accent); }
+  .rbtn svg { width:15px; height:15px; }
+  .rbtn .tip { position:absolute; right:100%; top:50%; transform:translateY(-50%) translateX(-10px); background: rgba(10,12,14,.92);
+    backdrop-filter: blur(20px); border:.5px solid var(--w-08); color: var(--w-70); font-size:11px; padding:3px 8px; border-radius:6px; white-space:nowrap; opacity:0; pointer-events:none; transition: opacity .15s ease .15s; }
+  .rbtn:hover .tip { opacity:1; }
+  .rbtn.gear .tip { display:none; }
+
+  /* ===== compact module styles ===== */
+  .cmod { height:100%; animation: fade .2s ease; }
+  @keyframes fade { from {opacity:0;} to {opacity:1;} }
+
+  .cm-media { height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; padding: 0 16px; }
+  .cart { width:100px; height:100px; border-radius:12px; position:relative; overflow:hidden; background: linear-gradient(150deg,#3a3e46,#1a1d22); box-shadow: inset 0 0 0 .5px var(--w-10); }
+  .cart .g { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color: rgba(255,255,255,.12); }
+  .cart .g svg { width:34px; height:34px; }
+  .cm-meta { text-align:center; max-width:100%; }
+  .cm-track { font-size:14px; font-weight:600; color: var(--w-90); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .cm-artist { font-size:11px; color: var(--w-50); margin-top:2px; }
+  .cbar { width:100%; height:3px; border-radius:2px; background: var(--w-10); position:relative; }
+  .cbar i { position:absolute; left:0; top:0; bottom:0; width:40%; background: var(--w-70); border-radius:2px; }
+  .cm-ctrl { display:flex; align-items:center; gap:20px; }
+  .cm-ctrl button { background:none; border:none; color: var(--w-60); cursor:pointer; display:flex; }
+  .cm-ctrl svg { width:15px; height:15px; }
+  .cm-ctrl .play { width:34px; height:34px; border-radius:50%; background: var(--w-90); color:#0c0d0f; align-items:center; justify-content:center; }
+  .cm-ctrl .play svg { width:13px; height:13px; }
+
+  .cm-cal { height:100%; display:flex; flex-direction:column; padding: 4px 14px 8px; }
+  .cc-date { display:flex; align-items:baseline; gap:8px; margin-bottom:8px; }
+  .cc-date .big { font-size:28px; font-weight:300; color: var(--w-90); line-height:1; }
+  .cc-date .dow { font-family: var(--mono); font-size:9px; text-transform:uppercase; letter-spacing:.1em; color: var(--w-40); }
+  .cc-list { flex:1; display:flex; flex-direction:column; justify-content:space-evenly; overflow:hidden; }
+  .cc-ev { display:grid; grid-template-columns: 32px 1fr; gap:10px; align-items:center; }
+  .cc-ev .t { font-family: var(--mono); font-size:9px; color: var(--w-40); text-align:right; }
+  .cc-ev .t.now { color: var(--accent); }
+  .cc-ev .b { border-left:1px solid var(--w-10); padding-left:10px; min-width:0; }
+  .cc-ev.now .b { border-left-color: var(--accent); }
+  .cc-ev .ti { font-size:11.5px; color: var(--w-90); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .cc-ev .mi { font-size:9.5px; color: var(--w-40); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+  .cm-list { height:100%; overflow-y:auto; padding: 2px 10px 6px; display:flex; flex-direction:column; }
+  .cm-list::-webkit-scrollbar { display:none; }
+  .cl-row { display:flex; align-items:center; gap:10px; padding:8px 6px; border-radius:6px; transition: background .15s; }
+  .cl-row:hover { background: var(--w-04); }
+  .cl-check { width:14px; height:14px; border-radius:50%; border:1.4px solid var(--w-25); flex-shrink:0; display:flex; align-items:center; justify-content:center; }
+  .cl-check.done { background: var(--accent); border-color: var(--accent); }
+  .cl-check.done::after { content:""; width:3px; height:6px; border:solid #fff; border-width:0 1.3px 1.3px 0; transform:rotate(45deg) translate(-1px,-1px); }
+  .cl-text { flex:1; min-width:0; font-size:12px; color: var(--w-90); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .cl-row.done .cl-text { color: var(--w-25); text-decoration: line-through; }
+  .cl-kind { font-family: var(--mono); font-size:8px; text-transform:uppercase; letter-spacing:.06em; color: var(--w-30); width:30px; flex-shrink:0; }
+
+  .cm-notes { height:100%; overflow-y:auto; padding: 2px 12px 6px; display:flex; flex-direction:column; gap:6px; }
+  .cm-notes::-webkit-scrollbar { display:none; }
+  .cn { border:1px solid var(--w-06); border-radius:8px; padding:8px 10px; }
+  .cn .t { font-size:11.5px; font-weight:500; color: var(--w-90); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .cn .b { font-size:10px; color: var(--w-40); margin-top:3px; display:-webkit-box; -webkit-line-clamp:1; -webkit-box-orient:vertical; overflow:hidden; }
+
+  .cm-files { height:100%; overflow-y:auto; padding: 4px 12px 6px; display:grid; grid-template-columns: repeat(3,1fr); gap:8px; align-content:start; }
+  .cm-files::-webkit-scrollbar { display:none; }
+  .cf { display:flex; flex-direction:column; align-items:center; gap:5px; padding:6px 2px; }
+  .cf .th { width:36px; height:36px; border-radius:7px; background: linear-gradient(155deg,#23262c,#15171b); box-shadow: inset 0 0 0 .5px var(--w-08); display:flex; align-items:flex-end; padding:4px; }
+  .cf .th span { font-family: var(--mono); font-size:6.5px; font-weight:600; color: var(--w-50); text-transform:uppercase; }
+  .cf .nm { font-family: var(--mono); font-size:8px; color: var(--w-50); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+
+  .caption { text-align:center; margin: 22px auto 0; font-family: var(--mono); font-size:9.5px; text-transform:uppercase; letter-spacing:.14em; color: var(--w-25); }
+  .legend { max-width:600px; margin: 26px auto 0; padding: 0 24px; display:grid; grid-template-columns:1fr 1fr; gap:13px; }
+  .lc { border:1px solid var(--w-06); border-radius:12px; padding:14px 16px; }
+  .lc h3 { font-size:11px; color: var(--w-90); margin-bottom:6px; font-weight:500; }
+  .lc p { font-size:10.5px; color: var(--w-50); line-height:1.55; }
+  .lc .m { font-family: var(--mono); color: var(--w-70); }
+</style>
+
+<div class="desktop">
+  <div class="menubar"><span class="left">&#xF8FF;&nbsp; Utility Notch</span><span>84%</span><span>14:32</span></div>
+
+  <div class="shell" id="shell">
+    <div class="main">
+      <div class="header">
+        <div class="h-title">dashboard<span class="sub" id="subLabel"></span></div>
+        <div class="layout-toggle">
+          <button class="lt-btn" id="ltSingle" title="single"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2.5" y="3.5" width="11" height="9" rx="1.5"/></svg></button>
+          <button class="lt-btn on" id="ltSplit" title="split"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2.5" y="3.5" width="11" height="9" rx="1.5"/><path d="M8 3.5v9"/></svg></button>
+        </div>
+      </div>
+      <div class="content" id="content">
+        <div class="pane focused" data-side="left">
+          <div class="pane-head"><span class="pane-title"></span><span class="pane-swap">swap ›</span></div>
+          <div class="pane-body"></div>
+        </div>
+        <div class="pane" data-side="right">
+          <div class="pane-head"><span class="pane-title"></span><span class="pane-swap">swap ›</span></div>
+          <div class="pane-body"></div>
+        </div>
+      </div>
+      <div class="footer"><span class="f-left"><span class="tick"></span><span id="footMode">split view</span></span><span id="footPair"></span></div>
+    </div>
+
+    <div class="rail">
+      <div class="rail-top"></div>
+      <div class="rail-scroll" id="rail">
+        <button class="rbtn" data-mod="media"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M13 2.5v8.25a2.25 2.25 0 1 1-1.5-2.12V4.5L7 5.75v6.5A2.25 2.25 0 1 1 5.5 10.13V4.5z"/></svg><span class="tip">media</span></button>
+        <button class="rbtn" data-mod="calendar"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25"><rect x="2" y="3.5" width="12" height="10.5" rx="1.5"/><path d="M2 6.5h12M5 2v3M11 2v3"/></svg><span class="tip">calendar</span></button>
+        <button class="rbtn" data-mod="todo"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25"><path d="M3 4l1.3 1.3L6 3M3 8l1.3 1.3L6 7M3 12l1.3 1.3L6 11M8.5 4h5M8.5 8h5M8.5 12h5"/></svg><span class="tip">todo</span></button>
+        <button class="rbtn" data-mod="notes"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25"><path d="M3 2.5h7L13 5.5v8H3z"/><path d="M10 2.5v3h3"/></svg><span class="tip">notes</span></button>
+        <button class="rbtn" data-mod="clip"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25"><rect x="4" y="3" width="8" height="11" rx="1"/><path d="M6 3V2h4v1"/></svg><span class="tip">clipboard</span></button>
+        <button class="rbtn" data-mod="files"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25"><path d="M2 9.5L5 12h6l3-2.5M2 9.5l2-6h8l2 6M2 9.5v3h12v-3"/></svg><span class="tip">files tray</span></button>
+      </div>
+      <div class="rail-foot">
+        <button class="rbtn gear" style="width:28px;height:28px;"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25"><circle cx="8" cy="8" r="1.7"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="caption">tap a pane to focus it · then tap a rail icon to drop a module in</div>
+
+  <div class="legend">
+    <div class="lc"><h3>how mix-and-match works</h3><p>focus a pane (accent line on top), then a rail tap loads that module into it. the layout toggle in the header flips <span class="m">single ↔ split</span>. pairs could be saved as presets.</p></div>
+    <div class="lc"><h3>architecture note</h3><p>this needs a layout container above modules — the content slot holds <span class="m">1–2 panes</span>, each a module host. your "one module per page" rule becomes "one <em>layout</em> per page." compact modules suit pairing; calendar/converter stay full-width.</p></div>
+  </div>
+</div>
+
+<script>
+  const MOD = {
+    media: { name:'media', html:`
+      <div class="cmod cm-media">
+        <div class="cart"><div class="g"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M13 2.5v8.25a2.25 2.25 0 1 1-1.5-2.12V4.5L7 5.75v6.5A2.25 2.25 0 1 1 5.5 10.13V4.5z"/></svg></div></div>
+        <div class="cm-meta"><div class="cm-track">Midnight City</div><div class="cm-artist">M83</div></div>
+        <div class="cbar" style="width:80%"><i></i></div>
+        <div class="cm-ctrl">
+          <button><svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 3v10h1.4V3zm10 0L6.6 8 14 13z"/></svg></button>
+          <button class="play"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M3.5 2.5v11l10-5.5z"/></svg></button>
+          <button><svg viewBox="0 0 16 16" fill="currentColor"><path d="M12 3v10h-1.4V3zM2 3l7.4 5L2 13z"/></svg></button>
+        </div>
+      </div>` },
+    calendar: { name:'calendar', html:`
+      <div class="cmod cm-cal">
+        <div class="cc-date"><span class="big">31</span><span class="dow">sun · may</span></div>
+        <div class="cc-list">
+          <div class="cc-ev"><span class="t">9:00</span><span class="b"><div class="ti">design review</div><div class="mi">zoom · 3 people</div></span></div>
+          <div class="cc-ev now"><span class="t now">14:00</span><span class="b"><div class="ti">1:1 with mira</div><div class="mi">cafe · 4th floor</div></span></div>
+          <div class="cc-ev"><span class="t">16:00</span><span class="b"><div class="ti">gym · push day</div><div class="mi">equinox</div></span></div>
+          <div class="cc-ev"><span class="t">19:30</span><span class="b"><div class="ti">dinner with sam</div><div class="mi">misi</div></span></div>
+        </div>
+      </div>` },
+    todo: { name:'todo', html:`
+      <div class="cmod cm-list">
+        <div class="cl-row"><div class="cl-check"></div><div class="cl-text">ship redesign mockup</div></div>
+        <div class="cl-row"><div class="cl-check"></div><div class="cl-text">review module contract</div></div>
+        <div class="cl-row"><div class="cl-check"></div><div class="cl-text">wire launch-at-login</div></div>
+        <div class="cl-row"><div class="cl-check"></div><div class="cl-text">pick up groceries</div></div>
+        <div class="cl-row done"><div class="cl-check done"></div><div class="cl-text">update docs</div></div>
+        <div class="cl-row done"><div class="cl-check done"></div><div class="cl-text">call dentist</div></div>
+      </div>` },
+    notes: { name:'notes', html:`
+      <div class="cmod cm-notes">
+        <div class="cn"><div class="t">module api ideas</div><div class="b">reactive footer state instead of closures</div></div>
+        <div class="cn"><div class="t">coffee order</div><div class="b">oat flat white, half sugar</div></div>
+        <div class="cn"><div class="t">reading list</div><div class="b">everyday things · refactoring · shape up</div></div>
+        <div class="cn"><div class="t">apartment todo</div><div class="b">bulb, radiator, kitchen plant</div></div>
+      </div>` },
+    clip: { name:'clipboard', html:`
+      <div class="cmod cm-list">
+        <div class="cl-row"><span class="cl-kind">text</span><div class="cl-text">let's sync tomorrow at 2pm</div></div>
+        <div class="cl-row"><span class="cl-kind">code</span><div class="cl-text" style="font-family:var(--mono);font-size:11px">git checkout -b feat/x</div></div>
+        <div class="cl-row"><span class="cl-kind">url</span><div class="cl-text">figma.com/file/abc123</div></div>
+        <div class="cl-row"><span class="cl-kind">mail</span><div class="cl-text">roman@narnia.sk</div></div>
+        <div class="cl-row"><span class="cl-kind">hex</span><div class="cl-text" style="font-family:var(--mono);font-size:11px">#5B8DEF</div></div>
+      </div>` },
+    files: { name:'files tray', html:`
+      <div class="cmod cm-files">
+        <div class="cf"><div class="th"><span>zip</span></div><div class="nm">sample.zip</div></div>
+        <div class="cf"><div class="th"><span>txt</span></div><div class="nm">notes.txt</div></div>
+        <div class="cf"><div class="th"><span>swift</span></div><div class="nm">AppState</div></div>
+        <div class="cf"><div class="th"><span>png</span></div><div class="nm">mockup</div></div>
+        <div class="cf"><div class="th"><span>pdf</span></div><div class="nm">spec.pdf</div></div>
+        <div class="cf"><div class="th"><span>fig</span></div><div class="nm">notch.fig</div></div>
+      </div>` }
+  };
+
+  let mode = 'split';        // 'split' | 'single'
+  let active = 'left';
+  const slots = { left:'calendar', right:'media' };
+
+  const content = document.getElementById('content');
+  const panes = { left: content.querySelector('[data-side=left]'), right: content.querySelector('[data-side=right]') };
+  const rail = document.getElementById('rail');
+  const railBtns = rail.querySelectorAll('.rbtn[data-mod]');
+
+  function render() {
+    content.parentElement.parentElement.classList.toggle('single', mode==='single');
+    content.classList.toggle('single', mode==='single');
+    // since .single rule targets .content, toggle there
+    document.getElementById('shell').classList.toggle('single', mode==='single');
+
+    ['left','right'].forEach(side => {
+      const p = panes[side];
+      const modId = slots[side];
+      p.querySelector('.pane-title').textContent = MOD[modId].name;
+      p.querySelector('.pane-body').innerHTML = MOD[modId].html;
+      p.classList.toggle('focused', side===active && mode==='split');
+    });
+    // single mode: only show active pane, always "focused" visually off
+    if (mode==='single') {
+      panes.left.style.display='flex'; panes.right.style.display='none';
+      // put active module into the left (visible) pane
+      const modId = slots[active];
+      panes.left.querySelector('.pane-title').textContent = MOD[modId].name;
+      panes.left.querySelector('.pane-body').innerHTML = MOD[modId].html;
+      panes.left.classList.remove('focused');
+    } else {
+      panes.left.style.display='flex'; panes.right.style.display='flex';
+    }
+
+    // rail highlight reflects the focused pane's module
+    const shownMod = mode==='single' ? slots[active] : slots[active];
+    railBtns.forEach(b => b.classList.toggle('active', b.dataset.mod===shownMod));
+
+    document.getElementById('subLabel').textContent = mode==='split' ? '· 2 up' : '· single';
+    document.getElementById('footMode').textContent = mode==='split' ? 'split view' : 'single view';
+    document.getElementById('footPair').textContent = mode==='split'
+      ? MOD[slots.left].name + ' · ' + MOD[slots.right].name
+      : MOD[slots[active]].name;
+  }
+
+  // pane focus
+  ['left','right'].forEach(side => {
+    panes[side].addEventListener('click', () => {
+      if (mode!=='split') return;
+      active = side; render();
+    });
+  });
+
+  // rail click assigns to focused pane
+  railBtns.forEach(b => b.addEventListener('click', (e) => {
+    e.stopPropagation();
+    slots[active] = b.dataset.mod;
+    render();
+  }));
+
+  // layout toggle
+  document.getElementById('ltSingle').addEventListener('click', () => {
+    mode='single';
+    document.getElementById('ltSingle').classList.add('on');
+    document.getElementById('ltSplit').classList.remove('on');
+    render();
+  });
+  document.getElementById('ltSplit').addEventListener('click', () => {
+    mode='split';
+    document.getElementById('ltSplit').classList.add('on');
+    document.getElementById('ltSingle').classList.remove('on');
+    render();
+  });
+
+  render();
+</script>

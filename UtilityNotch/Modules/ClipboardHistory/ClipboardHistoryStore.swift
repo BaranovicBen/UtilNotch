@@ -1,12 +1,44 @@
 import AppKit
 import SwiftUI
 
-enum ClipboardContentKind: String, Codable {
+enum ClipboardContentKind: String, Codable, CaseIterable, Identifiable {
     case code
     case url
     case image
     case file
     case text
+
+    var id: String { rawValue }
+
+    var filterTitle: String {
+        switch self {
+        case .code: "Code"
+        case .url: "Links"
+        case .image: "Images"
+        case .file: "Files"
+        case .text: "Text"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .code: "curlybraces"
+        case .url: "link"
+        case .image: "photo"
+        case .file: "doc"
+        case .text: "text.alignleft"
+        }
+    }
+
+    var accentColor: Color {
+        switch self {
+        case .code: Color(hex: "BF5AF2")
+        case .url: Color(hex: "0A84FF")
+        case .image: Color(hex: "30D158")
+        case .file: Color(hex: "FF9F0A")
+        case .text: Color.white.opacity(0.48)
+        }
+    }
 }
 
 enum ClipboardHistorySettingsKey {
@@ -48,23 +80,11 @@ struct ClipboardHistoryItem: Identifiable, Codable, Equatable {
     }
 
     var icon: String {
-        switch kind {
-        case .code: "curlybraces"
-        case .url: "link"
-        case .image: "photo"
-        case .file: "doc"
-        case .text: "text.alignleft"
-        }
+        kind.icon
     }
 
     var accentColor: Color {
-        switch kind {
-        case .code: Color(hex: "BF5AF2")
-        case .url: Color(hex: "0A84FF")
-        case .image: Color(hex: "30D158")
-        case .file: Color(hex: "FF9F0A")
-        case .text: Color.white.opacity(0.48)
-        }
+        kind.accentColor
     }
 
     var timestamp: String {
@@ -134,7 +154,7 @@ struct ClipboardHistoryItem: Identifiable, Codable, Equatable {
 @Observable
 final class ClipboardHistoryStore {
     var items: [ClipboardHistoryItem] = []
-    var searchText: String = ""
+    var selectedKind: ClipboardContentKind?
     var recentlyCopiedID: UUID?
     var isMonitoring: Bool = false
 
@@ -152,9 +172,8 @@ final class ClipboardHistoryStore {
 
     var visibleItems: [ClipboardHistoryItem] {
         let source = isShowingDemoItems ? ClipboardHistoryItem.demoItems : items
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return source }
-        return source.filter { $0.searchableText.localizedCaseInsensitiveContains(query) }
+        guard let selectedKind else { return source }
+        return source.filter { $0.kind == selectedKind }
     }
 
     var storedItemCount: Int {
@@ -178,7 +197,7 @@ final class ClipboardHistoryStore {
     }
 
     func clearHistory() {
-        withAnimation(.easeOut(duration: 0.2)) {
+        withAnimation(UNMotion.listItem) {
             items.removeAll()
         }
         save()
@@ -186,7 +205,7 @@ final class ClipboardHistoryStore {
 
     func delete(_ item: ClipboardHistoryItem) {
         guard !item.isDemo else { return }
-        withAnimation(.easeOut(duration: 0.2)) {
+        withAnimation(UNMotion.listItem) {
             items.removeAll { $0.id == item.id }
         }
         save()
@@ -212,9 +231,9 @@ final class ClipboardHistoryStore {
         }
 
         changeCount = pasteboard.changeCount
-        withAnimation(.easeOut(duration: 0.05)) { recentlyCopiedID = item.id }
+        withAnimation(UNMotion.flashOn) { recentlyCopiedID = item.id }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) { [weak self] in
-            withAnimation(.easeOut(duration: 0.1)) { self?.recentlyCopiedID = nil }
+            withAnimation(UNMotion.flashOff) { self?.recentlyCopiedID = nil }
         }
     }
 
@@ -242,7 +261,7 @@ final class ClipboardHistoryStore {
 
     private func insert(_ item: ClipboardHistoryItem) {
         guard !item.preview.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        withAnimation(.spring(response: 0.28, dampingFraction: 0.78)) {
+        withAnimation(UNMotion.expressive) {
             items.removeAll { $0.copySignature == item.copySignature }
             items.insert(item, at: 0)
             _ = trimToHistoryLimit()

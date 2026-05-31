@@ -16,7 +16,7 @@ struct ClipboardModuleView: View {
             modules: shellNavItems(appState: appState),
             activeModuleID: appState.activeModuleID,
             onModuleSelect: { id in
-                withAnimation(.spring(duration: 0.28, bounce: 0.16)) {
+                withAnimation(UNMotion.moduleSwitch) {
                     appState.selectModule(id)
                 }
             },
@@ -28,7 +28,7 @@ struct ClipboardModuleView: View {
             }
         ) {
             VStack(spacing: 10) {
-                searchField
+                typeFilterPopup
 
                 ScrollView(.vertical, showsIndicators: false) {
                     LazyVStack(spacing: 8) {
@@ -42,7 +42,7 @@ struct ClipboardModuleView: View {
                         }
 
                         if store.visibleItems.isEmpty {
-                            emptySearchState
+                            emptyFilterState
                         }
                     }
                     .padding(.bottom, 2)
@@ -108,53 +108,72 @@ struct ClipboardModuleView: View {
         }
     }
 
-    private var searchField: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(Color.white.opacity(0.36))
-
-            TextField("", text: Binding(
-                get: { store.searchText },
-                set: { store.searchText = $0 }
-            ))
-                .textFieldStyle(.plain)
-                .font(.system(size: 13, weight: .regular))
-                .foregroundStyle(Color.white.opacity(0.82))
-                .overlay(alignment: .leading) {
-                    if store.searchText.isEmpty {
-                        Text("Search clipboard history...")
-                            .font(.system(size: 13, weight: .regular))
-                            .foregroundStyle(Color.white.opacity(0.28))
-                            .allowsHitTesting(false)
-                    }
-                }
-
-            if !store.searchText.isEmpty {
-                Button {
-                    store.searchText = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Color.white.opacity(0.35))
-                }
-                .buttonStyle(.plain)
+    private var typeFilterPopup: some View {
+        Menu {
+            Button {
+                store.selectedKind = nil
+            } label: {
+                Label("All Types", systemImage: store.selectedKind == nil ? "checkmark" : "tray.full")
             }
+
+            Divider()
+
+            ForEach(ClipboardContentKind.allCases) { kind in
+                Button {
+                    store.selectedKind = kind
+                } label: {
+                    Label(kind.filterTitle, systemImage: store.selectedKind == kind ? "checkmark" : kind.icon)
+                }
+            }
+        } label: {
+            HStack(spacing: 10) {
+                ZStack {
+                    Circle()
+                        .fill(selectedFilterColor.opacity(store.selectedKind == nil ? 0.08 : 0.16))
+                    Image(systemName: selectedFilterIcon)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(selectedFilterColor)
+                }
+                .frame(width: 26, height: 26)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Filter by type")
+                        .font(.system(size: 10.5, weight: .bold, design: .monospaced))
+                        .textCase(.uppercase)
+                        .foregroundStyle(Color.white.opacity(0.34))
+                    Text(selectedFilterTitle)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Color.white.opacity(0.84))
+                }
+
+                Spacer(minLength: 8)
+
+                Text("\(store.visibleItems.count)")
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Color.white.opacity(0.38))
+
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(Color.white.opacity(0.32))
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.white.opacity(0.04))
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.white.opacity(0.04))
-        )
+        .menuStyle(.borderlessButton)
+        .buttonStyle(.plain)
     }
 
-    private var emptySearchState: some View {
+    private var emptyFilterState: some View {
         VStack(spacing: 8) {
             Image(systemName: "doc.text.magnifyingglass")
                 .font(.system(size: 18, weight: .regular))
                 .foregroundStyle(Color.white.opacity(0.25))
-            Text("No matching clips")
+            Text(emptyFilterMessage)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(Color.white.opacity(0.42))
         }
@@ -177,6 +196,23 @@ struct ClipboardModuleView: View {
         clearConfirmTimer = nil
         clearConfirmActive = false
         store.clearHistory()
+    }
+
+    private var selectedFilterTitle: String {
+        store.selectedKind?.filterTitle ?? "All Types"
+    }
+
+    private var selectedFilterIcon: String {
+        store.selectedKind?.icon ?? "line.3.horizontal.decrease.circle"
+    }
+
+    private var selectedFilterColor: Color {
+        store.selectedKind?.accentColor ?? Color.white.opacity(0.48)
+    }
+
+    private var emptyFilterMessage: String {
+        guard let selectedKind = store.selectedKind else { return "No clips yet" }
+        return "No \(selectedKind.filterTitle.lowercased()) clips"
     }
 }
 
@@ -232,7 +268,7 @@ private struct ClipboardHistoryCard: View {
         )
         .contentShape(Rectangle())
         .onTapGesture(perform: onCopy)
-        .onHover { isHovering = $0 }
+        .onHover { h in withAnimation(UNMotion.hover) { isHovering = h } }
         .contextMenu {
             Button {
                 onCopy()

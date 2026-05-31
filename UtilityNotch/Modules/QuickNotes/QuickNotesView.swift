@@ -118,7 +118,7 @@ struct QuickNotesView: View {
         let title = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty else { return }
         let body = newBody.trimmingCharacters(in: .whitespacesAndNewlines)
-        withAnimation(.easeOut(duration: 0.2)) {
+        withAnimation(UNMotion.expressive) {
             appState.quickNotes.insert(QuickNote(title: title, body: body), at: 0)
         }
         newTitle = ""
@@ -128,7 +128,7 @@ struct QuickNotesView: View {
 
     private func toggleExpand(_ id: UUID) {
         guard editingNoteID != id else { return }
-        withAnimation(.easeInOut(duration: 0.2)) {
+        withAnimation(UNMotion.standard) {
             expandedNoteID = expandedNoteID == id ? nil : id
         }
     }
@@ -154,7 +154,7 @@ struct QuickNotesView: View {
     }
 
     private func delete(_ id: UUID) {
-        withAnimation(.easeOut(duration: 0.2)) {
+        withAnimation(UNMotion.listItem) {
             appState.quickNotes.removeAll { $0.id == id }
         }
         if expandedNoteID == id { expandedNoteID = nil }
@@ -214,7 +214,7 @@ private struct NoteCard: View {
         )
         .contentShape(Rectangle())
         .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.12)) { isHovering = hovering }
+            withAnimation(UNMotion.hover) { isHovering = hovering }
         }
         .onTapGesture(count: 2) {
             if !isEditing {

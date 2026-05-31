@@ -110,7 +110,7 @@ struct DynamicIslandView: View {
                 expandedContent
                     .frame(width: expandedWidth, height: expandedHeight)
                     .opacity(showContent ? 1 : 0)
-                    .animation(.easeIn(duration: 0.12), value: showContent)
+                    .animation(UNMotion.crossFade, value: showContent)
                     .transition(.opacity)
             }
         }
@@ -187,7 +187,7 @@ struct DynamicIslandView: View {
     @ViewBuilder
     private var collapsedContent: some View {
         defaultPillContent
-            .transition(.opacity.animation(.easeInOut(duration: 0.2)))
+            .transition(.opacity.animation(UNMotion.crossFade))
     }
 
     /// Default idle pill: app name + ambient music-active indicator.
@@ -246,7 +246,7 @@ struct DynamicIslandView: View {
                 // when the cursor skims the edge of the panel). If the shell is
                 // already open, keep the module content alive instead of blanking
                 // the whole panel while waiting on an expansion that is not needed.
-                withAnimation(.easeIn(duration: 0.12)) {
+                withAnimation(UNMotion.crossFade) {
                     showContent = true
                 }
                 return
@@ -254,7 +254,7 @@ struct DynamicIslandView: View {
 
             showContent = false
 
-            withAnimation(.spring(response: 0.38, dampingFraction: 0.78)) {
+            withAnimation(UNMotion.panelOpen) {
                 isExpanded = true
             }
 
@@ -262,7 +262,7 @@ struct DynamicIslandView: View {
             let contentDelay = 0.30 + UNConstants.contentFadeDelay
             DispatchQueue.main.asyncAfter(deadline: .now() + contentDelay) {
                 guard animationGeneration == generation, isExpanded else { return }
-                withAnimation(.easeIn(duration: 0.12)) {
+                withAnimation(UNMotion.crossFade) {
                     showContent = true
                 }
             }
@@ -279,13 +279,13 @@ struct DynamicIslandView: View {
         animationGeneration &+= 1
         let generation = animationGeneration
 
-        withAnimation(.easeOut(duration: 0.10)) {
+        withAnimation(UNMotion.press) {
             showContent = false
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
             guard animationGeneration == generation else { return }
-            withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+            withAnimation(UNMotion.panelClose) {
                 isExpanded = false
             }
         }

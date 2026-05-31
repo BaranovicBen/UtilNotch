@@ -78,7 +78,8 @@ final class NotchPanelController {
 
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = UNConstants.animationDuration
-                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                // Smooth ease-out curve — premium feel on appear.
+                ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.22, 1.0, 0.36, 1.0)
                 panel.animator().alphaValue = 1
             } completionHandler: { [weak self, weak panel] in
                 Task { @MainActor in
@@ -121,7 +122,8 @@ final class NotchPanelController {
 
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = UNConstants.animationDuration * 0.8
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            // Snappy ease-in curve — keeps the close feeling responsive.
+            ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.4, 0.0, 1.0, 1.0)
             panel.animator().alphaValue = 0
         }, completionHandler: { [weak self] in
             // Only order out if this hide was not cancelled by a subsequent show

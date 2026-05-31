@@ -10,6 +10,8 @@ struct QuickNotesModuleView: View {
     @State private var editingNote: QuickNote? = nil
     @State private var popupTitle: String = ""
     @State private var popupBody: String = ""
+    @State private var pinnedExpandedNoteID: UUID? = nil
+    @State private var hoveredNoteID: UUID? = nil
     @FocusState private var isPopupTitleFocused: Bool
 
     // Dummy notes for initial state (shown when appState.quickNotes is empty)
@@ -31,7 +33,7 @@ struct QuickNotesModuleView: View {
             modules: shellNavItems(appState: appState),
             activeModuleID: appState.activeModuleID,
             onModuleSelect: { id in
-                withAnimation(.spring(duration: 0.28, bounce: 0.16)) {
+                withAnimation(UNMotion.moduleSwitch) {
                     appState.selectModule(id)
                 }
             },
@@ -77,7 +79,7 @@ struct QuickNotesModuleView: View {
                         .transition(.scale(scale: 0.92).combined(with: .opacity))
                 }
             }
-            .animation(.spring(response: 0.28, dampingFraction: 0.72), value: showingNewNotePopup)
+            .animation(UNMotion.gentle, value: showingNewNotePopup)
         }
     }
 
@@ -85,28 +87,28 @@ struct QuickNotesModuleView: View {
 
     @ViewBuilder
     private func staticNoteCard(title: String, timestamp: String, preview: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
                 Text(title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Color.white.opacity(0.85))
                     .lineLimit(1)
                 Spacer()
                 Text(timestamp)
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(.system(size: 12, design: .monospaced))
                     .foregroundStyle(Color.white.opacity(0.35))
             }
             Text(preview)
-                .font(.system(size: 12, weight: .regular))
-                .foregroundStyle(Color.white.opacity(0.45))
+                .font(.system(size: 14, weight: .regular))
+                .foregroundStyle(Color.white.opacity(0.50))
                 .lineLimit(2)
                 .truncationMode(.tail)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(12)
+        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(Color.white.opacity(0.03))
         )
         .opacity(0.6)
@@ -118,6 +120,11 @@ struct QuickNotesModuleView: View {
     private func liveNoteCard(_ note: QuickNote) -> some View {
         LiveNoteCardView(
             note: note,
+            isExpanded: hoveredNoteID == note.id || pinnedExpandedNoteID == note.id,
+            onHoverChanged: { hovering in
+                setHovered(note.id, hovering: hovering)
+            },
+            onToggleExpanded: { togglePinnedExpansion(note.id) },
             onEdit: { openEditPopup(note) },
             onCopy: { copyNote(note) },
             onDelete: { deleteNote(note) }
@@ -253,6 +260,22 @@ struct QuickNotesModuleView: View {
         appState.dismissalLocks.insert(.activeEditing)
     }
 
+    private func setHovered(_ id: UUID, hovering: Bool) {
+        withAnimation(UNMotion.standard) {
+            if hovering {
+                hoveredNoteID = id
+            } else if hoveredNoteID == id {
+                hoveredNoteID = nil
+            }
+        }
+    }
+
+    private func togglePinnedExpansion(_ id: UUID) {
+        withAnimation(UNMotion.standard) {
+            pinnedExpandedNoteID = pinnedExpandedNoteID == id ? nil : id
+        }
+    }
+
     private func dismissPopup() {
         showingNewNotePopup = false
         editingNote = nil
@@ -265,7 +288,7 @@ struct QuickNotesModuleView: View {
         let title = popupTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty else { return }
         let body = popupBody.trimmingCharacters(in: .whitespacesAndNewlines)
-        withAnimation(.easeOut(duration: 0.2)) {
+        withAnimation(UNMotion.expressive) {
             if let editing = editingNote,
                let idx = appState.quickNotes.firstIndex(where: { $0.id == editing.id }) {
                 appState.quickNotes[idx].title = title
@@ -284,8 +307,14 @@ struct QuickNotesModuleView: View {
     }
 
     private func deleteNote(_ note: QuickNote) {
-        withAnimation(.easeOut(duration: 0.18)) {
+        withAnimation(UNMotion.listItem) {
             appState.quickNotes.removeAll { $0.id == note.id }
+        }
+        if pinnedExpandedNoteID == note.id {
+            pinnedExpandedNoteID = nil
+        }
+        if hoveredNoteID == note.id {
+            hoveredNoteID = nil
         }
     }
 }
@@ -294,6 +323,9 @@ struct QuickNotesModuleView: View {
 
 private struct LiveNoteCardView: View {
     let note: QuickNote
+    let isExpanded: Bool
+    let onHoverChanged: (Bool) -> Void
+    let onToggleExpanded: () -> Void
     let onEdit: () -> Void
     let onCopy: () -> Void
     let onDelete: () -> Void
@@ -302,40 +334,53 @@ private struct LiveNoteCardView: View {
     @State private var isFlashing = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
                 Text(note.title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Color.white.opacity(0.85))
-                    .lineLimit(1)
+                    .lineLimit(isExpanded ? 2 : 1)
                 Spacer()
                 if isHovering {
                     hoverActions
                         .transition(.opacity)
                 } else {
                     Text(formatTimestamp(note.createdAt))
-                        .font(.system(size: 11, design: .monospaced))
+                        .font(.system(size: 12, design: .monospaced))
                         .foregroundStyle(Color.white.opacity(0.35))
                 }
             }
 
             if !note.body.isEmpty {
                 Text(note.body)
-                    .font(.system(size: 12, weight: .regular))
-                    .foregroundStyle(Color.white.opacity(0.45))
-                    .lineLimit(2)
+                    .font(.system(size: 14, weight: .regular))
+                    .foregroundStyle(Color.white.opacity(0.52))
+                    .lineLimit(isExpanded ? nil : 2)
                     .truncationMode(.tail)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .padding(12)
+        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(Color.white.opacity(isFlashing ? 0.07 : (isHovering ? 0.05 : 0.03)))
         )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(
+                    isExpanded ? UNConstants.iconActiveTint.opacity(0.28) : Color.clear,
+                    lineWidth: 1
+                )
+        )
         .contentShape(Rectangle())
-        .onHover { h in withAnimation(.easeInOut(duration: 0.12)) { isHovering = h } }
+        .onTapGesture(perform: onToggleExpanded)
+        .onHover { hovering in
+            withAnimation(UNMotion.hover) {
+                isHovering = hovering
+            }
+            onHoverChanged(hovering)
+        }
     }
 
     @ViewBuilder
@@ -344,7 +389,7 @@ private struct LiveNoteCardView: View {
             // Edit
             Button(action: onEdit) {
                 Image(systemName: "pencil")
-                    .font(.system(size: 12))
+                    .font(.system(size: 13))
                     .foregroundStyle(Color.white.opacity(0.50))
             }
             .buttonStyle(.plain)
@@ -352,13 +397,13 @@ private struct LiveNoteCardView: View {
             // Copy with flash
             Button {
                 onCopy()
-                withAnimation(.easeIn(duration: 0.15)) { isFlashing = true }
+                withAnimation(UNMotion.flashOn) { isFlashing = true }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                     withAnimation { isFlashing = false }
                 }
             } label: {
                 Image(systemName: "doc.on.doc")
-                    .font(.system(size: 12))
+                    .font(.system(size: 13))
                     .foregroundStyle(Color.white.opacity(0.50))
             }
             .buttonStyle(.plain)
@@ -366,7 +411,7 @@ private struct LiveNoteCardView: View {
             // Delete
             Button(action: onDelete) {
                 Image(systemName: "trash")
-                    .font(.system(size: 12))
+                    .font(.system(size: 13))
                     .foregroundStyle(Color(hex: "FF453A"))
             }
             .buttonStyle(.plain)

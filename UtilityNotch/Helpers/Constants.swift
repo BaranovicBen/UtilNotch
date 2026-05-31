@@ -146,3 +146,94 @@ enum UNConstants {
     static let globalHotkeyKeyCode: UInt16 = 49
     static let globalHotkeyModifiers: NSEvent.ModifierFlags = .option
 }
+
+// MARK: - Motion Tokens
+
+/// Named animation curves shared across the app. Use these instead of open-coding
+/// `.spring(...)`, `.easeInOut(...)`, etc. The set is intentionally small — every
+/// surface should map to one of these tokens.
+///
+/// macOS 14 introduces `.smooth / .snappy / .bouncy` springs whose defaults are
+/// tuned to feel like Apple's first-party UI. We lean on those for the premium
+/// feel and only fall back to ease curves where motion must be linearly framed
+/// (hover, press flashes).
+enum UNMotion {
+
+    // MARK: - Spring presets
+
+    /// Crisp tap response — buttons, toggles, single-state flips.
+    static let tap: Animation = .snappy(duration: 0.22, extraBounce: 0.10)
+
+    /// Default state change — the most common motion in the app.
+    static let standard: Animation = .smooth(duration: 0.28, extraBounce: 0.12)
+
+    /// Module/sidebar selection — slightly slower and slightly bouncier than
+    /// `standard` so a module switch reads as a deliberate motion.
+    static let moduleSwitch: Animation = .smooth(duration: 0.32, extraBounce: 0.14)
+
+    /// Sheet / popup / settings flyout — calm, low-bounce.
+    static let gentle: Animation = .smooth(duration: 0.38, extraBounce: 0.06)
+
+    /// Delight moments — new item added, success states.
+    static let expressive: Animation = .bouncy(duration: 0.42, extraBounce: 0.18)
+
+    /// List inserts / removes — items entering or leaving a stack.
+    static let listItem: Animation = .smooth(duration: 0.32, extraBounce: 0.12)
+
+    /// Other rows sliding apart to make room for a dragged item.
+    static let dragDisplace: Animation = .smooth(duration: 0.28, extraBounce: 0.08)
+
+    /// The dragged item itself — quick, slightly springier.
+    static let dragLift: Animation = .snappy(duration: 0.20, extraBounce: 0.18)
+
+    /// Cross-fade between two states of the same surface.
+    static let crossFade: Animation = .smooth(duration: 0.22, extraBounce: 0)
+
+    /// Module-switch content fade in `ActiveModuleContainerView`.
+    static let contentFade: Animation = .smooth(duration: 0.22, extraBounce: 0)
+
+    /// Dynamic Island expand from the notch.
+    static let panelOpen: Animation = .smooth(duration: 0.40, extraBounce: 0.14)
+
+    /// Dynamic Island collapse — slightly faster so close feels responsive.
+    static let panelClose: Animation = .smooth(duration: 0.32, extraBounce: 0.04)
+
+    /// Music progress bar — low-bounce smoothing for value changes.
+    static let progress: Animation = .smooth(duration: 0.45, extraBounce: 0)
+
+    /// Calendar day selection / date shift.
+    static let daySelect: Animation = .snappy(duration: 0.26, extraBounce: 0.12)
+
+    // MARK: - Non-spring (intentional)
+
+    /// Hover — the ONLY easeInOut allowed for user-facing motion (per design rules).
+    static let hover: Animation = .easeInOut(duration: 0.15)
+
+    /// Press feedback flash — quick, framed, no bounce.
+    static let press: Animation = .easeOut(duration: 0.10)
+
+    /// Quick on / slow off used for the "just copied" flash.
+    static let flashOn: Animation  = .easeOut(duration: 0.08)
+    static let flashOff: Animation = .easeOut(duration: 0.18)
+}
+
+// MARK: - Press Feedback Button Style
+
+/// Subtle scale + opacity on press. Gives interactive surfaces a premium tactile
+/// feel without the heaviness of a full bounce. Pair with `.buttonStyle(.pressFeedback)`.
+struct PressFeedbackButtonStyle: ButtonStyle {
+    var scale: CGFloat = 0.94
+    var pressedOpacity: Double = 0.82
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? scale : 1)
+            .opacity(configuration.isPressed ? pressedOpacity : 1)
+            .animation(UNMotion.tap, value: configuration.isPressed)
+    }
+}
+
+extension ButtonStyle where Self == PressFeedbackButtonStyle {
+    /// Subtle scale-down + opacity dim on press.
+    static var pressFeedback: PressFeedbackButtonStyle { .init() }
+}

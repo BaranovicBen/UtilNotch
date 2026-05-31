@@ -11,8 +11,8 @@ struct ActiveModuleContainerView: View {
                 module.makeMainView()
                     .id(module.id)
                     .transition(.asymmetric(
-                        insertion: .opacity.combined(with: .offset(y: 4)),
-                        removal: .opacity
+                        insertion: .opacity.combined(with: .offset(y: 6)),
+                        removal: .opacity.combined(with: .offset(y: -3))
                     ))
             } else {
                 placeholder
@@ -20,7 +20,7 @@ struct ActiveModuleContainerView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .clipped()
-        .animation(.easeInOut(duration: 0.22), value: appState.activeModuleID)
+        .animation(UNMotion.contentFade, value: appState.activeModuleID)
     }
     
     private var placeholder: some View {

@@ -121,7 +121,7 @@ struct CalendarView: View {
             ForEach(weekDays, id: \.self) { day in
                 let isSelected = cal.isDate(day, inSameDayAs: selectedDate)
                 let isToday    = cal.isDateInToday(day)
-                Button { withAnimation(.spring(response: 0.25)) { selectedDate = day } } label: {
+                Button { withAnimation(UNMotion.daySelect) { selectedDate = day } } label: {
                     VStack(spacing: 3) {
                         Text(dayLetter(day))
                             .font(.system(size: 11, weight: .medium))
@@ -297,7 +297,7 @@ struct CalendarView: View {
 
     private func shiftDay(_ delta: Int) {
         if let d = cal.date(byAdding: .day, value: delta, to: selectedDate) {
-            withAnimation(.easeInOut(duration: 0.18)) { selectedDate = d }
+            withAnimation(UNMotion.daySelect) { selectedDate = d }
         }
     }
 
@@ -381,7 +381,7 @@ private struct EventRow: View {
         .padding(.vertical, 5)
         .background(isHovering ? Color.white.opacity(0.04) : Color.clear,
                     in: RoundedRectangle(cornerRadius: 7))
-        .onHover { isHovering = $0 }
+        .onHover { h in withAnimation(UNMotion.hover) { isHovering = h } }
     }
 
     private var calColor: Color {

@@ -39,7 +39,7 @@ struct CanonicalShellView<Content: View>: View {
                 .foregroundStyle(.white)
                 .lineLimit(1)
                 // Crossfade title text to match content area transition
-                .animation(.easeInOut(duration: 0.22), value: appState.activeModuleID)
+                .animation(UNMotion.contentFade, value: appState.activeModuleID)
 
             Spacer()
 
@@ -47,7 +47,7 @@ struct CanonicalShellView<Content: View>: View {
             if let builder = appState.moduleActionButtonBuilder {
                 let _ = appState.moduleActionButtonRevision
                 builder()
-                    .animation(.easeInOut(duration: 0.22), value: appState.moduleActionButtonRevision)
+                    .animation(UNMotion.contentFade, value: appState.moduleActionButtonRevision)
             }
         }
         .padding(.horizontal, UNConstants.headerPaddingH)
@@ -74,7 +74,7 @@ struct CanonicalShellView<Content: View>: View {
                 .foregroundStyle(Color.white.opacity(0.60))
                 .textCase(.uppercase)
                 .kerning(0.08 * 10)
-                .animation(.easeInOut(duration: 0.22), value: appState.moduleFooterLeft)
+                .animation(UNMotion.contentFade, value: appState.moduleFooterLeft)
 
             Spacer()
 
@@ -83,7 +83,7 @@ struct CanonicalShellView<Content: View>: View {
                 .foregroundStyle(Color.white.opacity(0.60))
                 .textCase(.uppercase)
                 .kerning(0.08 * 10)
-                .animation(.easeInOut(duration: 0.22), value: appState.moduleFooterRight)
+                .animation(UNMotion.contentFade, value: appState.moduleFooterRight)
         }
         .padding(.horizontal, UNConstants.footerPaddingH)
         .frame(height: UNConstants.footerHeight)

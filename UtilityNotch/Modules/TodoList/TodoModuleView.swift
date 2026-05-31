@@ -11,7 +11,10 @@ struct TodoModuleView: View {
     @State private var editingID: UUID? = nil
     @State private var editDraft: String = ""
     @State private var draggingID: UUID? = nil
-    @State private var dropTargetID: UUID? = nil
+    @State private var dragOriginalItems: [TodoItem]? = nil
+    @State private var didCommitDrag: Bool = false
+    @State private var localDragEndMonitor: Any? = nil
+    @State private var globalDragEndMonitor: Any? = nil
 
     // Dummy tasks shown when data source is empty
     private static let dummyTasks: [(text: String, timestamp: String, isDone: Bool)] = [
@@ -33,7 +36,7 @@ struct TodoModuleView: View {
             modules: shellNavItems(appState: appState),
             activeModuleID: appState.activeModuleID,
             onModuleSelect: { id in
-                withAnimation(.spring(duration: 0.28, bounce: 0.16)) {
+                withAnimation(UNMotion.moduleSwitch) {
                     appState.selectModule(id)
                 }
             },
@@ -76,33 +79,18 @@ struct TodoModuleView: View {
                         VStack(spacing: 8) {
                             ForEach(appState.todoItems) { item in
                                 let isDragged = draggingID == item.id
-                                let isDropTarget = dropTargetID == item.id && !isDragged
-                                liveRow(item)
-                                    .opacity(isDragged ? 0.62 : 1.0)
-                                    .scaleEffect(isDragged ? 0.985 : 1.0)
-                                    .overlay(alignment: .top) {
-                                        if isDropTarget {
-                                            Capsule()
-                                                .fill(UNConstants.iconActiveTint.opacity(0.78))
-                                                .frame(height: 2)
-                                                .padding(.horizontal, 10)
-                                                .offset(y: -5)
-                                                .transition(.opacity.combined(with: .scale(scale: 0.96)))
-                                        }
+
+                                Group {
+                                    if isDragged {
+                                        dragInsertionRail
+                                    } else {
+                                        liveRow(item)
                                     }
-                                    .overlay {
-                                        if isDragged {
-                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                                .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
-                                        }
-                                    }
-                                    .animation(
-                                        .spring(response: 0.24, dampingFraction: 0.82),
-                                        value: draggingID
-                                    )
-                                    .animation(.spring(response: 0.22, dampingFraction: 0.84), value: dropTargetID)
+                                }
+                                    .animation(UNMotion.dragLift, value: draggingID)
+                                    .animation(UNMotion.dragDisplace, value: appState.todoItems.map(\.id))
                                     // Drag-to-reorder — only undone items
-                                    .if(!item.isDone && editingID == nil) { view in
+                                    .if(!item.isDone && editingID == nil && !isDragged) { view in
                                         view.onDrag {
                                             startDrag(item)
                                         } preview: {
@@ -115,16 +103,12 @@ struct TodoModuleView: View {
                                             target: item,
                                             items: Bindable(appState).todoItems,
                                             draggingID: $draggingID,
-                                            dropTargetID: $dropTargetID,
-                                            onCleanup: { cleanupDrag() }
+                                            onCommit: { commitDrag() }
                                         )
                                     )
                             }
                         }
-                        .animation(
-                            .spring(response: 0.35, dampingFraction: 0.72),
-                            value: appState.todoItems.map(\.id)
-                        )
+                        .animation(UNMotion.listItem, value: appState.todoItems.map(\.id))
                         .padding(.bottom, 4)
                     }
                     .clipped()
@@ -135,6 +119,16 @@ struct TodoModuleView: View {
                         }
                     }
                 }
+            }
+            .onAppear {
+                resetDanglingDragState()
+            }
+            .onChange(of: appState.activeModuleID) { _, newValue in
+                guard newValue != "todoList" else { return }
+                cancelDrag()
+            }
+            .onDisappear {
+                cancelDrag()
             }
         }
     }
@@ -275,12 +269,34 @@ struct TodoModuleView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
+    private var dragInsertionRail: some View {
+        HStack {
+            Capsule()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            UNConstants.iconActiveTint.opacity(0.55),
+                            UNConstants.iconActiveTint,
+                            UNConstants.iconActiveTint.opacity(0.55)
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .frame(height: 3)
+                .shadow(color: UNConstants.iconActiveTint.opacity(0.45), radius: 7, y: 0)
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 12)
+        .transition(.opacity.combined(with: .scale(scale: 0.96)))
+    }
+
     // MARK: - Actions
 
     private func confirmAdd() {
         let text = newTaskText.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty else { cancelAdd(); return }
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.74)) {
+        withAnimation(UNMotion.expressive) {
             appState.todoItems.insert(TodoItem(title: text), at: 0)
         }
         newTaskText = ""
@@ -295,7 +311,7 @@ struct TodoModuleView: View {
     }
 
     private func deleteTask(_ id: UUID) {
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.74)) {
+        withAnimation(UNMotion.listItem) {
             appState.todoItems.removeAll { $0.id == id }
         }
     }
@@ -310,21 +326,88 @@ struct TodoModuleView: View {
         appState.dismissalLocks.remove(.activeEditing)
     }
 
-    private func cleanupDrag() {
-        var transaction = Transaction()
-        transaction.disablesAnimations = true
-        withTransaction(transaction) {
-            draggingID = nil
-            dropTargetID = nil
+    private func finishDrag(commit: Bool) {
+        guard draggingID != nil || dragOriginalItems != nil else { return }
+
+        uninstallDragEndMonitors()
+
+        if !commit, let originalItems = dragOriginalItems {
+            withAnimation(UNMotion.dragDisplace) {
+                appState.todoItems = originalItems
+            }
         }
+
+        withAnimation(UNMotion.dragLift) {
+            draggingID = nil
+        }
+
+        dragOriginalItems = nil
+        didCommitDrag = false
         appState.dismissalLocks.remove(.dragDrop)
     }
 
     private func startDrag(_ item: TodoItem) -> NSItemProvider {
+        dragOriginalItems = appState.todoItems
+        didCommitDrag = false
         draggingID = item.id
-        dropTargetID = item.id
         appState.dismissalLocks.insert(.dragDrop)
+        installDragEndMonitors()
         return NSItemProvider(object: item.id.uuidString as NSString)
+    }
+
+    private func commitDrag() {
+        didCommitDrag = true
+        finishDrag(commit: true)
+    }
+
+    private func cancelDrag() {
+        finishDrag(commit: false)
+    }
+
+    private func resetDanglingDragState() {
+        guard draggingID != nil || dragOriginalItems != nil else { return }
+        cancelDrag()
+    }
+
+    private func installDragEndMonitors() {
+        uninstallDragEndMonitors()
+
+        localDragEndMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.leftMouseUp, .rightMouseUp, .otherMouseUp, .keyDown]
+        ) { event in
+            if event.type == .keyDown, event.keyCode == 53 {
+                scheduleDragCleanupFallback()
+            } else if event.type == .leftMouseUp ||
+                        event.type == .rightMouseUp ||
+                        event.type == .otherMouseUp {
+                scheduleDragCleanupFallback()
+            }
+            return event
+        }
+
+        globalDragEndMonitor = NSEvent.addGlobalMonitorForEvents(
+            matching: [.leftMouseUp, .rightMouseUp, .otherMouseUp]
+        ) { _ in
+            scheduleDragCleanupFallback()
+        }
+    }
+
+    private func uninstallDragEndMonitors() {
+        if let localDragEndMonitor {
+            NSEvent.removeMonitor(localDragEndMonitor)
+            self.localDragEndMonitor = nil
+        }
+        if let globalDragEndMonitor {
+            NSEvent.removeMonitor(globalDragEndMonitor)
+            self.globalDragEndMonitor = nil
+        }
+    }
+
+    private func scheduleDragCleanupFallback() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            guard draggingID != nil else { return }
+            finishDrag(commit: didCommitDrag)
+        }
     }
 
     /// Toggle done/undone, then re-sort so undone items always precede done items.
@@ -332,7 +415,7 @@ struct TodoModuleView: View {
     /// mutation + positional move in the same animation block.
     private func toggleTask(_ id: UUID) {
         guard let idx = appState.todoItems.firstIndex(where: { $0.id == id }) else { return }
-        withAnimation(.spring(response: 0.38, dampingFraction: 0.74)) {
+        withAnimation(UNMotion.listItem) {
             appState.todoItems[idx].isDone.toggle()
             let undone = appState.todoItems.filter { !$0.isDone }
             let done   = appState.todoItems.filter {  $0.isDone }
@@ -363,25 +446,15 @@ private struct TodoDropDelegate: DropDelegate {
     let target: TodoItem
     @Binding var items: [TodoItem]
     @Binding var draggingID: UUID?
-    @Binding var dropTargetID: UUID?
-    let onCleanup: () -> Void
+    let onCommit: () -> Void
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
-        if draggingID != target.id, !target.isDone {
-            dropTargetID = target.id
-        }
         return DropProposal(operation: .move)
     }
 
     func performDrop(info: DropInfo) -> Bool {
-        onCleanup()
+        onCommit()
         return true
-    }
-
-    func dropExited(info: DropInfo) {
-        if dropTargetID == target.id {
-            dropTargetID = nil
-        }
     }
 
     func dropEntered(info: DropInfo) {
@@ -394,9 +467,7 @@ private struct TodoDropDelegate: DropDelegate {
             !items[from].isDone
         else { return }
 
-        dropTargetID = target.id
-
-        withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+        withAnimation(UNMotion.dragDisplace) {
             items.move(
                 fromOffsets: IndexSet(integer: from),
                 toOffset: to > from ? to + 1 : to
@@ -534,7 +605,7 @@ private struct LiveTaskRowView: View {
             guard !isEditing else { return }
             onToggle()
         }
-        .onHover { h in withAnimation(.easeInOut(duration: 0.15)) { isHovering = h } }
+        .onHover { h in withAnimation(UNMotion.hover) { isHovering = h } }
         .onChange(of: isEditing) { _, editing in
             if editing {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {

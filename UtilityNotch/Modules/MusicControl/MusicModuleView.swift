@@ -44,7 +44,7 @@ struct MusicModuleView: View {
             modules: shellNavItems(appState: appState),
             activeModuleID: appState.activeModuleID,
             onModuleSelect: { id in
-                withAnimation(.spring(duration: 0.28, bounce: 0.16)) {
+                withAnimation(UNMotion.moduleSwitch) {
                     appState.selectModule(id)
                 }
             },
@@ -228,7 +228,7 @@ struct MusicModuleView: View {
         }
         .frame(maxWidth: .infinity)
         .multilineTextAlignment(.center)
-        .animation(.easeInOut(duration: 0.25), value: orchestrator.nowPlaying?.current?.id)
+        .animation(UNMotion.standard, value: orchestrator.nowPlaying?.current?.id)
     }
 
     // MARK: - Sound wave
@@ -284,9 +284,10 @@ struct MusicModuleView: View {
                 Image(systemName: icon)
                     .font(.system(size: size, weight: .medium))
                     .foregroundStyle(Color.white.opacity(disabled ? 0.3 : 1.0))
+                    .contentTransition(.symbolEffect(.replace.downUp))
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressFeedback)
         .disabled(disabled)
     }
 
@@ -311,7 +312,7 @@ struct MusicModuleView: View {
                         startPoint: .leading, endPoint: .trailing
                     ))
                     .frame(width: max(0, trackWidth * progress), height: 3)
-                    .animation(isDraggingProgress ? nil : .spring(response: 0.4, dampingFraction: 0.9),
+                    .animation(isDraggingProgress ? nil : UNMotion.progress,
                                value: progress)
             }
             .frame(height: 12)

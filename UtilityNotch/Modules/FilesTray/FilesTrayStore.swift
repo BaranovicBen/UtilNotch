@@ -37,7 +37,7 @@ final class FilesTrayStore {
         var changed = false
         for url in urls {
             guard !trayItems.contains(where: { $0.path == url.path }) else { continue }
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            withAnimation(UNMotion.expressive) {
                 trayItems.append(TrayItem(url: url))
             }
             changed = true
@@ -48,7 +48,7 @@ final class FilesTrayStore {
     /// Removes a single item and persists.
     func removeItem(_ item: TrayItem) {
         selectedIDs.remove(item.id)
-        withAnimation(.easeOut(duration: 0.2)) {
+        withAnimation(UNMotion.listItem) {
             trayItems.removeAll { $0.id == item.id }
         }
         TrayPersistence.save(trayItems)
@@ -56,13 +56,13 @@ final class FilesTrayStore {
 
     /// Removes all currently selected items and exits select mode if tray becomes empty.
     func removeSelected() {
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.74)) {
+        withAnimation(UNMotion.listItem) {
             trayItems.removeAll { selectedIDs.contains($0.id) }
         }
         selectedIDs.removeAll()
         TrayPersistence.save(trayItems)
         if trayItems.isEmpty {
-            withAnimation(.spring(response: 0.28, dampingFraction: 0.72)) {
+            withAnimation(UNMotion.standard) {
                 isSelectMode = false
             }
         }
@@ -71,14 +71,14 @@ final class FilesTrayStore {
     // MARK: - Selection
 
     func toggleSelectMode() {
-        withAnimation(.spring(response: 0.28, dampingFraction: 0.72)) {
+        withAnimation(UNMotion.standard) {
             isSelectMode.toggle()
         }
         if !isSelectMode { selectedIDs.removeAll() }
     }
 
     func toggleSelection(_ item: TrayItem) {
-        withAnimation(.spring(response: 0.22, dampingFraction: 0.75)) {
+        withAnimation(UNMotion.tap) {
             if selectedIDs.contains(item.id) {
                 selectedIDs.remove(item.id)
             } else {

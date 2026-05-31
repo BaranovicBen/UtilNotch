@@ -34,7 +34,7 @@ struct SidebarRailView: View {
                                 name: module.name,
                                 isActive: appState.activeModuleID == module.id
                             ) {
-                                withAnimation(.spring(duration: 0.28, bounce: 0.16)) {
+                                withAnimation(UNMotion.moduleSwitch) {
                                     appState.selectModule(module.id)
                                 }
                             }
@@ -125,13 +125,13 @@ private struct SidebarButton: View {
                     .font(.system(size: UNConstants.sidebarIconSize, weight: .medium))
                     .foregroundStyle(iconColor)
                     .scaleEffect(isHovering ? 1.07 : 1.0)
-                    .animation(.easeOut(duration: 0.14), value: isHovering)
+                    .animation(UNMotion.tap, value: isHovering)
             }
             .frame(width: 32, height: 32)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressFeedback)
         .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.12)) { isHovering = hovering }
+            withAnimation(UNMotion.hover) { isHovering = hovering }
             if hovering {
                 // 150ms delay before showing tooltip (Rule 6 / DESIGN.md §6)
                 tooltipTask?.cancel()
@@ -194,12 +194,12 @@ private struct SidebarGearButton: View {
                     .font(.system(size: 18, weight: .regular))
                     .foregroundStyle(isHovering ? Color.white : Color.white.opacity(0.50))
                     .scaleEffect(isHovering ? 1.07 : 1.0)
-                    .animation(.easeOut(duration: 0.14), value: isHovering)
+                    .animation(UNMotion.tap, value: isHovering)
             }
             .frame(width: 32, height: 32)
         }
-        .buttonStyle(.plain)
-        .onHover { h in withAnimation(.easeInOut(duration: 0.12)) { isHovering = h } }
+        .buttonStyle(.pressFeedback)
+        .onHover { h in withAnimation(UNMotion.hover) { isHovering = h } }
     }
 }
 // MARK: - Drop Delegate
@@ -216,7 +216,7 @@ private struct SidebarDropDelegate: DropDelegate {
               let from = current.firstIndex(of: draggingID),
               let to   = current.firstIndex(of: item) else { return }
         if current[to] != draggingID {
-            withAnimation(.easeInOut(duration: 0.15)) {
+            withAnimation(UNMotion.dragDisplace) {
                 current.move(fromOffsets: IndexSet(integer: from), toOffset: to > from ? to + 1 : to)
             }
         }

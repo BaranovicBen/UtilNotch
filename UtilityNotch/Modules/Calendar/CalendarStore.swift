@@ -175,7 +175,7 @@ final class CalendarStore {
     /// Moves selectedDate by delta days and reloads events.
     func shiftDay(_ delta: Int) {
         guard let d = Calendar.current.date(byAdding: .day, value: delta, to: selectedDate) else { return }
-        withAnimation(.spring(response: 0.28, dampingFraction: 0.72)) {
+        withAnimation(UNMotion.daySelect) {
             selectedDate = Calendar.current.startOfDay(for: d)
         }
         loadEvents()
@@ -183,7 +183,7 @@ final class CalendarStore {
 
     /// Selects a specific day from the week strip and reloads events.
     func selectDay(_ date: Date) {
-        withAnimation(.spring(response: 0.25, dampingFraction: 0.72)) {
+        withAnimation(UNMotion.daySelect) {
             selectedDate = Calendar.current.startOfDay(for: date)
         }
         loadEvents()

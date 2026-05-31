@@ -134,7 +134,7 @@ struct FilesTrayView: View {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .fill(Color.white.opacity(isDropTargeted ? 0.04 : 0))
                 )
-                .animation(.easeInOut(duration: 0.15), value: isDropTargeted)
+                .animation(UNMotion.hover, value: isDropTargeted)
 
             VStack(spacing: 8) {
                 Image(systemName: "tray.and.arrow.down")
@@ -158,7 +158,7 @@ struct FilesTrayView: View {
                     Color.white.opacity(isDropTargeted ? 0.35 : 0),
                     style: StrokeStyle(lineWidth: 1, dash: [6, 4])
                 )
-                .animation(.easeInOut(duration: 0.15), value: isDropTargeted)
+                .animation(UNMotion.hover, value: isDropTargeted)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: 10) {
@@ -184,7 +184,7 @@ struct FilesTrayView: View {
                       let url  = URL(dataRepresentation: data, relativeTo: nil) else { return }
                 Task { @MainActor in
                     guard !items.contains(where: { $0.path == url.path }) else { return }
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                    withAnimation(UNMotion.expressive) {
                         items.append(TrayItem(url: url))
                     }
                     TrayPersistence.save(items)
@@ -198,7 +198,7 @@ struct FilesTrayView: View {
     // MARK: - Actions
 
     private func remove(_ item: TrayItem) {
-        withAnimation(.easeOut(duration: 0.2)) {
+        withAnimation(UNMotion.listItem) {
             items.removeAll { $0.id == item.id }
         }
         TrayPersistence.save(items)
@@ -268,7 +268,7 @@ private struct TrayThumbnail: View {
                 .transition(.scale(scale: 0.6).combined(with: .opacity))
             }
         }
-        .onHover { h in withAnimation(.easeInOut(duration: 0.15)) { isHovering = h } }
+        .onHover { h in withAnimation(UNMotion.hover) { isHovering = h } }
         .onAppear { loadIcon() }
     }
 
@@ -289,7 +289,7 @@ struct FilesTraySettingsView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Files Tray Settings")
                 .font(.headline)
-                .foregroundStyle(.white)
+                .foregroundStyle(.primary)
 
             VStack(alignment: .leading, spacing: 6) {
                 Text("Max tray capacity")

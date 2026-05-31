@@ -36,7 +36,7 @@ struct FilesTrayModuleView: View {
             modules: shellNavItems(appState: appState),
             activeModuleID: appState.activeModuleID,
             onModuleSelect: { id in
-                withAnimation(.spring(duration: 0.28, bounce: 0.16)) {
+                withAnimation(UNMotion.moduleSwitch) {
                     appState.selectModule(id)
                 }
             },
@@ -96,9 +96,9 @@ struct FilesTrayModuleView: View {
                             }
                         }
                     }
-                    .animation(.spring(response: 0.28, dampingFraction: 0.72), value: isUsingDummy)
-                    .animation(.spring(response: 0.28, dampingFraction: 0.72), value: store.isSelectMode)
-                    .animation(.spring(response: 0.28, dampingFraction: 0.72), value: store.selectedIDs.isEmpty)
+                    .animation(UNMotion.standard, value: isUsingDummy)
+                    .animation(UNMotion.standard, value: store.isSelectMode)
+                    .animation(UNMotion.standard, value: store.selectedIDs.isEmpty)
                 )
             }
         ) {
@@ -114,7 +114,7 @@ struct FilesTrayModuleView: View {
                                 style: StrokeStyle(lineWidth: isDragTargeted ? 1.5 : 1, dash: [6, 4])
                             )
                     )
-                    .animation(.easeInOut(duration: 0.15), value: isDragTargeted)
+                    .animation(UNMotion.hover, value: isDragTargeted)
 
                 // Files grid — 4-column LazyVGrid
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 16) {
@@ -266,7 +266,7 @@ private struct CircularIconButton: View {
                     )
                 )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressFeedback)
         .disabled(isDisabled)
         .overlay(alignment: .bottom) {
             if isHovering && !isDisabled {
@@ -287,7 +287,7 @@ private struct CircularIconButton: View {
                     .zIndex(100)
             }
         }
-        .onHover { h in withAnimation(.easeInOut(duration: 0.15)) { isHovering = h } }
+        .onHover { h in withAnimation(UNMotion.hover) { isHovering = h } }
         .zIndex(isHovering ? 100 : 0)
     }
 }
@@ -412,7 +412,7 @@ private struct LiveThumbnailView: View {
                 .transition(.scale(scale: 0.7).combined(with: .opacity))
             }
         }
-        .onHover { h in withAnimation(.easeInOut(duration: 0.15)) { isHovering = h } }
+        .onHover { h in withAnimation(UNMotion.hover) { isHovering = h } }
         .onAppear { loadIcon() }
     }
 

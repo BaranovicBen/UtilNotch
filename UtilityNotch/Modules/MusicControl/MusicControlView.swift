@@ -76,7 +76,7 @@ struct MusicControlView: View {
                         Capsule()
                             .fill(progressGradient)
                             .frame(width: max(0, geo.size.width * progress), height: 2.5)
-                            .animation(.linear(duration: 0.5), value: progress)
+                            .animation(UNMotion.progress, value: progress)
                     }
                 }
                 .frame(height: 2.5)
@@ -126,11 +126,11 @@ struct MusicControlView: View {
     // MARK: - Actions
 
     private func togglePlayPause() {
-        withAnimation(.easeInOut(duration: 0.15)) { isPlaying.toggle() }
+        withAnimation(UNMotion.tap) { isPlaying.toggle() }
     }
 
     private func nextTrack() {
-        withAnimation(.easeInOut(duration: 0.2)) {
+        withAnimation(UNMotion.standard) {
             trackIndex = (trackIndex + 1) % MockTrack.sampleTracks.count
             currentTrack = MockTrack.sampleTracks[trackIndex]
             progress = 0
@@ -138,7 +138,7 @@ struct MusicControlView: View {
     }
 
     private func previousTrack() {
-        withAnimation(.easeInOut(duration: 0.2)) {
+        withAnimation(UNMotion.standard) {
             trackIndex = (trackIndex - 1 + MockTrack.sampleTracks.count) % MockTrack.sampleTracks.count
             currentTrack = MockTrack.sampleTracks[trackIndex]
             progress = 0
@@ -186,8 +186,8 @@ private struct CircularControlButton: View {
             }
             .frame(width: diameter, height: diameter)
         }
-        .buttonStyle(.plain)
-        .onHover { h in withAnimation(.easeOut(duration: 0.12)) { isHovering = h } }
+        .buttonStyle(.pressFeedback)
+        .onHover { h in withAnimation(UNMotion.hover) { isHovering = h } }
     }
 }
 

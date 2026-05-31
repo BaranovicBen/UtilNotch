@@ -98,7 +98,7 @@ struct CalendarModuleView: View {
             modules: shellNavItems(appState: appState),
             activeModuleID: appState.activeModuleID,
             onModuleSelect: { id in
-                withAnimation(.spring(duration: 0.28, bounce: 0.16)) {
+                withAnimation(UNMotion.moduleSwitch) {
                     appState.selectModule(id)
                 }
             },
@@ -163,7 +163,7 @@ struct CalendarModuleView: View {
                         .fill(Color.white.opacity(0.10))
                 )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressFeedback)
     }
 
     // MARK: - Week Strip
@@ -274,14 +274,14 @@ struct CalendarModuleView: View {
 
     private func shiftDay(_ delta: Int) {
         guard let d = Calendar.current.date(byAdding: .day, value: delta, to: selectedDate) else { return }
-        withAnimation(.spring(response: 0.28, dampingFraction: 0.72)) {
+        withAnimation(UNMotion.daySelect) {
             selectedDate = Calendar.current.startOfDay(for: d)
         }
         loadEvents()
     }
 
     private func selectDay(_ date: Date) {
-        withAnimation(.spring(response: 0.25, dampingFraction: 0.72)) {
+        withAnimation(UNMotion.daySelect) {
             selectedDate = Calendar.current.startOfDay(for: date)
         }
         loadEvents()
