@@ -33,6 +33,13 @@ final class HoverTriggerZone {
         triggerWindow = nil
     }
 
+    /// When the panel is visible, make the trigger window transparent to all
+    /// mouse and drag events so it doesn't intercept drag-and-drop sessions.
+    /// When the panel hides, restore normal hit-testing so hover-to-open works.
+    func setPassthrough(_ passthrough: Bool) {
+        triggerWindow?.ignoresMouseEvents = passthrough
+    }
+
     // MARK: - Private
 
     private func makeWindow() -> NSWindow {

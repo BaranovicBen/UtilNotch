@@ -82,9 +82,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func handlePanelVisibilityChange() {
         guard let panelController else { return }
         if appState.isPanelVisible {
+            // Make the trigger zone transparent to drag events while the panel is open.
+            // HoverTriggerZone and the panel share the same window level (mainMenuWindow+2).
+            // With two same-level windows overlapping, macOS drag IPC can route a drop to
+            // the wrong window — causing kDragIPCLeaveApplication while the panel's drop
+            // delegate fires simultaneously (reentrant conflict). Passthrough eliminates
+            // the conflict: the trigger zone is only needed to open the panel, and it
+            // already is open, so it doesn't need to receive any events.
+            hoverTrigger?.setPassthrough(true)
             panelController.showPanel()
         } else {
             panelController.hidePanel()
+            hoverTrigger?.setPassthrough(false)
         }
     }
 
