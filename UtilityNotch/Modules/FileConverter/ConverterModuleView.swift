@@ -6,8 +6,9 @@ struct ConverterModuleView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    @State private var store = FileConverterStore()
     @State private var isDragTargeted = false
+
+    private var store: FileConverterStore { appState.fileConverterStore }
 
     private var statusRight: String {
         switch store.state {
@@ -40,17 +41,6 @@ struct ConverterModuleView: View {
 
                 outputTypeStrip
             }
-        }
-        .onAppear {
-            if let url = appState.pendingFileURL {
-                select(url)
-                appState.pendingFileURL = nil
-            }
-        }
-        .onChange(of: appState.pendingFileURL) { _, url in
-            guard let url else { return }
-            select(url)
-            appState.pendingFileURL = nil
         }
         .onChange(of: isDragTargeted) { _, targeted in
             if targeted { appState.dismissalLocks.insert(.dragDrop) }

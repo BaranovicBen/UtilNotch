@@ -8,7 +8,7 @@ import UniformTypeIdentifiers
 /// State lifecycle:
 ///   `appState.isExternalFileDrag = true`  → this view appears
 ///   Drop on Tray   → pendingTrayURLs → selectModule("filesTray")   → isExternalFileDrag = false
-///   Drop on Conv.  → pendingFileURL  → selectModule("fileConverter")→ isExternalFileDrag = false
+///   Drop on Conv.  → fileConverterStore.selectFile → selectModule("fileConverter") → isExternalFileDrag = false
 ///   Drag cancelled → NotchPanelView.onChange(isPanelDropTargeted)   → isExternalFileDrag = false
 struct FileDropChoiceView: View {
 
@@ -222,7 +222,7 @@ private struct ConverterDropDelegate: DropDelegate {
                   !url.hasDirectoryPath
             else { return }
             DispatchQueue.main.async {
-                appState.pendingFileURL = url
+                appState.fileConverterStore.selectFile(url)
             }
         }
         return true

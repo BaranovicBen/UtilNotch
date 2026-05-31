@@ -44,9 +44,9 @@ enum ConversionRoutingError: LocalizedError {
 // MARK: - Store
 
 /// Orchestrates all converters. Holds ephemeral session state only.
-/// Instantiate as `@State private var store = FileConverterStore()` inside the module view.
+/// Lives as a singleton on AppState so the converter drop delegate can call
+/// selectFile(_:) directly without depending on ConverterModuleView's view lifecycle.
 @Observable
-@MainActor
 final class FileConverterStore {
 
     // ── Inputs ────────────────────────────────────────────────────────────────
@@ -68,25 +68,24 @@ final class FileConverterStore {
         state = .detecting
         detectedType = FileTypeDetector.fileType(for: url)
 
-        Task {
+        Task { @MainActor in
             await refreshOutputTypes(for: url)
             state = .idle
         }
     }
 
-    /// Runs the conversion. The caller is responsible for managing DismissalLock(.activeConvert).
     func convert() async {
         guard let input = selectedFileURL, let outputType = selectedOutputType else {
             state = .failed(ConversionRoutingError.noOutputTypeSelected.localizedDescription)
             return
         }
-        state = .converting(progress: 0)
+        await MainActor.run { state = .converting(progress: 0) }
 
         do {
             let output = try await route(input: input, to: outputType)
-            state = .done(outputURL: output)
+            await MainActor.run { state = .done(outputURL: output) }
         } catch {
-            state = .failed(error.localizedDescription)
+            await MainActor.run { state = .failed(error.localizedDescription) }
         }
     }
 
@@ -117,17 +116,20 @@ final class FileConverterStore {
         }
     }
 
+    @MainActor
     private func refreshOutputTypes(for url: URL) async {
         let category = FileTypeDetector.category(for: url)
 
+        let types: [FileType]
         switch category {
         case .audio:
-            availableOutputTypes = await AudioConverter().availableOutputTypes(for: url)
+            types = await AudioConverter().availableOutputTypes(for: url)
         case .video:
-            availableOutputTypes = await VideoConverter().availableOutputTypes(for: url)
+            types = await VideoConverter().availableOutputTypes(for: url)
         default:
-            availableOutputTypes = FileTypeDetector.outputTypes(for: url)
+            types = FileTypeDetector.outputTypes(for: url)
         }
-        selectedOutputType = availableOutputTypes.first
+        availableOutputTypes = types
+        selectedOutputType = types.first
     }
 }

@@ -293,7 +293,9 @@ final class AppState {
     /// the Files Tray panel finishes opening. FilesTrayModuleView drains this on appear/change.
     var pendingTrayURLs: [URL] = []
 
-    var pendingFileURL: URL?
+    /// Singleton converter store — lives here so ConverterDropDelegate can call selectFile(_:)
+    /// directly without depending on ConverterModuleView's view lifecycle.
+    let fileConverterStore = FileConverterStore()
 
     /// True while the user is actively dragging files over the notch/panel.
     /// Drives FileDropChoiceView — the dual tray/converter drop surface shown in place of
