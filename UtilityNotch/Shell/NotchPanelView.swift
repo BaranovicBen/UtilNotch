@@ -49,7 +49,19 @@ struct NotchPanelView: View {
         }
         .onChange(of: isPanelDropTargeted) { _, targeted in
             if targeted { appState.dismissalLocks.insert(.dragDrop) }
-            else { appState.dismissalLocks.remove(.dragDrop) }
+            else {
+                appState.dismissalLocks.remove(.dragDrop)
+                // Drag left the panel without a drop (cancelled) — restore previous module.
+                if appState.isExternalFileDrag {
+                    withAnimation(UNMotion.standard) {
+                        appState.isExternalFileDrag = false
+                        if let prev = appState.preDragModuleID {
+                            appState.selectModule(prev)
+                            appState.preDragModuleID = nil
+                        }
+                    }
+                }
+            }
         }
         .environment(\.colorScheme, .dark)
     }
@@ -59,7 +71,11 @@ struct NotchPanelView: View {
         provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
             if let data = item as? Data, let url = URL(dataRepresentation: data, relativeTo: nil) {
                 DispatchQueue.main.async {
+                    // Background fallback: dropped on panel chrome outside any card.
+                    // Route to Files Tray and clean up drag state.
                     appState.pendingTrayURLs.append(url)
+                    appState.isExternalFileDrag = false
+                    appState.preDragModuleID = nil
                     appState.selectModule("filesTray")
                     appState.showPanel()
                 }

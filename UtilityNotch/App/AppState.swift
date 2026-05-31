@@ -295,6 +295,15 @@ final class AppState {
 
     var pendingFileURL: URL?
 
+    /// True while the user is actively dragging files over the notch/panel.
+    /// Drives FileDropChoiceView — the dual tray/converter drop surface shown in place of
+    /// the active module during the drag session.
+    var isExternalFileDrag: Bool = false
+
+    /// The module that was active before the external drag started.
+    /// Restored if the drag is cancelled without a drop.
+    var preDragModuleID: String? = nil
+
     var liveActivities: [LiveActivity] = []
 
     var highestPriorityLiveActivity: LiveActivity? {
@@ -328,6 +337,8 @@ final class AppState {
         isPanelVisible = false
         dismissalLocks.remove(.activeEditing)
         isPointerInsidePanel = false
+        isExternalFileDrag = false
+        preDragModuleID = nil
     }
 
     /// Force-hide even when interacting (e.g. user pressed Escape or hotkey).
@@ -335,6 +346,8 @@ final class AppState {
         isPanelVisible = false
         dismissalLocks = []
         isPointerInsidePanel = false
+        isExternalFileDrag = false
+        preDragModuleID = nil
     }
 
     /// Select a module; only if it's enabled. Clears activeEditing lock.

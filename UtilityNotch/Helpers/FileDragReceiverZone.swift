@@ -115,8 +115,9 @@ private class FileDragReceiverView: NSView {
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
         Task { @MainActor in
+            appState.preDragModuleID = appState.activeModuleID
+            appState.isExternalFileDrag = true
             appState.showPanel()
-            appState.selectModule("filesTray")
             appState.dismissalLocks.insert(.externalDragDrop)
         }
         return .copy
@@ -144,7 +145,11 @@ private class FileDragReceiverView: NSView {
         ) as? [URL], !items.isEmpty else { return false }
 
         Task { @MainActor in
+            // Dropped on the notch zone itself (not into a panel card) — route to Files Tray.
             appState.pendingTrayURLs.append(contentsOf: items)
+            appState.isExternalFileDrag = false
+            appState.preDragModuleID = nil
+            appState.selectModule("filesTray")
             appState.dismissalLocks.remove(.externalDragDrop)
         }
         return true

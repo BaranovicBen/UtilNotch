@@ -1,6 +1,8 @@
 import SwiftUI
 
 /// Center content area that displays the currently active utility module's view.
+/// During an external file drag (`appState.isExternalFileDrag == true`), replaces the
+/// active module with `FileDropChoiceView` — a dual Tray / Converter drop surface.
 /// Lazily resolves the module from the registry each time the active ID changes.
 struct ActiveModuleContainerView: View {
     @Environment(AppState.self) private var appState
@@ -8,7 +10,10 @@ struct ActiveModuleContainerView: View {
     
     var body: some View {
         Group {
-            if let module = ModuleRegistry.module(for: appState.activeModuleID) {
+            if appState.isExternalFileDrag {
+                FileDropChoiceView()
+                    .transition(contentTransition)
+            } else if let module = ModuleRegistry.module(for: appState.activeModuleID) {
                 module.makeMainView()
                     .id(module.id)
                     .transition(moduleTransition)
@@ -19,6 +24,16 @@ struct ActiveModuleContainerView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .clipped()
         .animation(reduceMotion ? UNMotion.reduced : UNMotion.contentFade, value: appState.activeModuleID)
+        .animation(reduceMotion ? UNMotion.reduced : UNMotion.standard, value: appState.isExternalFileDrag)
+    }
+
+    private var contentTransition: AnyTransition {
+        reduceMotion
+            ? .opacity
+            : .asymmetric(
+                insertion: .opacity.combined(with: .scale(scale: 0.97)),
+                removal: .opacity.combined(with: .scale(scale: 1.02))
+            )
     }
 
     private var moduleTransition: AnyTransition {
