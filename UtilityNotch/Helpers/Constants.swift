@@ -81,6 +81,21 @@ enum UNConstants {
     static let headerHeight: CGFloat = 60
     static let footerHeight: CGFloat = 38
     static let contentHeight: CGFloat = 282
+    static let contentPaddingH: CGFloat = 16
+    static let contentPaddingV: CGFloat = 8
+    static let moduleCanvasWidth: CGFloat = panelWidth - sidebarWidth - (contentPaddingH * 2)
+    static let moduleCanvasHeight: CGFloat = contentHeight - (contentPaddingV * 2)
+
+    // MARK: - Component Layout
+
+    static let hudButtonSize: CGFloat = 28
+    static let hudIconSize: CGFloat = 12
+    static let compactControlHeight: CGFloat = 30
+    static let rowCornerRadius: CGFloat = 8
+    static let cardCornerRadius: CGFloat = 8
+    static let tileCornerRadius: CGFloat = 10
+    static let moduleColumnGap: CGFloat = 12
+    static let moduleRowGap: CGFloat = 8
 
     // MARK: - Header / Footer Padding
 
@@ -107,12 +122,63 @@ enum UNConstants {
     static let accentHighlight = Color.white.opacity(0.08)
     static let iconTint = Color.white.opacity(0.35)
     static let iconActiveTint = Color(hex: "0A84FF")
+    static let accentBlue = Color(hex: "0A84FF")
+    static let successGreen = Color(red: 52/255, green: 199/255, blue: 89/255)
+    static let destructiveRed = Color(red: 1.0, green: 0.271, blue: 0.227)
+    static let amber = Color(red: 255/255, green: 159/255, blue: 10/255)
 
     // MARK: - Surface Opacities
 
-    static let panelGlowOpacity: Double = 0.05
+    static let panelGlowOpacity: Double = 0.08
+    static let panelGlowRadius: CGFloat = 220
     static let activeStateOpacity: Double = 0.08
     static let hoverStateOpacity: Double = 0.05
+    static let panelGhostBorder = Color.white.opacity(0.10)
+    static let sidebarBorder = Color.white.opacity(0.15)
+    static let contentLift = Color.white.opacity(0.02)
+    static let insetSurface = Color.white.opacity(0.04)
+    static let rowSurface = Color.white.opacity(0.03)
+    static let rowHoverSurface = Color.white.opacity(0.05)
+    static let raisedSurface = Color.white.opacity(0.08)
+    static let selectedSurface = Color.white.opacity(0.12)
+    static let controlSurface = Color.white.opacity(0.10)
+    static let controlHoverSurface = Color.white.opacity(0.14)
+    static let overlayScrim = Color.black.opacity(0.50)
+    static let tooltipSurface = Color.black.opacity(0.60)
+    static let textPrimary = Color.white.opacity(0.85)
+    static let textSecondary = Color.white.opacity(0.55)
+    static let textTertiary = Color.white.opacity(0.35)
+    static let textPlaceholder = Color.white.opacity(0.25)
+    static let textMuted = Color.white.opacity(0.30)
+
+    // MARK: - Module Environmental Tints
+
+    static let todoContentTint = successGreen.opacity(0.015)
+    static let notesContentTint = amber.opacity(0.014)
+    static let clipboardContentTint = accentBlue.opacity(0.015)
+    static let musicContentTint = musicProgressStart.opacity(0.012)
+    static let calendarContentTint = accentBlue.opacity(0.015)
+    static let filesContentTint = fileDefaultEnd.opacity(0.012)
+    static let fileConverterContentTint = fileVideoEnd.opacity(0.012)
+    static let activeAppsContentTint = fileDefaultEnd.opacity(0.014)
+    static let downloadsContentTint = fileAudioEnd.opacity(0.014)
+    static let recentFilesContentTint = fileDefaultStart.opacity(0.014)
+    static let liveActivitiesContentTint = accentBlue.opacity(0.014)
+
+    // MARK: - File Type Tints
+
+    static let fileImageStart = Color(hex: "7C3AED")
+    static let fileImageEnd = Color(hex: "EC4899")
+    static let filePDFStart = Color(hex: "DC2626")
+    static let filePDFEnd = Color(hex: "F97316")
+    static let fileVideoStart = Color(hex: "2563EB")
+    static let fileVideoEnd = Color(hex: "06B6D4")
+    static let fileAudioStart = Color(hex: "059669")
+    static let fileAudioEnd = Color(hex: "34D399")
+    static let fileArchiveStart = Color(hex: "D97706")
+    static let fileArchiveEnd = Color(hex: "FBBF24")
+    static let fileDefaultStart = Color(hex: "475569")
+    static let fileDefaultEnd = Color(hex: "94A3B8")
 
     // MARK: - State Colors
 
@@ -188,6 +254,9 @@ enum UNMotion {
 
     /// Cross-fade between two states of the same surface.
     static let crossFade: Animation = .smooth(duration: 0.22, extraBounce: 0)
+
+    /// Reduced-motion fallback — short opacity/scale changes without travel.
+    static let reduced: Animation = .smooth(duration: 0.12, extraBounce: 0)
 
     /// Module-switch content fade in `ActiveModuleContainerView`.
     static let contentFade: Animation = .smooth(duration: 0.22, extraBounce: 0)

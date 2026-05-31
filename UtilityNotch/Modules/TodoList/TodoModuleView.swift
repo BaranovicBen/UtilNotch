@@ -16,20 +16,15 @@ struct TodoModuleView: View {
     @State private var localDragEndMonitor: Any? = nil
     @State private var globalDragEndMonitor: Any? = nil
 
-    // Dummy tasks shown when data source is empty
-    private static let dummyTasks: [(text: String, timestamp: String, isDone: Bool)] = [
-        (text: "Fix parser bug",           timestamp: "09:41", isDone: false),
-        (text: "Write unit tests",          timestamp: "10:15", isDone: false),
-        (text: "Review pull request #42",   timestamp: "11:03", isDone: false),
-        (text: "Update dependencies",       timestamp: "08:30", isDone: true),
-        (text: "Ship v1.0 release notes",   timestamp: "08:00", isDone: true),
-    ]
-
     private var isUsingDummy: Bool { appState.todoItems.isEmpty }
-    private var completedCount: Int { isUsingDummy ? 2 : appState.completedCount }
-    private var remainingCount: Int { isUsingDummy ? 3 : appState.remainingCount }
+    private var completedCount: Int { appState.completedCount }
+    private var remainingCount: Int { appState.remainingCount }
+    private var totalCount: Int { completedCount + remainingCount }
+    private var allDone: Bool { !isUsingDummy && completedCount > 0 && remainingCount == 0 }
 
     var body: some View {
+        @Bindable var state = appState
+
         ModuleShellView(
             moduleTitle: "Todo",
             moduleIcon: "checklist",
@@ -41,8 +36,8 @@ struct TodoModuleView: View {
                 }
             },
             statusDotColor: Color.white.opacity(0.2),
-            statusLeft: "\(completedCount) COMPLETED TODAY",
-            statusRight: "\(remainingCount) REMAINING",
+            statusLeft: "\(completedCount) DONE",
+            statusRight: allDone ? "ALL CLEAR" : "\(remainingCount) LEFT",
             actionButton: {
                 AnyView(
                     Button {
@@ -56,70 +51,65 @@ struct TodoModuleView: View {
                 )
             }
         ) {
-            VStack(spacing: 0) {
-                if showAddInput {
-                    addInputRow
-                        .padding(.bottom, 8)
-                }
+            HStack(alignment: .top, spacing: UNConstants.moduleColumnGap) {
+                todoSummaryPanel
+                    .frame(width: 132)
+                    .frame(maxHeight: .infinity)
 
-                if isUsingDummy {
-                    // Non-interactive dummy list
-                    ScrollView(.vertical, showsIndicators: false) {
-                        VStack(spacing: 8) {
-                            ForEach(Self.dummyTasks, id: \.text) { t in
-                                dummyRow(text: t.text, timestamp: t.timestamp, isDone: t.isDone)
-                            }
-                        }
+                VStack(spacing: UNConstants.moduleRowGap) {
+                    if showAddInput {
+                        addInputRow
                     }
-                } else {
-                    // Live list — stable stack with a visible source row and gap indicator.
-                    // This avoids the disappearing-row glitches caused by hiding the
-                    // source while SwiftUI is also animating repeated dropEntered moves.
-                    ScrollView(.vertical, showsIndicators: false) {
-                        VStack(spacing: 8) {
-                            ForEach(appState.todoItems) { item in
-                                let isDragged = draggingID == item.id
 
-                                Group {
-                                    if isDragged {
-                                        dragInsertionRail
-                                    } else {
-                                        liveRow(item)
-                                    }
-                                }
-                                    .animation(UNMotion.dragLift, value: draggingID)
-                                    .animation(UNMotion.dragDisplace, value: appState.todoItems.map(\.id))
-                                    // Drag-to-reorder — only undone items
-                                    .if(!item.isDone && editingID == nil && !isDragged) { view in
-                                        view.onDrag {
-                                            startDrag(item)
-                                        } preview: {
-                                            dragPreview(for: item)
+                    if isUsingDummy {
+                        todoEmptyState
+                    } else {
+                        ScrollView(.vertical, showsIndicators: false) {
+                            VStack(spacing: 8) {
+                                ForEach(appState.todoItems) { item in
+                                    let isDragged = draggingID == item.id
+
+                                    Group {
+                                        if isDragged {
+                                            dragInsertionRail
+                                        } else {
+                                            liveRow(item)
                                         }
                                     }
-                                    .onDrop(
-                                        of: [UTType.plainText],
-                                        delegate: TodoDropDelegate(
-                                            target: item,
-                                            items: Bindable(appState).todoItems,
-                                            draggingID: $draggingID,
-                                            onCommit: { commitDrag() }
+                                        .animation(UNMotion.dragLift, value: draggingID)
+                                        .animation(UNMotion.dragDisplace, value: appState.todoItems.map(\.id))
+                                        .if(!item.isDone && editingID == nil && !isDragged) { view in
+                                            view.onDrag {
+                                                startDrag(item)
+                                            } preview: {
+                                                dragPreview(for: item)
+                                            }
+                                        }
+                                        .onDrop(
+                                            of: [UTType.plainText],
+                                            delegate: TodoDropDelegate(
+                                                target: item,
+                                                items: $state.todoItems,
+                                                draggingID: $draggingID,
+                                                onCommit: { commitDrag() }
+                                            )
                                         )
-                                    )
+                                }
                             }
+                            .animation(UNMotion.listItem, value: appState.todoItems.map(\.id))
+                            .padding(.bottom, 4)
                         }
-                        .animation(UNMotion.listItem, value: appState.todoItems.map(\.id))
-                        .padding(.bottom, 4)
-                    }
-                    .clipped()
-                    .onChange(of: draggingID) { _, newVal in
-                        // Safety net: if draggingID is cleared by any path, release lock
-                        if newVal == nil {
-                            appState.dismissalLocks.remove(.dragDrop)
+                        .clipped()
+                        .onChange(of: draggingID) { _, newVal in
+                            if newVal == nil {
+                                appState.dismissalLocks.remove(.dragDrop)
+                            }
                         }
                     }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .onAppear {
                 resetDanglingDragState()
             }
@@ -133,6 +123,97 @@ struct TodoModuleView: View {
         }
     }
 
+    private var todoEmptyState: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "checklist")
+                .font(.system(size: 28, weight: .light))
+                .foregroundStyle(UNConstants.textPlaceholder)
+            Text("nothing here yet")
+                .font(.system(size: 14))
+                .foregroundStyle(UNConstants.textSecondary)
+            Button {
+                showAddInput = true
+                isNewTaskFocused = true
+                appState.dismissalLocks.insert(.activeEditing)
+            } label: {
+                Text("add your first task")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(UNConstants.textPrimary)
+                    .padding(.horizontal, 12)
+                    .frame(height: UNConstants.compactControlHeight)
+                    .background(Capsule().fill(UNConstants.controlSurface))
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var todoSummaryPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .lastTextBaseline, spacing: 2) {
+                    if allDone {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 40, weight: .black))
+                            .foregroundStyle(UNConstants.successGreen)
+                            .transition(.scale(scale: 0.8).combined(with: .opacity))
+                    } else {
+                        Text("\(completedCount)")
+                            .font(.system(size: 44, weight: .black))
+                            .foregroundStyle(UNConstants.textPrimary)
+                            .contentTransition(.numericText())
+                            .transition(.scale(scale: 0.8).combined(with: .opacity))
+                        Text("/ \(max(totalCount, 1))")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(UNConstants.textTertiary)
+                    }
+                }
+                .animation(UNMotion.expressive, value: allDone)
+
+                Text(allDone ? "all clear" : "done today")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(UNConstants.textSecondary)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                statusMetric(label: "done", value: completedCount, color: UNConstants.successGreen)
+                statusMetric(label: "open", value: remainingCount, color: UNConstants.accentBlue)
+            }
+
+            Spacer(minLength: 0)
+
+            Image(systemName: "checklist")
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(UNConstants.textTertiary)
+        }
+        .padding(12)
+        .background {
+            RoundedRectangle(cornerRadius: UNConstants.tileCornerRadius, style: .continuous)
+                .fill(UNConstants.insetSurface)
+                .overlay {
+                    if allDone {
+                        RoundedRectangle(cornerRadius: UNConstants.tileCornerRadius, style: .continuous)
+                            .fill(UNConstants.successGreen.opacity(0.04))
+                    }
+                }
+        }
+    }
+
+    private func statusMetric(label: String, value: Int, color: Color) -> some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(color)
+                .frame(width: 6, height: 6)
+            Text(label)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(UNConstants.textSecondary)
+            Spacer(minLength: 0)
+            Text("\(value)")
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .foregroundStyle(UNConstants.textPrimary)
+        }
+    }
+
     // MARK: - Add Input Row
 
     private var addInputRow: some View {
@@ -140,14 +221,14 @@ struct TodoModuleView: View {
             TextField("", text: $newTaskText)
                 .textFieldStyle(.plain)
                 .font(.system(size: 14, weight: .regular))
-                .foregroundStyle(Color.white.opacity(0.85))
+                .foregroundStyle(UNConstants.textPrimary)
                 .focused($isNewTaskFocused)
                 .onSubmit { confirmAdd() }
                 .overlay(alignment: .leading) {
                     if newTaskText.isEmpty {
                         Text("New task…")
                             .font(.system(size: 14, weight: .regular))
-                            .foregroundStyle(Color.white.opacity(0.25))
+                            .foregroundStyle(UNConstants.textPlaceholder)
                             .allowsHitTesting(false)
                     }
                 }
@@ -155,17 +236,17 @@ struct TodoModuleView: View {
                 .padding(.vertical, 7)
                 .background(
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(Color.white.opacity(0.06))
+                        .fill(UNConstants.insetSurface)
                 )
 
             Button { confirmAdd() } label: {
                 Image(systemName: "checkmark")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Color.white.opacity(0.8))
-                    .frame(width: 24, height: 24)
+                    .foregroundStyle(UNConstants.textPrimary)
+                    .frame(width: UNConstants.hudButtonSize, height: UNConstants.hudButtonSize)
                     .background(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(Color.white.opacity(0.08))
+                        Circle()
+                            .fill(UNConstants.controlSurface)
                     )
             }
             .buttonStyle(.plain)
@@ -173,11 +254,11 @@ struct TodoModuleView: View {
             Button { cancelAdd() } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Color.white.opacity(0.5))
-                    .frame(width: 24, height: 24)
+                    .foregroundStyle(UNConstants.textSecondary)
+                    .frame(width: UNConstants.hudButtonSize, height: UNConstants.hudButtonSize)
                     .background(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(Color.white.opacity(0.04))
+                        Circle()
+                            .fill(UNConstants.insetSurface)
                     )
             }
             .buttonStyle(.plain)
@@ -185,46 +266,10 @@ struct TodoModuleView: View {
         .padding(12)
         .frame(minHeight: 45)
         .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.white.opacity(0.03))
+            RoundedRectangle(cornerRadius: UNConstants.rowCornerRadius, style: .continuous)
+                .fill(UNConstants.rowSurface)
         )
         .onAppear { isNewTaskFocused = true }
-    }
-
-    // MARK: - Dummy Row
-
-    @ViewBuilder
-    private func dummyRow(text: String, timestamp: String, isDone: Bool) -> some View {
-        HStack(spacing: 12) {
-            if isDone {
-                ZStack {
-                    Circle().fill(Color(hex: "32D74B")).frame(width: 20, height: 20)
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(Color.white)
-                }
-            } else {
-                Circle()
-                    .strokeBorder(Color.white.opacity(0.3), lineWidth: 1)
-                    .frame(width: 20, height: 20)
-            }
-            Text(text)
-                .font(.system(size: 14, weight: .regular))
-                .foregroundStyle(isDone ? Color.white.opacity(0.3) : Color.white.opacity(0.85))
-                .strikethrough(isDone, color: Color.white.opacity(0.3))
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Text(timestamp)
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(Color.white.opacity(0.35))
-        }
-        .padding(12)
-        .frame(minHeight: 45)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.white.opacity(0.03))
-        )
-        .opacity(0.5)
     }
 
     // MARK: - Live Row
@@ -265,8 +310,8 @@ struct TodoModuleView: View {
             onCancelEdit: {}
         )
         .frame(width: 520)
-        .background(Color.black.opacity(0.82), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(UNConstants.overlayScrim, in: RoundedRectangle(cornerRadius: UNConstants.rowCornerRadius, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: UNConstants.rowCornerRadius, style: .continuous))
     }
 
     private var dragInsertionRail: some View {
@@ -284,7 +329,6 @@ struct TodoModuleView: View {
                     )
                 )
                 .frame(height: 3)
-                .shadow(color: UNConstants.iconActiveTint.opacity(0.45), radius: 7, y: 0)
         }
         .padding(.horizontal, 14)
         .frame(height: 12)
@@ -498,16 +542,18 @@ private struct LiveTaskRowView: View {
     let onCancelEdit: () -> Void
 
     @State private var isHovering = false
+    @State private var isConfirmingDelete = false
+    @State private var checkPulse = false
     @FocusState private var isEditFocused: Bool
 
     var body: some View {
         HStack(spacing: 12) {
             // Checkbox — toggles done/undone
-            Button(action: onToggle) {
+            Button(action: toggleWithPulse) {
                 if item.isDone {
                     ZStack {
                         Circle()
-                            .fill(Color(hex: "32D74B"))
+                            .fill(UNConstants.successGreen)
                             .frame(width: 20, height: 20)
                         Image(systemName: "checkmark")
                             .font(.system(size: 9, weight: .bold))
@@ -520,20 +566,22 @@ private struct LiveTaskRowView: View {
                 }
             }
             .buttonStyle(.plain)
+            .scaleEffect(checkPulse ? 1.22 : 1.0)
+            .animation(UNMotion.tap, value: checkPulse)
 
             // Inline edit field or task title
             if isEditing {
                 TextField("", text: $editDraft)
                     .textFieldStyle(.plain)
                     .font(.system(size: 14, weight: .regular))
-                    .foregroundStyle(Color.white.opacity(0.85))
+                    .foregroundStyle(UNConstants.textPrimary)
                     .focused($isEditFocused)
                     .onSubmit { onSaveEdit(editDraft) }
                     .frame(maxWidth: .infinity)
             } else {
                 Text(item.title)
                     .font(.system(size: 14, weight: .regular))
-                    .foregroundStyle(item.isDone ? Color.white.opacity(0.3) : Color.white.opacity(0.85))
+                    .foregroundStyle(item.isDone ? UNConstants.textMuted : UNConstants.textPrimary)
                     .strikethrough(item.isDone, color: Color.white.opacity(0.3))
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -544,7 +592,7 @@ private struct LiveTaskRowView: View {
                 Button { onSaveEdit(editDraft) } label: {
                     Image(systemName: "checkmark")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Color.white.opacity(0.8))
+                        .foregroundStyle(UNConstants.textPrimary)
                         .frame(width: 28, height: 28)
                         .background(
                             RoundedRectangle(cornerRadius: 6, style: .continuous)
@@ -562,11 +610,16 @@ private struct LiveTaskRowView: View {
                     }
                     .buttonStyle(.plain)
 
-                    Button(action: onDelete) {
-                        Image(systemName: "trash")
+                    Button(action: confirmOrDelete) {
+                        Image(systemName: isConfirmingDelete ? "trash.fill" : "trash")
                             .font(.system(size: 12))
-                            .foregroundStyle(Color(hex: "FF453A"))
+                            .foregroundStyle(UNConstants.destructiveRed)
                             .frame(width: 26, height: 26)
+                            .background(
+                                Circle()
+                                    .fill(isConfirmingDelete ? UNConstants.selectedSurface : Color.clear)
+                            )
+                            .scaleEffect(isConfirmingDelete ? 1.12 : 1.0)
                     }
                     .buttonStyle(.plain)
 
@@ -596,14 +649,14 @@ private struct LiveTaskRowView: View {
         .padding(12)
         .frame(minHeight: 45)
         .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.white.opacity(isEditing ? 0.07 : (isHovering ? 0.05 : 0.03)))
+            RoundedRectangle(cornerRadius: UNConstants.rowCornerRadius, style: .continuous)
+                .fill(isEditing ? UNConstants.raisedSurface : (isHovering ? UNConstants.rowHoverSurface : UNConstants.rowSurface))
         )
         .contentShape(Rectangle())
         // Tap the row (outside buttons) → toggle done/undone
         .onTapGesture {
             guard !isEditing else { return }
-            onToggle()
+            toggleWithPulse()
         }
         .onHover { h in withAnimation(UNMotion.hover) { isHovering = h } }
         .onChange(of: isEditing) { _, editing in
@@ -613,6 +666,28 @@ private struct LiveTaskRowView: View {
                 }
             } else {
                 isEditFocused = false
+            }
+        }
+    }
+
+    private func toggleWithPulse() {
+        if !item.isDone {
+            withAnimation(UNMotion.tap) { checkPulse = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+                withAnimation(UNMotion.tap) { checkPulse = false }
+            }
+        }
+        onToggle()
+    }
+
+    private func confirmOrDelete() {
+        if isConfirmingDelete {
+            isConfirmingDelete = false
+            onDelete()
+        } else {
+            withAnimation(UNMotion.tap) { isConfirmingDelete = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                withAnimation(UNMotion.tap) { isConfirmingDelete = false }
             }
         }
     }

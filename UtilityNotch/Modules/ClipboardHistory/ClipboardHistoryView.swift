@@ -76,8 +76,6 @@ struct ClipboardHistoryView: View {
                 Label("All Types", systemImage: selectedKind == nil ? "checkmark" : "tray.full")
             }
 
-            Divider()
-
             ForEach(ClipboardContentKind.allCases) { kind in
                 Button {
                     selectedKind = kind

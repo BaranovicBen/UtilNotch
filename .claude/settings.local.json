@@ -58,7 +58,16 @@
       "mcp__plugin_figma_figma__use_figma",
       "mcp__plugin_figma_figma__get_design_context",
       "mcp__plugin_figma_figma__get_screenshot",
-      "Bash(curl *)"
+      "Bash(curl *)",
+      "WebSearch",
+      "WebFetch(domain:macnotch.io)",
+      "WebFetch(domain:alternativeto.net)",
+      "WebFetch(domain:cosmiq-store.com)",
+      "WebFetch(domain:chatgate.ai)",
+      "WebFetch(domain:www.producthunt.com)",
+      "WebFetch(domain:www.visalytica.com)",
+      "WebFetch(domain:notchable.com)",
+      "WebFetch(domain:www.macobserver.com)"
     ]
   },
   "enabledPlugins": {

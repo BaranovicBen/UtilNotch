@@ -5,6 +5,7 @@ struct QuickNotesModule: UtilityModule {
     let id = "quickNotes"
     let name = "Quick Notes"
     let icon = "note.text"
+    let contentTint = UNConstants.notesContentTint
     var isEnabled: Bool = true
     
     func makeMainView() -> AnyView {

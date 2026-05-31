@@ -22,7 +22,6 @@ struct QuickNotesView: View {
         VStack(alignment: .leading, spacing: 10) {
             header
             composer
-            Divider().overlay(Color.white.opacity(0.06))
             notesList
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)

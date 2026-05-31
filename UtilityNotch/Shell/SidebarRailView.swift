@@ -7,6 +7,7 @@ import SwiftUI
 ///   Gear zone: 38pt (aligns with footer)
 struct SidebarRailView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var draggingID: String? = nil
     @State private var commandKeyMonitor: Any? = nil
     @State private var isCommandHeld: Bool = false
@@ -20,21 +21,19 @@ struct SidebarRailView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // ── Top blank zone (aligns with header) ───────────────────
             Color.clear
                 .frame(height: UNConstants.headerHeight)
 
-            // ── Icon scroll zone ──────────────────────────────────────
             ZStack {
                 ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: 4) {
+                    VStack(spacing: 6) {
                         ForEach(enabledModules, id: \.id) { module in
                             SidebarButton(
                                 icon: module.icon,
                                 name: module.name,
                                 isActive: appState.activeModuleID == module.id
                             ) {
-                                withAnimation(UNMotion.moduleSwitch) {
+                                withAnimation(reduceMotion ? UNMotion.reduced : UNMotion.moduleSwitch) {
                                     appState.selectModule(module.id)
                                 }
                             }
@@ -67,15 +66,14 @@ struct SidebarRailView: View {
             }
             .frame(maxHeight: .infinity)
 
-            // ── Gear zone (aligns with footer) ────────────────────────
             SidebarGearButton()
                 .frame(height: UNConstants.footerHeight)
         }
         .frame(width: UNConstants.sidebarWidth)
-        // Sidebar left border — the ONLY allowed structural divider in the app (Rule 7)
+        .background(UNConstants.insetSurface)
         .overlay(alignment: .leading) {
             Rectangle()
-                .fill(Color.white.opacity(0.15))
+                .fill(UNConstants.sidebarBorder)
                 .frame(width: 1)
         }
         .onAppear  { installCommandKeyMonitor() }
@@ -106,6 +104,8 @@ struct SidebarRailView: View {
 // MARK: - Sidebar Button with 150ms tooltip delay
 
 private struct SidebarButton: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     let icon: String
     let name: String
     let isActive: Bool
@@ -118,20 +118,20 @@ private struct SidebarButton: View {
     var body: some View {
         Button(action: action) {
             ZStack {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                Circle()
                     .fill(backgroundColor)
 
                 Image(systemName: icon)
                     .font(.system(size: UNConstants.sidebarIconSize, weight: .medium))
                     .foregroundStyle(iconColor)
-                    .scaleEffect(isHovering ? 1.07 : 1.0)
-                    .animation(UNMotion.tap, value: isHovering)
+                    .scaleEffect(reduceMotion ? 1 : (isHovering ? 1.07 : 1.0))
+                    .animation(reduceMotion ? UNMotion.reduced : UNMotion.tap, value: isHovering)
             }
-            .frame(width: 32, height: 32)
+            .frame(width: UNConstants.hudButtonSize, height: UNConstants.hudButtonSize)
         }
         .buttonStyle(.pressFeedback)
         .onHover { hovering in
-            withAnimation(UNMotion.hover) { isHovering = hovering }
+            withAnimation(reduceMotion ? UNMotion.reduced : UNMotion.hover) { isHovering = hovering }
             if hovering {
                 // 150ms delay before showing tooltip (Rule 6 / DESIGN.md §6)
                 tooltipTask?.cancel()
@@ -151,55 +151,56 @@ private struct SidebarButton: View {
             if showTooltip {
                 Text(name)
                     .font(.system(size: 12, weight: .regular))
-                    .foregroundStyle(Color.white.opacity(0.85))
+                    .foregroundStyle(UNConstants.textPrimary)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(Color.black.opacity(0.60))
+                            .fill(UNConstants.tooltipSurface)
                     )
                     .fixedSize()
                     .offset(x: -44)
-                    .transition(.opacity.combined(with: .scale(scale: 0.92, anchor: .trailing)))
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.92, anchor: .trailing)))
                     .zIndex(100)
             }
         }
     }
 
     private var backgroundColor: Color {
-        if isActive   { return UNConstants.accentHighlight }  // rgba(255,255,255,0.08)
+        if isActive   { return UNConstants.selectedSurface }
         if isHovering { return Color.white.opacity(UNConstants.hoverStateOpacity) }
         return .clear
     }
 
     private var iconColor: Color {
-        if isActive   { return UNConstants.iconActiveTint }           // #0A84FF
-        if isHovering { return Color.white }                           // 100% on hover
-        return Color.white.opacity(UNConstants.sidebarInactiveOpacity) // 35% inactive
+        if isActive   { return UNConstants.iconActiveTint }
+        if isHovering { return Color.white }
+        return Color.white.opacity(UNConstants.sidebarInactiveOpacity)
     }
 }
 
 // MARK: - Gear Button (no tooltip per Rule 6)
 
 private struct SidebarGearButton: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovering = false
 
     var body: some View {
         SettingsLink {
             ZStack {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                Circle()
                     .fill(isHovering ? Color.white.opacity(UNConstants.hoverStateOpacity) : Color.clear)
 
                 Image(systemName: "gearshape")
                     .font(.system(size: 18, weight: .regular))
                     .foregroundStyle(isHovering ? Color.white : Color.white.opacity(0.50))
-                    .scaleEffect(isHovering ? 1.07 : 1.0)
-                    .animation(UNMotion.tap, value: isHovering)
+                    .scaleEffect(reduceMotion ? 1 : (isHovering ? 1.07 : 1.0))
+                    .animation(reduceMotion ? UNMotion.reduced : UNMotion.tap, value: isHovering)
             }
-            .frame(width: 32, height: 32)
+            .frame(width: UNConstants.hudButtonSize, height: UNConstants.hudButtonSize)
         }
         .buttonStyle(.pressFeedback)
-        .onHover { h in withAnimation(UNMotion.hover) { isHovering = h } }
+        .onHover { h in withAnimation(reduceMotion ? UNMotion.reduced : UNMotion.hover) { isHovering = h } }
     }
 }
 // MARK: - Drop Delegate

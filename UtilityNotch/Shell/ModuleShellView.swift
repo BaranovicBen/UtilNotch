@@ -114,28 +114,26 @@ private struct ShellActionButton: View {
     let isDestructive: Bool
 
     private var bgColor: Color {
-        isDestructive ? Color(red: 1.0, green: 0.271, blue: 0.227).opacity(0.15)
-                      : Color.white.opacity(0.1)
+        isDestructive ? UNConstants.destructiveRed.opacity(0.15)
+                      : UNConstants.controlSurface
     }
     private var fgColor: Color {
-        isDestructive ? Color(red: 1.0, green: 0.271, blue: 0.227)
-                      : Color.white
+        isDestructive ? UNConstants.destructiveRed
+                      : UNConstants.textPrimary
     }
 
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: icon)
-                .font(.system(size: 10, weight: .medium))
+                .font(.system(size: UNConstants.hudIconSize, weight: .semibold))
                 .foregroundStyle(fgColor)
 
             Text(label)
-                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                .textCase(.uppercase)
-                .kerning(0.55)
+                .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(fgColor)
         }
-        .padding(.vertical, 4)
-        .padding(.horizontal, 12)
+        .frame(height: UNConstants.hudButtonSize)
+        .padding(.horizontal, 10)
         .background(Capsule().fill(bgColor))
     }
 }

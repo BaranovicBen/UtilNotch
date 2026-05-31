@@ -5,9 +5,11 @@ import SwiftUI
 /// Uses the same ModuleRegistry + AppState as the standard Expanded Panel — no separate data layer.
 struct DynamicIslandView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isExpanded: Bool = false
     @State private var showContent: Bool = false
     @State private var isPanelDropTargeted = false
+    @State private var pillGlowing: Bool = false
     /// Invalidates delayed animation callbacks when show/hide changes rapidly.
     @State private var animationGeneration: Int = 0
 
@@ -54,7 +56,7 @@ struct DynamicIslandView: View {
                             cornerRadius: UNConstants.panelCornerRadius,
                             invertedCornerRadius: UNConstants.invertedCornerRadius
                         )
-                        .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                        .stroke(UNConstants.panelGhostBorder, lineWidth: 1)
                     } else {
                         // Floating pill: all four edges need the specular highlight
                         UnevenRoundedRectangle(
@@ -64,7 +66,7 @@ struct DynamicIslandView: View {
                             topTrailingRadius:    collapsedCornerRadius,
                             style: .continuous
                         )
-                        .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                        .strokeBorder(pillGlowing ? Color.white.opacity(0.28) : UNConstants.panelGhostBorder, lineWidth: 1)
                     }
                 }
             )
@@ -81,18 +83,17 @@ struct DynamicIslandView: View {
                         .fill(
                             RadialGradient(
                                 gradient: Gradient(colors: [
-                                    Color(hex: "0A84FF").opacity(UNConstants.panelGlowOpacity),
+                                    UNConstants.accentBlue.opacity(UNConstants.panelGlowOpacity),
                                     Color.clear
                                 ]),
                                 center: .topLeading,
                                 startRadius: 0,
-                                endRadius: 300
+                                endRadius: UNConstants.panelGlowRadius
                             )
                         )
                     }
                 }
             )
-            .shadow(color: .black.opacity(isExpanded ? 0.4 : 0.25), radius: isExpanded ? 28 : 12, y: isExpanded ? 8 : 4)
             .frame(
                 width:  isExpanded ? expandedWidth  : collapsedWidth,
                 height: isExpanded ? expandedHeight : collapsedHeight
@@ -110,7 +111,7 @@ struct DynamicIslandView: View {
                 expandedContent
                     .frame(width: expandedWidth, height: expandedHeight)
                     .opacity(showContent ? 1 : 0)
-                    .animation(UNMotion.crossFade, value: showContent)
+                    .animation(reduceMotion ? UNMotion.reduced : UNMotion.crossFade, value: showContent)
                     .transition(.opacity)
             }
         }
@@ -187,36 +188,30 @@ struct DynamicIslandView: View {
     @ViewBuilder
     private var collapsedContent: some View {
         defaultPillContent
-            .transition(.opacity.animation(UNMotion.crossFade))
+            .transition(.opacity.animation(reduceMotion ? UNMotion.reduced : UNMotion.crossFade))
     }
 
-    /// Default idle pill: app name + ambient music-active indicator.
+    /// Compact ambient status: one useful thing, kept quiet until the panel opens.
     @ViewBuilder
     private var defaultPillContent: some View {
         HStack(spacing: 8) {
-            Image(systemName: "rectangle.expand.vertical")
+            Image(systemName: appState.ambientPillIcon)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.white.opacity(0.5))
+                .foregroundStyle(UNConstants.textSecondary)
 
-            Text("Utility Notch")
+            Text(appState.ambientPillText)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.white.opacity(0.65))
+                .lineLimit(1)
+                .truncationMode(.tail)
 
             Spacer(minLength: 0)
 
-            ambientIndicator
+            Image(systemName: appState.highestPriorityLiveActivity == nil ? "lock" : "waveform.path.ecg")
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(UNConstants.textTertiary)
         }
         .padding(.horizontal, 14)
-    }
-
-    @ViewBuilder
-    private var ambientIndicator: some View {
-        // Music playing ambient glyph
-        if appState.activeModuleID == "musicControl" {
-            Image(systemName: "music.note")
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(.purple.opacity(0.8))
-        }
     }
 
     // MARK: - Expanded Content
@@ -246,7 +241,7 @@ struct DynamicIslandView: View {
                 // when the cursor skims the edge of the panel). If the shell is
                 // already open, keep the module content alive instead of blanking
                 // the whole panel while waiting on an expansion that is not needed.
-                withAnimation(UNMotion.crossFade) {
+                withAnimation(reduceMotion ? UNMotion.reduced : UNMotion.crossFade) {
                     showContent = true
                 }
                 return
@@ -254,15 +249,15 @@ struct DynamicIslandView: View {
 
             showContent = false
 
-            withAnimation(UNMotion.panelOpen) {
+            withAnimation(reduceMotion ? UNMotion.reduced : UNMotion.panelOpen) {
                 isExpanded = true
             }
 
             // Rule 11: frame expands first, then content fades in after it settles.
-            let contentDelay = 0.30 + UNConstants.contentFadeDelay
+            let contentDelay = reduceMotion ? 0.02 : 0.30 + UNConstants.contentFadeDelay
             DispatchQueue.main.asyncAfter(deadline: .now() + contentDelay) {
                 guard animationGeneration == generation, isExpanded else { return }
-                withAnimation(UNMotion.crossFade) {
+                withAnimation(reduceMotion ? UNMotion.reduced : UNMotion.crossFade) {
                     showContent = true
                 }
             }
@@ -279,14 +274,21 @@ struct DynamicIslandView: View {
         animationGeneration &+= 1
         let generation = animationGeneration
 
-        withAnimation(UNMotion.press) {
+        withAnimation(reduceMotion ? UNMotion.reduced : UNMotion.press) {
             showContent = false
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + (reduceMotion ? 0.02 : 0.12)) {
             guard animationGeneration == generation else { return }
-            withAnimation(UNMotion.panelClose) {
+            withAnimation(reduceMotion ? UNMotion.reduced : UNMotion.panelClose) {
                 isExpanded = false
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + (reduceMotion ? 0.10 : 0.34)) {
+                guard animationGeneration == generation, !isExpanded else { return }
+                withAnimation(reduceMotion ? UNMotion.reduced : UNMotion.crossFade) { pillGlowing = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+                    withAnimation(reduceMotion ? UNMotion.reduced : UNMotion.crossFade) { pillGlowing = false }
+                }
             }
         }
     }

@@ -1,4 +1,5 @@
- import SwiftUI
+import AppKit
+import SwiftUI
 import EventKit
 
 /// Calendar module — full-shell Figma implementation with EventKit integration.
@@ -11,6 +12,7 @@ struct CalendarModuleView: View {
     @State private var authStatus: EKAuthorizationStatus = EKEventStore.authorizationStatus(for: .event)
     @State private var ekEvents: [EKEvent] = []
     @State private var selectedDate: Date = Calendar.current.startOfDay(for: .now)
+    @State private var isRequestingAccess = false
 
     private var isAuthorized: Bool {
         return authStatus == .fullAccess
@@ -33,13 +35,6 @@ struct CalendarModuleView: View {
         let accentColor: Color
         let hasVideo: Bool
     }
-
-    // Dummy events shown when permission is not yet granted
-    private let dummyEvents: [CalEvent] = [
-        CalEvent(time: "09:00", title: "Team Standup",     accentColor: Color(hex: "42E355"), hasVideo: true),
-        CalEvent(time: "14:00", title: "Design Review",    accentColor: Color(hex: "0A84FF"), hasVideo: true),
-        CalEvent(time: "16:30", title: "1:1 with Manager", accentColor: Color(hex: "A259FF"), hasVideo: false),
-    ]
 
     // MARK: - Computed real-date values
 
@@ -75,18 +70,16 @@ struct CalendarModuleView: View {
     }
 
     private var displayEvents: [CalEvent] {
-        if isAuthorized {
-            let formatter = DateFormatter(); formatter.dateFormat = "HH:mm"
-            return ekEvents.prefix(3).map { event in
-                CalEvent(
-                    time: event.isAllDay ? "All day" : formatter.string(from: event.startDate),
-                    title: event.title ?? "Untitled",
-                    accentColor: Color(nsColor: event.calendar.color ?? .systemBlue),
-                    hasVideo: false
-                )
-            }
+        guard isAuthorized else { return [] }
+        let formatter = DateFormatter(); formatter.dateFormat = "HH:mm"
+        return ekEvents.prefix(3).map { event in
+            CalEvent(
+                time: event.isAllDay ? "All day" : formatter.string(from: event.startDate),
+                title: event.title ?? "Untitled",
+                accentColor: Color(nsColor: event.calendar.color ?? .systemBlue),
+                hasVideo: false
+            )
         }
-        return dummyEvents
     }
 
     // MARK: - Body
@@ -102,52 +95,132 @@ struct CalendarModuleView: View {
                     appState.selectModule(id)
                 }
             },
-            statusDotColor: isAuthorized ? Color(hex: "32D74B") : Color.white.opacity(0.2),
+            statusDotColor: isAuthorized ? UNConstants.successGreen : Color.white.opacity(0.2),
             statusLeft: isAuthorized ? currentMonthYear.uppercased() : "PERMISSION REQUIRED",
-            statusRight: isAuthorized ? "\(displayEvents.count) UPCOMING" : "DEMO DATA",
+            statusRight: isAuthorized ? "\(displayEvents.count) UPCOMING" : "ALLOW ACCESS",
             actionButton: nil
         ) {
-            // ScrollView ensures the content never pushes the footer out of position.
-            // The scroll view fills the content slot exactly (via maxHeight: .infinity).
-            // Content scrolls internally if it overflows — the shell never grows.
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 0) {
+            if isAuthorized {
+                HStack(alignment: .top, spacing: UNConstants.moduleColumnGap) {
                     dateRow
-                    weekStrip
-                    upcomingLabel
-                    eventRows
+                        .frame(width: 128)
+                        .frame(maxHeight: .infinity)
+
+                    VStack(alignment: .leading, spacing: UNConstants.moduleRowGap) {
+                        weekStrip
+                        upcomingLabel
+                        eventRows
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 }
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                permissionCTA
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .onAppear {
             authStatus = EKEventStore.authorizationStatus(for: .event)
             if isAuthorized { loadEvents() }
+            else { removeCalendarActivity() }
         }
+    }
+
+    private var permissionCTA: some View {
+        VStack(spacing: 12) {
+            Spacer(minLength: 0)
+
+            Image(systemName: "calendar.badge.exclamationmark")
+                .font(.system(size: 30, weight: .medium))
+                .foregroundStyle(UNConstants.textSecondary)
+
+            VStack(spacing: 5) {
+                Text("Allow Calendar Access")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(UNConstants.textPrimary)
+
+                Text("urNotch reads your local calendars to show upcoming events in the shelf. Nothing leaves this Mac.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(UNConstants.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(3)
+            }
+            .frame(maxWidth: 330)
+
+            HStack(spacing: 8) {
+                Button {
+                    requestCalendarAccess()
+                } label: {
+                    HStack(spacing: 6) {
+                        if isRequestingAccess {
+                            ProgressView()
+                                .controlSize(.small)
+                                .scaleEffect(0.62)
+                        }
+                        Text(isRequestingAccess ? "Requesting..." : "Allow Calendar Access")
+                    }
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(UNConstants.textPrimary)
+                    .padding(.horizontal, 12)
+                    .frame(height: UNConstants.compactControlHeight)
+                    .background(
+                        Capsule()
+                            .fill(UNConstants.controlSurface)
+                    )
+                }
+                .buttonStyle(.pressFeedback)
+                .disabled(isRequestingAccess)
+
+                if authStatus == .denied || authStatus == .restricted {
+                    Button {
+                        openCalendarPrivacySettings()
+                    } label: {
+                        Text("Open Settings")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(UNConstants.textSecondary)
+                            .padding(.horizontal, 12)
+                            .frame(height: UNConstants.compactControlHeight)
+                            .background(
+                                Capsule()
+                                    .fill(UNConstants.insetSurface)
+                            )
+                    }
+                    .buttonStyle(.pressFeedback)
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 28)
     }
 
     // MARK: - Date Row
 
     private var dateRow: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            Text(currentDayNumber)
-                .font(.system(size: 52, weight: .black))
-                .foregroundStyle(Color.white)
-                .padding(.leading, 8)
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(currentMonthYear)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(UNConstants.textSecondary)
+                    .lineLimit(2)
 
-            Text(currentMonthYear)
-                .font(.system(size: 28, weight: .semibold))
-                .foregroundStyle(Color.white.opacity(0.70))
-                .padding(.bottom, 4)
+                Text(currentDayNumber)
+                    .font(.system(size: 58, weight: .black))
+                    .foregroundStyle(UNConstants.textPrimary)
+                    .lineLimit(1)
+            }
 
-            Spacer()
+            Spacer(minLength: 0)
 
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 navButton(icon: "chevron.left")  { shiftDay(-7) }
                 navButton(icon: "chevron.right") { shiftDay(7) }
             }
-            .padding(.bottom, 4)
+        }
+        .padding(12)
+        .background {
+            RoundedRectangle(cornerRadius: UNConstants.tileCornerRadius, style: .continuous)
+                .fill(UNConstants.insetSurface)
         }
     }
 
@@ -156,11 +229,11 @@ struct CalendarModuleView: View {
         Button(action: action) {
             Image(systemName: icon)
                 .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(Color.white.opacity(0.5))
-                .frame(width: 24, height: 24)
+                .foregroundStyle(UNConstants.textSecondary)
+                .frame(width: UNConstants.hudButtonSize, height: UNConstants.hudButtonSize)
                 .background(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(Color.white.opacity(0.10))
+                    Circle()
+                        .fill(UNConstants.controlSurface)
                 )
         }
         .buttonStyle(.pressFeedback)
@@ -180,8 +253,11 @@ struct CalendarModuleView: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 52)
-        .padding(.top, 8)
+        .frame(height: 58)
+        .background {
+            RoundedRectangle(cornerRadius: UNConstants.tileCornerRadius, style: .continuous)
+                .fill(UNConstants.insetSurface)
+        }
     }
 
     @ViewBuilder
@@ -189,18 +265,18 @@ struct CalendarModuleView: View {
         ZStack {
             if day.isSelected {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(day.isToday ? Color(hex: "0A84FF") : Color.white.opacity(0.12))
-                    .frame(width: 44, height: 40)
+                    .fill(day.isToday ? UNConstants.accentBlue : UNConstants.selectedSurface)
+                    .frame(width: 42, height: 44)
             }
 
             VStack(spacing: 3) {
                 Text(day.abbrev)
                     .font(.system(size: 10, weight: day.isSelected ? .medium : .regular))
-                    .foregroundStyle(day.isSelected ? Color.white : Color.white.opacity(0.30))
+                    .foregroundStyle(day.isSelected ? Color.white : UNConstants.textMuted)
 
                 Text("\(day.day)")
                     .font(.system(size: 13, weight: day.isSelected ? .semibold : .regular))
-                    .foregroundStyle(day.isSelected ? Color.white : Color.white.opacity(0.35))
+                    .foregroundStyle(day.isSelected ? Color.white : UNConstants.textTertiary)
             }
         }
         .frame(maxWidth: .infinity)
@@ -214,11 +290,9 @@ struct CalendarModuleView: View {
     private var upcomingLabel: some View {
         Text("UPCOMING")
             .font(.system(size: 10, design: .monospaced))
-            .foregroundStyle(Color.white.opacity(0.25))
-            .frame(height: 16)
+            .foregroundStyle(UNConstants.textTertiary)
+            .frame(height: 14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, 8)
-            .padding(.bottom, 6)
     }
 
     // MARK: - Event Rows
@@ -229,7 +303,7 @@ struct CalendarModuleView: View {
         VStack(spacing: 6) {
             ForEach(displayEvents) { event in
                 eventRow(event)
-                    .frame(height: 44)
+                    .frame(height: 46)
             }
         }
     }
@@ -238,8 +312,8 @@ struct CalendarModuleView: View {
     private func eventRow(_ event: CalEvent) -> some View {
         ZStack(alignment: .leading) {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.white.opacity(0.03))
-                .frame(height: 44)
+                .fill(UNConstants.rowSurface)
+                .frame(height: 46)
 
             HStack(spacing: 0) {
                 RoundedRectangle(cornerRadius: 2, style: .continuous)
@@ -249,12 +323,12 @@ struct CalendarModuleView: View {
 
                 Text(event.time)
                     .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(Color.white.opacity(0.45))
+                    .foregroundStyle(UNConstants.textSecondary)
                     .padding(.leading, 10)
 
                 Text(event.title)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Color.white.opacity(0.85))
+                    .foregroundStyle(UNConstants.textPrimary)
                     .lineLimit(1)
                     .padding(.leading, 10)
 
@@ -263,7 +337,7 @@ struct CalendarModuleView: View {
                 if event.hasVideo {
                     Image(systemName: "video.fill")
                         .font(.system(size: 11))
-                        .foregroundStyle(Color.white.opacity(0.35))
+                        .foregroundStyle(UNConstants.textTertiary)
                         .padding(.trailing, 12)
                 }
             }
@@ -300,5 +374,61 @@ struct CalendarModuleView: View {
             .sorted { $0.startDate < $1.startDate }
             .prefix(3)
             .map { $0 }
+        updateCalendarActivity()
+    }
+
+    private func requestCalendarAccess() {
+        guard !isRequestingAccess else { return }
+        if authStatus == .denied || authStatus == .restricted {
+            openCalendarPrivacySettings()
+            return
+        }
+
+        isRequestingAccess = true
+        Task {
+            do {
+                _ = try await sharedEventStore.requestFullAccessToEvents()
+            } catch {
+                #if DEBUG
+                print("Calendar permission request failed: \(error)")
+                #endif
+            }
+            await MainActor.run {
+                authStatus = EKEventStore.authorizationStatus(for: .event)
+                isRequestingAccess = false
+                if isAuthorized { loadEvents() }
+                else { removeCalendarActivity() }
+            }
+        }
+    }
+
+    @MainActor
+    private func openCalendarPrivacySettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars") else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    @MainActor
+    private func updateCalendarActivity() {
+        removeCalendarActivity()
+        guard let next = ekEvents.first(where: { $0.startDate >= Date() }) else { return }
+        appState.liveActivities.append(
+            LiveActivity(
+                title: "Next event",
+                subtitle: next.title ?? "Calendar event",
+                icon: "calendar",
+                progress: nil,
+                priority: 35,
+                timestamp: next.startDate,
+                destinationModuleID: "calendar"
+            )
+        )
+    }
+
+    @MainActor
+    private func removeCalendarActivity() {
+        appState.liveActivities.removeAll {
+            $0.destinationModuleID == "calendar" && $0.icon == "calendar"
+        }
     }
 }

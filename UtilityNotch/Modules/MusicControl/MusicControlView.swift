@@ -15,8 +15,8 @@ struct MusicControlView: View {
     // Fixed gradient colors — consistent across all tracks
     private let progressGradient = LinearGradient(
         colors: [
-            Color(red: 0.55, green: 0.35, blue: 0.95),
-            Color(red: 0.35, green: 0.55, blue: 1.0)
+            UNConstants.musicProgressStart,
+            UNConstants.musicProgressEnd
         ],
         startPoint: .leading,
         endPoint: .trailing
@@ -116,11 +116,6 @@ struct MusicControlView: View {
                     .font(.system(size: 16))
                     .foregroundStyle(.white.opacity(0.4))
             )
-            .shadow(
-                color: (currentTrack.gradientColors.first ?? .clear).opacity(0.45),
-                radius: 10,
-                y: 3
-            )
     }
 
     // MARK: - Actions
@@ -217,13 +212,7 @@ struct SoundWaveView: View {
                         )
                     )
                     .frame(width: 2.5, height: isPlaying ? max(4, heights[i] * 28) : 4)
-                    .animation(
-                        isPlaying
-                            ? .easeInOut(duration: Double.random(in: 0.25...0.5))
-                                .repeatForever(autoreverses: true)
-                            : .easeOut(duration: 0.25),
-                        value: heights[i]
-                    )
+                    .animation(UNMotion.standard, value: heights[i])
             }
         }
         .frame(maxHeight: .infinity)
@@ -237,10 +226,10 @@ struct SoundWaveView: View {
     private func startAnimating() {
         guard isPlaying else { return }
         animationTimer?.invalidate()
-        withAnimation { heights = randomHeights() }
+        withAnimation(UNMotion.standard) { heights = randomHeights() }
         animationTimer = Timer.scheduledTimer(withTimeInterval: 0.28, repeats: true) { _ in
             Task { @MainActor in
-                withAnimation { heights = randomHeights() }
+                withAnimation(UNMotion.standard) { heights = randomHeights() }
             }
         }
     }

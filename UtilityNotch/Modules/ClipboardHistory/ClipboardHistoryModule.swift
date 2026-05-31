@@ -5,6 +5,7 @@ struct ClipboardHistoryModule: UtilityModule {
     let id = "clipboardHistory"
     let name = "Clipboard History"
     let icon = "doc.on.clipboard"
+    let contentTint = UNConstants.clipboardContentTint
     var isEnabled = true
     let supportsBackground = true
     

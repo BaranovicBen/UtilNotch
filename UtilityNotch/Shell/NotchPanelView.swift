@@ -26,17 +26,17 @@ struct NotchPanelView: View {
                     .fill(
                         RadialGradient(
                             gradient: Gradient(colors: [
-                                Color(hex: "0A84FF").opacity(UNConstants.panelGlowOpacity),
+                                UNConstants.accentBlue.opacity(UNConstants.panelGlowOpacity),
                                 Color.clear
                             ]),
                             center: .topLeading,
                             startRadius: 0,
-                            endRadius: 300
+                            endRadius: UNConstants.panelGlowRadius
                         )
                     )
                 // Ghost border (outer container specular highlight)
                 RoundedRectangle(cornerRadius: UNConstants.panelCornerRadius, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                    .strokeBorder(UNConstants.panelGhostBorder, lineWidth: 1)
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: UNConstants.panelCornerRadius, style: .continuous))

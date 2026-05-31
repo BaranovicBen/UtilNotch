@@ -20,34 +20,37 @@ struct ClipboardModuleView: View {
                     appState.selectModule(id)
                 }
             },
-            statusDotColor: store.isMonitoring ? Color(hex: "32D74B") : Color.white.opacity(0.2),
-            statusLeft: store.isMonitoring ? "CLIPBOARD SYNC ACTIVE" : "CLIPBOARD SYNC PAUSED",
-            statusRight: store.isShowingDemoItems ? "\(store.storedItemCount) EXAMPLES" : "\(store.storedItemCount) ITEMS STORED",
+            statusDotColor: store.isMonitoring ? UNConstants.successGreen : Color.white.opacity(0.2),
+            statusLeft: store.isMonitoring ? "LOCAL CLIPS ACTIVE" : "LOCAL CLIPS PAUSED",
+            statusRight: store.isShowingDemoItems ? "0 STORED" : "\(store.storedItemCount) STORED",
             actionButton: {
                 AnyView(headerActions)
             }
         ) {
-            VStack(spacing: 10) {
+            VStack(spacing: UNConstants.moduleRowGap) {
                 typeFilterPopup
 
                 ScrollView(.vertical, showsIndicators: false) {
                     LazyVStack(spacing: 8) {
-                        ForEach(store.visibleItems) { item in
-                            ClipboardHistoryCard(
-                                item: item,
-                                isCopied: store.recentlyCopiedID == item.id,
-                                onCopy: { store.copy(item) },
-                                onDelete: { store.delete(item) }
-                            )
-                        }
-
-                        if store.visibleItems.isEmpty {
+                        if store.isShowingDemoItems {
+                            clipboardEmptyState
+                        } else if store.visibleItems.isEmpty {
                             emptyFilterState
+                        } else {
+                            ForEach(store.visibleItems) { item in
+                                ClipboardHistoryCard(
+                                    item: item,
+                                    isCopied: store.recentlyCopiedID == item.id,
+                                    onCopy: { store.copy(item) },
+                                    onDelete: { store.delete(item) }
+                                )
+                            }
                         }
                     }
                     .padding(.bottom, 2)
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .onAppear {
             store.onAppear()
@@ -72,9 +75,9 @@ struct ClipboardModuleView: View {
             } label: {
                 Image(systemName: "arrow.clockwise")
                     .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(Color.white.opacity(0.68))
-                    .frame(width: 24, height: 24)
-                    .background(Circle().fill(Color.white.opacity(0.08)))
+                    .foregroundStyle(UNConstants.textSecondary)
+                    .frame(width: UNConstants.hudButtonSize, height: UNConstants.hudButtonSize)
+                    .background(Circle().fill(UNConstants.controlSurface))
             }
             .buttonStyle(.plain)
             .help("Refresh clipboard")
@@ -86,20 +89,13 @@ struct ClipboardModuleView: View {
                     activateClearConfirm()
                 }
             } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: clearConfirmActive ? "exclamationmark.triangle" : "trash")
-                        .font(.system(size: 10, weight: .medium))
-                    Text(clearConfirmActive ? "CONFIRM" : "CLEAR")
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
-                        .textCase(.uppercase)
-                        .kerning(0.55)
-                }
-                .foregroundStyle(Color(red: 1.0, green: 0.271, blue: 0.227))
-                .padding(.vertical, 4)
-                .padding(.horizontal, 12)
+                Image(systemName: clearConfirmActive ? "exclamationmark.triangle" : "trash")
+                    .font(.system(size: UNConstants.hudIconSize, weight: .semibold))
+                    .foregroundStyle(UNConstants.destructiveRed)
+                    .frame(width: UNConstants.hudButtonSize, height: UNConstants.hudButtonSize)
                 .background(
-                    Capsule()
-                        .fill(Color(red: 1.0, green: 0.271, blue: 0.227).opacity(0.15))
+                    Circle()
+                        .fill(UNConstants.destructiveRed.opacity(clearConfirmActive ? 0.20 : 0.13))
                 )
             }
             .buttonStyle(.plain)
@@ -115,9 +111,6 @@ struct ClipboardModuleView: View {
             } label: {
                 Label("All Types", systemImage: store.selectedKind == nil ? "checkmark" : "tray.full")
             }
-
-            Divider()
-
             ForEach(ClipboardContentKind.allCases) { kind in
                 Button {
                     store.selectedKind = kind
@@ -138,31 +131,30 @@ struct ClipboardModuleView: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Filter by type")
-                        .font(.system(size: 10.5, weight: .bold, design: .monospaced))
-                        .textCase(.uppercase)
-                        .foregroundStyle(Color.white.opacity(0.34))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(UNConstants.textTertiary)
                     Text(selectedFilterTitle)
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Color.white.opacity(0.84))
+                        .foregroundStyle(UNConstants.textPrimary)
                 }
 
                 Spacer(minLength: 8)
 
                 Text("\(store.visibleItems.count)")
                     .font(.system(size: 11, weight: .bold, design: .monospaced))
-                    .foregroundStyle(Color.white.opacity(0.38))
+                    .foregroundStyle(UNConstants.textTertiary)
 
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(Color.white.opacity(0.32))
+                    .foregroundStyle(UNConstants.textTertiary)
             }
             .padding(.horizontal, 10)
-            .padding(.vertical, 8)
+            .padding(.vertical, 7)
             .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.white.opacity(0.04))
+                RoundedRectangle(cornerRadius: UNConstants.rowCornerRadius, style: .continuous)
+                    .fill(UNConstants.insetSurface)
             )
-            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: UNConstants.rowCornerRadius, style: .continuous))
         }
         .menuStyle(.borderlessButton)
         .buttonStyle(.plain)
@@ -172,13 +164,28 @@ struct ClipboardModuleView: View {
         VStack(spacing: 8) {
             Image(systemName: "doc.text.magnifyingglass")
                 .font(.system(size: 18, weight: .regular))
-                .foregroundStyle(Color.white.opacity(0.25))
+                .foregroundStyle(UNConstants.textPlaceholder)
             Text(emptyFilterMessage)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Color.white.opacity(0.42))
+                .foregroundStyle(UNConstants.textSecondary)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 34)
+    }
+
+    private var clipboardEmptyState: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "doc.on.clipboard")
+                .font(.system(size: 28, weight: .light))
+                .foregroundStyle(UNConstants.textPlaceholder)
+            Text("nothing copied yet")
+                .font(.system(size: 14))
+                .foregroundStyle(UNConstants.textSecondary)
+            Text("clipboard history stays local on this Mac")
+                .font(.system(size: 12))
+                .foregroundStyle(UNConstants.textTertiary)
+        }
+        .frame(maxWidth: .infinity, minHeight: 190)
     }
 
     private func activateClearConfirm() {
@@ -211,8 +218,8 @@ struct ClipboardModuleView: View {
     }
 
     private var emptyFilterMessage: String {
-        guard let selectedKind = store.selectedKind else { return "No clips yet" }
-        return "No \(selectedKind.filterTitle.lowercased()) clips"
+        guard let selectedKind = store.selectedKind else { return "nothing copied yet" }
+        return "no \(selectedKind.filterTitle.lowercased()) clips"
     }
 }
 
@@ -223,6 +230,7 @@ private struct ClipboardHistoryCard: View {
     let onDelete: () -> Void
 
     @State private var isHovering = false
+    @State private var isConfirmingDelete = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -234,7 +242,7 @@ private struct ClipboardHistoryCard: View {
                         ? .system(size: 13, weight: .regular, design: .monospaced)
                         : .system(size: 13, weight: .regular)
                     )
-                    .foregroundStyle(item.kind == .url ? item.accentColor : Color.white.opacity(0.85))
+                    .foregroundStyle(item.kind == .url ? item.accentColor : UNConstants.textPrimary)
                     .lineLimit(item.kind == .text ? 2 : 1)
                     .truncationMode(.tail)
 
@@ -252,7 +260,7 @@ private struct ClipboardHistoryCard: View {
                     }
                 }
                 .font(.system(size: 10.5, weight: .medium, design: .monospaced))
-                .foregroundStyle(Color.white.opacity(0.34))
+                .foregroundStyle(UNConstants.textTertiary)
                 .lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -263,8 +271,8 @@ private struct ClipboardHistoryCard: View {
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(isCopied ? Color.white.opacity(0.09) : Color.white.opacity(isHovering ? 0.055 : 0.03))
+            RoundedRectangle(cornerRadius: UNConstants.rowCornerRadius, style: .continuous)
+                .fill(isCopied ? UNConstants.selectedSurface : (isHovering ? UNConstants.rowHoverSurface : UNConstants.rowSurface))
         )
         .contentShape(Rectangle())
         .onTapGesture(perform: onCopy)
@@ -311,33 +319,46 @@ private struct ClipboardHistoryCard: View {
         if isCopied {
             Image(systemName: "checkmark")
                 .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(Color(hex: "32D74B"))
-                .frame(width: 24, height: 24)
+                .foregroundStyle(UNConstants.successGreen)
+                .frame(width: UNConstants.hudButtonSize, height: UNConstants.hudButtonSize)
         } else if isHovering {
             HStack(spacing: 6) {
                 Button(action: onCopy) {
                     Image(systemName: "doc.on.doc")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Color.white.opacity(0.62))
-                        .frame(width: 24, height: 24)
-                        .background(Circle().fill(Color.white.opacity(0.07)))
+                        .foregroundStyle(UNConstants.textSecondary)
+                        .frame(width: UNConstants.hudButtonSize, height: UNConstants.hudButtonSize)
+                        .background(Circle().fill(UNConstants.controlSurface))
                 }
                 .buttonStyle(.plain)
                 .help("Copy")
 
                 if !item.isDemo {
-                    Button(action: onDelete) {
-                        Image(systemName: "trash")
+                    Button(action: confirmOrDelete) {
+                        Image(systemName: isConfirmingDelete ? "trash.fill" : "trash")
                             .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(Color(red: 1.0, green: 0.271, blue: 0.227).opacity(0.82))
-                            .frame(width: 24, height: 24)
-                            .background(Circle().fill(Color(red: 1.0, green: 0.271, blue: 0.227).opacity(0.12)))
+                            .foregroundStyle(UNConstants.destructiveRed.opacity(0.82))
+                            .frame(width: UNConstants.hudButtonSize, height: UNConstants.hudButtonSize)
+                            .background(Circle().fill(isConfirmingDelete ? UNConstants.selectedSurface : UNConstants.controlSurface))
+                            .scaleEffect(isConfirmingDelete ? 1.12 : 1.0)
                     }
                     .buttonStyle(.plain)
                     .help("Delete")
                 }
             }
             .transition(.opacity.combined(with: .scale(scale: 0.96)))
+        }
+    }
+
+    private func confirmOrDelete() {
+        if isConfirmingDelete {
+            isConfirmingDelete = false
+            onDelete()
+        } else {
+            withAnimation(UNMotion.tap) { isConfirmingDelete = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                withAnimation(UNMotion.tap) { isConfirmingDelete = false }
+            }
         }
     }
 }

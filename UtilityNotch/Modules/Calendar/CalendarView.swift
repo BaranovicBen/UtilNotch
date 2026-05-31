@@ -74,7 +74,6 @@ struct CalendarView: View {
         VStack(spacing: 8) {
             dayHeader
             weekStrip
-            Divider().background(Color.white.opacity(0.06)).padding(.vertical, 4)
             eventsList
         }
     }
@@ -443,8 +442,6 @@ struct CalendarSettingsView: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
             }
-
-            Divider()
 
             // Calendar multi-select
             VStack(alignment: .leading, spacing: 6) {

@@ -60,4 +60,5 @@ struct PersistedSettings: Codable {
     var panelStyle: String?         // Optional for backward compat with old saves
     var deleteCompletedTodosEndOfDay: Bool?
     var lastTodoCleanupDay: String?
+    var showAmbientPill: Bool?
 }

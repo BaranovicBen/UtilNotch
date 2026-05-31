@@ -232,7 +232,7 @@ final class ClipboardHistoryStore {
 
         changeCount = pasteboard.changeCount
         withAnimation(UNMotion.flashOn) { recentlyCopiedID = item.id }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) { [weak self] in
             withAnimation(UNMotion.flashOff) { self?.recentlyCopiedID = nil }
         }
     }

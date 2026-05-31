@@ -12,6 +12,10 @@ protocol UtilityModule: Identifiable {
     
     /// SF Symbol name for the utility rail icon
     var icon: String { get }
+
+    /// Barely visible environmental tint for the active module canvas.
+    /// This is an orientation cue, not per-module theming.
+    var contentTint: Color { get }
     
     /// Whether the module is currently enabled by the user
     var isEnabled: Bool { get set }
@@ -39,6 +43,7 @@ protocol UtilityModule: Identifiable {
 extension UtilityModule {
     var supportsBackground: Bool { false }
     var supportsNotifications: Bool { false }
+    var contentTint: Color { Color.clear }
     var requiredPermissions: [PermissionInfo] { [] }
     
     func makeSettingsView() -> AnyView? { nil }

@@ -11,6 +11,7 @@ struct CalendarModule: UtilityModule {
     let id = "calendar"
     let name = "Calendar"
     let icon = "calendar"
+    let contentTint = UNConstants.calendarContentTint
     var isEnabled: Bool = true
     var supportsBackground: Bool = false
     var supportsNotifications: Bool = true

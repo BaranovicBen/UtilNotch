@@ -195,9 +195,7 @@ final class NotchPanelController {
         panel.isMovableByWindowBackground = false
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        // DI mode: suppress shadow — any shadow above the panel breaks the notch illusion.
-        // EP mode: shadow is fine (panel floats below the menu bar).
-        panel.hasShadow = appState.panelStyle != .dynamicIsland
+        panel.hasShadow = false
         panel.titleVisibility = .hidden
         panel.titlebarAppearsTransparent = true
 

@@ -30,7 +30,7 @@ final class AppState {
         _quickNotes = savedNotes ?? []
 
         // Apply module order
-        let defaultOrder = ["todoList", "quickNotes", "clipboardHistory", "musicControl", "calendar", "filesTray"]
+        let defaultOrder = ["todoList", "clipboardHistory", "filesTray", "fileConverter", "downloads", "recentFiles", "activeApps", "liveActivities", "calendar", "quickNotes", "musicControl"]
         _enabledModuleIDs = savedOrder ?? defaultOrder
 
         // Apply settings
@@ -44,6 +44,7 @@ final class AppState {
             _panelStyle = PanelStyle(rawValue: s.panelStyle ?? "") ?? .expandedPanel
             _deleteCompletedTodosEndOfDay = s.deleteCompletedTodosEndOfDay ?? false
             _lastTodoCleanupDay = s.lastTodoCleanupDay
+            _showAmbientPill = s.showAmbientPill ?? true
         } else if let raw = defaults.string(forKey: "menuBarSummaryMode"),
                   let mode = TodoSummaryMode(rawValue: raw) {
             // Migrate from old UserDefaults
@@ -87,7 +88,7 @@ final class AppState {
         set { _activeModuleID = newValue; saveSettings() }
     }
 
-    private var _enabledModuleIDs: [String] = ["todoList", "quickNotes", "clipboardHistory", "musicControl", "calendar", "filesTray"]
+    private var _enabledModuleIDs: [String] = ["todoList", "clipboardHistory", "filesTray", "fileConverter", "downloads", "recentFiles", "activeApps", "liveActivities", "calendar", "quickNotes", "musicControl"]
     /// Ordered list of enabled module IDs (also defines rail order)
     var enabledModuleIDs: [String] {
         get { _enabledModuleIDs }
@@ -181,6 +182,12 @@ final class AppState {
 
     private var _lastTodoCleanupDay: String?
 
+    private var _showAmbientPill: Bool = true
+    var showAmbientPill: Bool {
+        get { _showAmbientPill }
+        set { _showAmbientPill = newValue; saveSettings() }
+    }
+
     // MARK: - Todo State (shared for menu bar)
 
     private var _todoItems: [TodoItem] = []
@@ -195,6 +202,49 @@ final class AppState {
 
     var completedCount: Int { todoItems.filter { $0.isDone }.count }
     var remainingCount: Int { todoItems.count - completedCount }
+
+    var commandShelfStatusText: String {
+        var parts: [String] = ["local"]
+        if let nextPendingTask, !nextPendingTask.isEmpty {
+            parts.append("todo \(Self.truncatedStatus(nextPendingTask, limit: 22))")
+        } else if remainingCount == 0, completedCount > 0 {
+            parts.append("all clear")
+        }
+        if !quickNotes.isEmpty {
+            parts.append("\(quickNotes.count) notes")
+        }
+        return parts.joined(separator: "  ·  ")
+    }
+
+    var ambientPillIcon: String {
+        if let activity = highestPriorityLiveActivity {
+            return activity.icon
+        }
+        switch activeModuleID {
+        case "downloads": return "arrow.down.circle"
+        case "filesTray": return "tray"
+        case "clipboardHistory": return "doc.on.clipboard"
+        case "calendar": return "calendar"
+        case "musicControl": return "music.note"
+        case "activeApps": return "app.badge"
+        default: return ModuleRegistry.module(for: activeModuleID)?.icon ?? "rectangle.expand.vertical"
+        }
+    }
+
+    var ambientPillText: String {
+        if let activity = highestPriorityLiveActivity {
+            if let progress = activity.progress {
+                return "\(activity.title) · \(Int(progress * 100))%"
+            }
+            return activity.title
+        }
+        let title = moduleTitle.isEmpty ? "urNotch" : moduleTitle
+        let right = moduleFooterRight.trimmingCharacters(in: .whitespacesAndNewlines)
+        let left = moduleFooterLeft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let detail = !right.isEmpty && right != "—" ? right : left
+        guard !detail.isEmpty else { return title }
+        return "\(title) · \(Self.truncatedStatus(detail.lowercased(), limit: 18))"
+    }
 
     // MARK: - Module UI Metadata
     // Set by the active module view (via ModuleShellView) on appear/change.
@@ -243,6 +293,19 @@ final class AppState {
     /// the Files Tray panel finishes opening. FilesTrayModuleView drains this on appear/change.
     var pendingTrayURLs: [URL] = []
 
+    var pendingFileURL: URL?
+
+    var liveActivities: [LiveActivity] = []
+
+    var highestPriorityLiveActivity: LiveActivity? {
+        liveActivities
+            .sorted {
+                if $0.priority != $1.priority { return $0.priority > $1.priority }
+                return $0.timestamp > $1.timestamp
+            }
+            .first
+    }
+
     // MARK: - Helpers
 
     func togglePanel() {
@@ -289,7 +352,7 @@ final class AppState {
         _enabledModuleIDs = _enabledModuleIDs.filter { ModuleRegistry.module(for: $0) != nil }
 
         if _enabledModuleIDs.isEmpty {
-            _enabledModuleIDs = ["todoList", "quickNotes", "clipboardHistory", "musicControl", "calendar", "filesTray"]
+            _enabledModuleIDs = ["todoList", "clipboardHistory", "filesTray", "fileConverter", "downloads", "recentFiles", "activeApps", "liveActivities", "calendar", "quickNotes", "musicControl"]
         }
 
         if let defaultModuleID,
@@ -308,6 +371,12 @@ final class AppState {
 
     private static var isLaunchAtLoginEnabled: Bool {
         SMAppService.mainApp.status == .enabled
+    }
+
+    private static func truncatedStatus(_ value: String, limit: Int) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count > limit else { return trimmed }
+        return "\(trimmed.prefix(max(limit - 1, 1)))…"
     }
 
     private func cleanupCompletedTodosIfNeeded(now: Date = Date()) {
@@ -362,7 +431,8 @@ final class AppState {
             showMusicWaveform: _showMusicWaveform,
             panelStyle: _panelStyle.rawValue,
             deleteCompletedTodosEndOfDay: _deleteCompletedTodosEndOfDay,
-            lastTodoCleanupDay: _lastTodoCleanupDay
+            lastTodoCleanupDay: _lastTodoCleanupDay,
+            showAmbientPill: _showAmbientPill
         )
         persistence.save(snapshot, key: .settings)
     }
@@ -461,6 +531,37 @@ enum PanelStyle: String, CaseIterable, Identifiable {
         case .expandedPanel: return "Expanded Panel"
         case .dynamicIsland: return "Dynamic Island"
         }
+    }
+}
+
+struct LiveActivity: Identifiable, Codable, Equatable {
+    let id: UUID
+    var title: String
+    var subtitle: String
+    var icon: String
+    var progress: Double?
+    var priority: Int
+    var timestamp: Date
+    var destinationModuleID: String
+
+    init(
+        id: UUID = UUID(),
+        title: String,
+        subtitle: String,
+        icon: String,
+        progress: Double? = nil,
+        priority: Int = 0,
+        timestamp: Date = Date(),
+        destinationModuleID: String
+    ) {
+        self.id = id
+        self.title = title
+        self.subtitle = subtitle
+        self.icon = icon
+        self.progress = progress
+        self.priority = priority
+        self.timestamp = timestamp
+        self.destinationModuleID = destinationModuleID
     }
 }
 

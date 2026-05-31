@@ -11,11 +11,11 @@ import SwiftUI
 /// module view's appear / onChange cycle.
 struct CanonicalShellView<Content: View>: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ViewBuilder let content: () -> Content
 
     var body: some View {
         HStack(spacing: 0) {
-            // ── Left: header + content + footer ───────────────────────
             VStack(spacing: 0) {
                 header
                 contentSlot
@@ -23,7 +23,6 @@ struct CanonicalShellView<Content: View>: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            // ── Right: sidebar rail (48pt, full height) ────────────────
             SidebarRailView()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -33,21 +32,41 @@ struct CanonicalShellView<Content: View>: View {
     // Rule 8: title left-aligned at 24pt, action button right at 24pt, SF Pro Semibold 16pt
 
     private var header: some View {
-        HStack(spacing: 8) {
-            Text(appState.moduleTitle)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.white)
-                .lineLimit(1)
-                // Crossfade title text to match content area transition
-                .animation(UNMotion.contentFade, value: appState.activeModuleID)
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(appState.moduleTitle)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(UNConstants.textPrimary)
+                    .lineLimit(1)
+
+                HStack(spacing: 6) {
+                    Image(systemName: "lock.shield")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(UNConstants.textTertiary)
+
+                    Text(appState.commandShelfStatusText)
+                        .font(.system(size: 10, weight: .regular, design: .monospaced))
+                        .foregroundStyle(UNConstants.textTertiary)
+                        .lineLimit(1)
+                }
+            }
+            .animation(shellAnimation, value: appState.activeModuleID)
 
             Spacer()
 
-            // Action button — re-read when moduleActionButtonRevision changes
+            HStack(spacing: 5) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 10, weight: .medium))
+                Text("⌘K")
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+            }
+            .foregroundStyle(UNConstants.textTertiary)
+            .help("Command search placeholder")
+
             if let builder = appState.moduleActionButtonBuilder {
                 let _ = appState.moduleActionButtonRevision
                 builder()
-                    .animation(UNMotion.contentFade, value: appState.moduleActionButtonRevision)
+                    .animation(shellAnimation, value: appState.moduleActionButtonRevision)
             }
         }
         .padding(.horizontal, UNConstants.headerPaddingH)
@@ -59,9 +78,20 @@ struct CanonicalShellView<Content: View>: View {
     private var contentSlot: some View {
         content()
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
+            .padding(.horizontal, UNConstants.contentPaddingH)
+            .padding(.vertical, UNConstants.contentPaddingV)
+            .background {
+                ZStack {
+                    UNConstants.contentLift
+                    activeModule?.contentTint ?? Color.clear
+                }
+            }
             .clipped()
+            .animation(shellAnimation, value: appState.activeModuleID)
+    }
+
+    private var activeModule: (any UtilityModule)? {
+        ModuleRegistry.module(for: appState.activeModuleID)
     }
 
     // MARK: - Footer (38pt)
@@ -74,7 +104,7 @@ struct CanonicalShellView<Content: View>: View {
                 .foregroundStyle(Color.white.opacity(0.60))
                 .textCase(.uppercase)
                 .kerning(0.08 * 10)
-                .animation(UNMotion.contentFade, value: appState.moduleFooterLeft)
+                .animation(shellAnimation, value: appState.moduleFooterLeft)
 
             Spacer()
 
@@ -83,9 +113,13 @@ struct CanonicalShellView<Content: View>: View {
                 .foregroundStyle(Color.white.opacity(0.60))
                 .textCase(.uppercase)
                 .kerning(0.08 * 10)
-                .animation(UNMotion.contentFade, value: appState.moduleFooterRight)
+                .animation(shellAnimation, value: appState.moduleFooterRight)
         }
         .padding(.horizontal, UNConstants.footerPaddingH)
         .frame(height: UNConstants.footerHeight)
+    }
+
+    private var shellAnimation: Animation {
+        reduceMotion ? UNMotion.reduced : UNMotion.contentFade
     }
 }

@@ -7,6 +7,7 @@ struct MusicControlModule: UtilityModule {
     let id = "musicControl"
     let name = "Music Control"
     let icon = "music.note"
+    let contentTint = UNConstants.musicContentTint
     var isEnabled = true
     let supportsNotifications = true
 

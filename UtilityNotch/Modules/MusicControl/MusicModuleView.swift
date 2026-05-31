@@ -61,9 +61,15 @@ struct MusicModuleView: View {
                 emptyStateView
             }
         }
-        .onAppear { appState.setModuleActionButton(nil) }
+        .onAppear {
+            appState.setModuleActionButton(nil)
+            updateMusicActivity()
+        }
+        .onChange(of: orchestrator.nowPlaying?.current?.id) { _, _ in updateMusicActivity() }
+        .onChange(of: orchestrator.nowPlaying?.isPlaying) { _, _ in updateMusicActivity() }
         .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { t in
             displayTime = t
+            updateMusicActivity()
         }
     }
 
@@ -73,15 +79,15 @@ struct MusicModuleView: View {
         VStack(spacing: 16) {
             Image(systemName: "music.note.list")
                 .font(.system(size: 32))
-                .foregroundStyle(Color.white.opacity(0.18))
+                .foregroundStyle(UNConstants.textPlaceholder)
 
             VStack(spacing: 6) {
                 Text("No music playing")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Color.white.opacity(0.7))
+                    .foregroundStyle(UNConstants.textPrimary)
                 Text("Start playback in Spotify, Apple Music, or any media app — it will appear here automatically.")
                     .font(.system(size: 11))
-                    .foregroundStyle(Color.white.opacity(0.35))
+                    .foregroundStyle(UNConstants.textTertiary)
                     .multilineTextAlignment(.center)
             }
 
@@ -89,14 +95,14 @@ struct MusicModuleView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "exclamationmark.triangle")
                         .font(.system(size: 11))
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(UNConstants.amber)
                     Text("MediaRemote failed to load")
                         .font(.system(size: 11))
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(UNConstants.amber)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .background(Capsule().fill(Color.orange.opacity(0.12)))
+                .background(Capsule().fill(UNConstants.amber.opacity(0.12)))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -106,18 +112,45 @@ struct MusicModuleView: View {
     // MARK: - Full content column
 
     private var musicContent: some View {
-        VStack(spacing: 0) {
-            carouselView
-            Spacer().frame(height: 4)
-            trackInfoView
-            Spacer().frame(height: 4)
-            waveView
-            Spacer().frame(height: 4)
-            controlsView
-            Spacer().frame(height: 4)
-            progressView
+        HStack(spacing: 14) {
+            currentArtworkTile(size: 126)
+                .frame(width: 126, height: 126)
+
+            VStack(alignment: .leading, spacing: 10) {
+                trackInfoView
+                waveView
+                controlsView
+                progressView
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private func currentArtworkTile(size: CGFloat) -> some View {
+        let card = orchestrator.nowPlaying?.current
+        if let data = card?.artworkData, let nsImg = NSImage(data: data) {
+            Image(nsImage: nsImg)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: size, height: size)
+                .clipShape(RoundedRectangle(cornerRadius: UNConstants.tileCornerRadius, style: .continuous))
+        } else if let url = card?.artworkURL {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: size, height: size)
+                        .clipShape(RoundedRectangle(cornerRadius: UNConstants.tileCornerRadius, style: .continuous))
+                default:
+                    artPlaceholder(for: card)
+                }
+            }
+        } else {
+            artPlaceholder(for: card)
+        }
     }
 
     // MARK: - 3D Wheel Carousel
@@ -156,11 +189,6 @@ struct MusicModuleView: View {
                 anchor: .center,
                 anchorZ: 0,
                 perspective: 0.35
-            )
-            .shadow(
-                color: Color.black.opacity(0.55 * (1.0 - sideT) * outerFade),
-                radius: 18.0 * (1.0 - sideT),
-                y:      5.0  * (1.0 - sideT)
             )
             .offset(x: pos)
             .zIndex(zIdx)
@@ -214,20 +242,21 @@ struct MusicModuleView: View {
     private var trackInfoView: some View {
         let np = orchestrator.nowPlaying
         return VStack(spacing: 4) {
-            Text(np?.current?.title ?? "—")
-                .font(.system(size: 17, weight: .bold))
-                .foregroundStyle(Color.white)
+                Text(np?.current?.title ?? "—")
+                    .font(.system(size: 17, weight: .bold))
+                .foregroundStyle(UNConstants.textPrimary)
                 .lineLimit(1)
                 .contentTransition(.numericText())
 
             Text(np?.current?.artist ?? "")
                 .font(.system(size: 13))
-                .foregroundStyle(Color.white.opacity(0.55))
+                .foregroundStyle(UNConstants.textSecondary)
                 .lineLimit(1)
                 .contentTransition(.numericText())
         }
         .frame(maxWidth: .infinity)
-        .multilineTextAlignment(.center)
+        .multilineTextAlignment(.leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .animation(UNMotion.standard, value: orchestrator.nowPlaying?.current?.id)
     }
 
@@ -239,14 +268,14 @@ struct MusicModuleView: View {
             color: orchestrator.waveColor
         )
         .frame(maxWidth: .infinity)
-        .frame(height: 24)
+        .frame(height: 38)
     }
 
     // MARK: - Playback controls
 
     private var controlsView: some View {
         let caps = orchestrator.capabilities
-        return HStack(spacing: 16) {
+        return HStack(spacing: 12) {
             controlButton(icon: "backward.fill", size: 13, diameter: 30,
                           disabled: !caps.canSkipPrevious || orchestrator.isTransportCommandInFlight || carouselLocked) {
                 triggerCarousel(forward: false)
@@ -283,7 +312,7 @@ struct MusicModuleView: View {
                     .frame(width: diameter, height: diameter)
                 Image(systemName: icon)
                     .font(.system(size: size, weight: .medium))
-                    .foregroundStyle(Color.white.opacity(disabled ? 0.3 : 1.0))
+                    .foregroundStyle(disabled ? UNConstants.textMuted : Color.white)
                     .contentTransition(.symbolEffect(.replace.downUp))
             }
         }
@@ -304,7 +333,7 @@ struct MusicModuleView: View {
         return VStack(spacing: 3) {
             ZStack(alignment: .leading) {
                 Capsule()
-                    .fill(Color.white.opacity(0.12))
+                    .fill(UNConstants.controlSurface)
                     .frame(height: 3)
                 Capsule()
                     .fill(LinearGradient(
@@ -321,6 +350,9 @@ struct MusicModuleView: View {
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
+                        if !isDraggingProgress {
+                            appState.dismissalLocks.insert(.dragDrop)
+                        }
                         isDraggingProgress = true
                         dragProgress = trackWidth > 0
                             ? max(0, min(1, value.location.x / trackWidth)) : 0
@@ -331,6 +363,7 @@ struct MusicModuleView: View {
                         let time = normalized * (np?.durationSeconds ?? 0)
                         Task { await orchestrator.seek(to: time) }
                         isDraggingProgress = false
+                        appState.dismissalLocks.remove(.dragDrop)
                     }
             )
 
@@ -341,13 +374,13 @@ struct MusicModuleView: View {
                         : (np?.currentElapsedTime(at: displayTime) ?? 0)
                 ))
                 .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(Color.white.opacity(0.35))
+                .foregroundStyle(UNConstants.textTertiary)
 
                 Spacer()
 
                 Text(formatTime(np?.durationSeconds ?? 0))
                     .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(Color.white.opacity(0.35))
+                    .foregroundStyle(UNConstants.textTertiary)
             }
         }
     }
@@ -370,6 +403,33 @@ struct MusicModuleView: View {
     private func formatTime(_ seconds: Double) -> String {
         let s = max(0, Int(seconds))
         return String(format: "%d:%02d", s / 60, s % 60)
+    }
+
+    @MainActor
+    private func updateMusicActivity() {
+        appState.liveActivities.removeAll { $0.destinationModuleID == "musicControl" && $0.icon == "music.note" }
+        guard let np = orchestrator.nowPlaying,
+              np.isPlaying,
+              let track = np.current else { return }
+
+        let progress: Double?
+        if let duration = np.durationSeconds, duration > 0 {
+            progress = min(max(np.currentElapsedTime(at: displayTime) / duration, 0), 1)
+        } else {
+            progress = nil
+        }
+
+        appState.liveActivities.append(
+            LiveActivity(
+                title: track.title,
+                subtitle: track.artist,
+                icon: "music.note",
+                progress: progress,
+                priority: 45,
+                timestamp: Date(),
+                destinationModuleID: "musicControl"
+            )
+        )
     }
 }
 
@@ -436,7 +496,7 @@ private struct MusicWaveView: View {
             }
         }
         beatPhase += 1
-        withAnimation(.easeInOut(duration: 0.11)) {
+        withAnimation(UNMotion.standard) {
             barHeights = newHeights
         }
     }
@@ -445,7 +505,7 @@ private struct MusicWaveView: View {
         waveTimer?.invalidate()
         waveTimer = nil
         beatPhase = 0
-        withAnimation(.easeInOut(duration: 0.25)) {
+        withAnimation(UNMotion.standard) {
             barHeights = Array(repeating: 3, count: Self.barCount)
         }
     }

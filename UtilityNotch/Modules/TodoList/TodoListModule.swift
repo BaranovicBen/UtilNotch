@@ -5,6 +5,7 @@ struct TodoListModule: UtilityModule {
     let id = "todoList"
     let name = "Todo List"
     let icon = "checklist"
+    let contentTint = UNConstants.todoContentTint
     var isEnabled = true
     
     func makeMainView() -> AnyView {

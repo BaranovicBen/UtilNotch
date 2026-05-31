@@ -97,8 +97,8 @@ struct FilesTrayView: View {
                         }
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(Color.white.opacity(0.08), in: Capsule())
-                        .foregroundStyle(.secondary)
+                        .background(UNConstants.controlSurface, in: Capsule())
+                        .foregroundStyle(UNConstants.textSecondary)
                     }
                     .buttonStyle(.plain)
                 }
@@ -132,17 +132,17 @@ struct FilesTrayView: View {
                 )
                 .background(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color.white.opacity(isDropTargeted ? 0.04 : 0))
+                        .fill(isDropTargeted ? UNConstants.insetSurface : Color.clear)
                 )
                 .animation(UNMotion.hover, value: isDropTargeted)
 
             VStack(spacing: 8) {
                 Image(systemName: "tray.and.arrow.down")
                     .font(.system(size: 24))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(UNConstants.textSecondary)
                 Text("Drop files here")
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(UNConstants.textSecondary)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -204,11 +204,16 @@ struct FilesTrayView: View {
         TrayPersistence.save(items)
     }
 
+    @MainActor
     private func shareAll() {
         let urls = items.compactMap { $0.resolvedURL() }
         guard !urls.isEmpty, let button = NSApp.keyWindow?.contentView else { return }
+        appState.dismissalLocks.insert(.pickerOpen)
         let picker = NSSharingServicePicker(items: urls as [Any])
         picker.show(relativeTo: .zero, of: button, preferredEdge: .minY)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            appState.dismissalLocks.remove(.pickerOpen)
+        }
     }
 }
 
@@ -227,7 +232,7 @@ private struct TrayThumbnail: View {
             VStack(spacing: 4) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(Color.white.opacity(0.06))
+                        .fill(UNConstants.insetSurface)
                         .frame(width: 64, height: 64)
                     if let icon {
                         Image(nsImage: icon)
@@ -237,13 +242,13 @@ private struct TrayThumbnail: View {
                     } else {
                         Image(systemName: "doc")
                             .font(.system(size: 28))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(UNConstants.textSecondary)
                     }
                 }
 
                 Text(item.displayName)
                     .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(UNConstants.textSecondary)
                     .lineLimit(2)
                     .truncationMode(.middle)
                     .multilineTextAlignment(.center)
@@ -261,7 +266,7 @@ private struct TrayThumbnail: View {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(.white)
-                        .background(Color.black.opacity(0.5), in: Circle())
+                        .background(UNConstants.overlayScrim, in: Circle())
                 }
                 .buttonStyle(.plain)
                 .offset(x: 4, y: -4)

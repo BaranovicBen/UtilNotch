@@ -14,14 +14,6 @@ struct QuickNotesModuleView: View {
     @State private var hoveredNoteID: UUID? = nil
     @FocusState private var isPopupTitleFocused: Bool
 
-    // Dummy notes for initial state (shown when appState.quickNotes is empty)
-    private static let dummyNotes: [(title: String, timestamp: String, preview: String)] = [
-        (title: "API Keys",          timestamp: "14:32",     preview: "All keys are stored in 1Password vault under the team…"),
-        (title: "Standup Notes",     timestamp: "11:15",     preview: "Discussed migration timeline. Backend team needs 2 more…"),
-        (title: "Design Feedback",   timestamp: "Yesterday", preview: "Sidebar feels too heavy. Reduce icon opacity on inactive…"),
-        (title: "Release Checklist", timestamp: "Mon",       preview: "1. Tag release  2. Update changelog  3. Notify beta…"),
-    ]
-
     private var isUsingDummy: Bool { appState.quickNotes.isEmpty }
     private var isEditing: Bool { editingNote != nil }
     private var canCreate: Bool { !popupTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
@@ -38,7 +30,7 @@ struct QuickNotesModuleView: View {
                 }
             },
             statusDotColor: Color.white.opacity(0.2),
-            statusLeft: "SAVED LOCALLY",
+            statusLeft: "SAVED TO DISK",
             statusRight: isUsingDummy ? "4 NOTES" : "\(appState.quickNotes.count) NOTES",
             actionButton: {
                 AnyView(
@@ -50,26 +42,30 @@ struct QuickNotesModuleView: View {
             }
         ) {
             ZStack(alignment: .center) {
-                // Notes list
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: 8) {
-                        if isUsingDummy {
-                            ForEach(Array(Self.dummyNotes.enumerated()), id: \.offset) { _, note in
-                                staticNoteCard(title: note.title, timestamp: note.timestamp, preview: note.preview)
-                            }
-                        } else {
-                            ForEach(appState.quickNotes) { note in
-                                liveNoteCard(note)
-                                    .transition(.opacity.combined(with: .move(edge: .trailing)))
+                HStack(alignment: .top, spacing: UNConstants.moduleColumnGap) {
+                    notesSummaryPanel
+                        .frame(width: 132)
+                        .frame(maxHeight: .infinity)
+
+                    ScrollView(.vertical, showsIndicators: false) {
+                        VStack(spacing: 8) {
+                            if isUsingDummy {
+                                notesEmptyState
+                            } else {
+                                ForEach(appState.quickNotes) { note in
+                                    liveNoteCard(note)
+                                        .transition(.opacity.combined(with: .move(edge: .trailing)))
+                                }
                             }
                         }
+                        .padding(.bottom, 8)
                     }
-                    .padding(.bottom, 8)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                // Popup overlay
                 if showingNewNotePopup {
-                    Color.black.opacity(0.50)
+                    UNConstants.overlayScrim
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .contentShape(Rectangle())
                         .onTapGesture { dismissPopup() }
@@ -83,35 +79,48 @@ struct QuickNotesModuleView: View {
         }
     }
 
-    // MARK: - Static Note Card (dummy data, non-interactive)
+    private var notesSummaryPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("\(appState.quickNotes.count)")
+                .font(.system(size: 44, weight: .black))
+                .foregroundStyle(UNConstants.textPrimary)
 
-    @ViewBuilder
-    private func staticNoteCard(title: String, timestamp: String, preview: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(title)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Color.white.opacity(0.85))
-                    .lineLimit(1)
-                Spacer()
-                Text(timestamp)
-                    .font(.system(size: 12, design: .monospaced))
-                    .foregroundStyle(Color.white.opacity(0.35))
-            }
-            Text(preview)
-                .font(.system(size: 14, weight: .regular))
-                .foregroundStyle(Color.white.opacity(0.50))
-                .lineLimit(2)
-                .truncationMode(.tail)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            Text("notes")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(UNConstants.textSecondary)
+
+            Spacer(minLength: 0)
+
+            Image(systemName: "note.text")
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(UNConstants.textTertiary)
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.white.opacity(0.03))
-        )
-        .opacity(0.6)
+        .padding(12)
+        .background {
+            RoundedRectangle(cornerRadius: UNConstants.tileCornerRadius, style: .continuous)
+                .fill(UNConstants.insetSurface)
+        }
+    }
+
+    private var notesEmptyState: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "note.text")
+                .font(.system(size: 28, weight: .light))
+                .foregroundStyle(UNConstants.textPlaceholder)
+            Text("nothing captured yet")
+                .font(.system(size: 14))
+                .foregroundStyle(UNConstants.textSecondary)
+            Button { openNewNotePopup() } label: {
+                Text("new note")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(UNConstants.textPrimary)
+                    .padding(.horizontal, 12)
+                    .frame(height: UNConstants.compactControlHeight)
+                    .background(Capsule().fill(UNConstants.controlSurface))
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity, minHeight: 180)
     }
 
     // MARK: - Live Note Card
@@ -138,19 +147,19 @@ struct QuickNotesModuleView: View {
             // Header
             Text(isEditing ? "Edit Note" : "New Note")
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Color.white.opacity(0.85))
+                .foregroundStyle(UNConstants.textPrimary)
 
             Spacer().frame(height: 12)
 
             // Title field
             ZStack(alignment: .leading) {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.white.opacity(0.06))
+                    .fill(UNConstants.insetSurface)
 
                 if popupTitle.isEmpty {
                     Text("Title…")
                         .font(.system(size: 14, weight: .regular))
-                        .foregroundStyle(Color.white.opacity(0.25))
+                        .foregroundStyle(UNConstants.textPlaceholder)
                         .padding(.horizontal, 12)
                         .allowsHitTesting(false)
                 }
@@ -158,7 +167,7 @@ struct QuickNotesModuleView: View {
                 TextField("", text: $popupTitle)
                     .textFieldStyle(.plain)
                     .font(.system(size: 14, weight: .regular))
-                    .foregroundStyle(Color.white.opacity(0.85))
+                    .foregroundStyle(UNConstants.textPrimary)
                     .focused($isPopupTitleFocused)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 10)
@@ -175,12 +184,12 @@ struct QuickNotesModuleView: View {
             // Body TextEditor
             ZStack(alignment: .topLeading) {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.white.opacity(0.06))
+                    .fill(UNConstants.insetSurface)
 
                 if popupBody.isEmpty {
                     Text("Add description…")
                         .font(.system(size: 13, weight: .regular))
-                        .foregroundStyle(Color.white.opacity(0.25))
+                        .foregroundStyle(UNConstants.textPlaceholder)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 10)
                         .allowsHitTesting(false)
@@ -188,7 +197,7 @@ struct QuickNotesModuleView: View {
 
                 TextEditor(text: $popupBody)
                     .font(.system(size: 13, weight: .regular))
-                    .foregroundStyle(Color.white.opacity(0.85))
+                    .foregroundStyle(UNConstants.textPrimary)
                     .scrollContentBackground(.hidden)
                     .background(Color.clear)
                     .padding(.horizontal, 8)
@@ -203,12 +212,12 @@ struct QuickNotesModuleView: View {
                 Button { dismissPopup() } label: {
                     Text("Cancel")
                         .font(.system(size: 14, weight: .regular))
-                        .foregroundStyle(Color.white.opacity(0.55))
+                        .foregroundStyle(UNConstants.textSecondary)
                         .frame(maxWidth: .infinity)
                         .frame(height: 36)
                         .background(
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(Color.white.opacity(0.08))
+                                .fill(UNConstants.controlSurface)
                         )
                 }
                 .buttonStyle(.plain)
@@ -221,7 +230,7 @@ struct QuickNotesModuleView: View {
                         .frame(height: 36)
                         .background(
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(canCreate ? Color(hex: "0A84FF") : Color.white.opacity(0.10))
+                                .fill(canCreate ? UNConstants.accentBlue : UNConstants.controlSurface)
                         )
                 }
                 .buttonStyle(.plain)
@@ -229,7 +238,7 @@ struct QuickNotesModuleView: View {
             }
         }
         .padding(16)
-        .background(Color(hex: "1C1C1C"))
+        .background(UNConstants.panelBackground)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -332,13 +341,14 @@ private struct LiveNoteCardView: View {
 
     @State private var isHovering = false
     @State private var isFlashing = false
+    @State private var isConfirmingDelete = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
                 Text(note.title)
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Color.white.opacity(0.85))
+                    .foregroundStyle(UNConstants.textPrimary)
                     .lineLimit(isExpanded ? 2 : 1)
                 Spacer()
                 if isHovering {
@@ -347,14 +357,14 @@ private struct LiveNoteCardView: View {
                 } else {
                     Text(formatTimestamp(note.createdAt))
                         .font(.system(size: 12, design: .monospaced))
-                        .foregroundStyle(Color.white.opacity(0.35))
+                        .foregroundStyle(UNConstants.textTertiary)
                 }
             }
 
             if !note.body.isEmpty {
                 Text(note.body)
                     .font(.system(size: 14, weight: .regular))
-                    .foregroundStyle(Color.white.opacity(0.52))
+                    .foregroundStyle(UNConstants.textSecondary)
                     .lineLimit(isExpanded ? nil : 2)
                     .truncationMode(.tail)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -363,11 +373,11 @@ private struct LiveNoteCardView: View {
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.white.opacity(isFlashing ? 0.07 : (isHovering ? 0.05 : 0.03)))
+            RoundedRectangle(cornerRadius: UNConstants.rowCornerRadius, style: .continuous)
+                .fill(isFlashing ? UNConstants.raisedSurface : (isHovering ? UNConstants.rowHoverSurface : UNConstants.rowSurface))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: UNConstants.rowCornerRadius, style: .continuous)
                 .strokeBorder(
                     isExpanded ? UNConstants.iconActiveTint.opacity(0.28) : Color.clear,
                     lineWidth: 1
@@ -390,7 +400,7 @@ private struct LiveNoteCardView: View {
             Button(action: onEdit) {
                 Image(systemName: "pencil")
                     .font(.system(size: 13))
-                    .foregroundStyle(Color.white.opacity(0.50))
+                    .foregroundStyle(UNConstants.textSecondary)
             }
             .buttonStyle(.plain)
 
@@ -398,23 +408,41 @@ private struct LiveNoteCardView: View {
             Button {
                 onCopy()
                 withAnimation(UNMotion.flashOn) { isFlashing = true }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                    withAnimation { isFlashing = false }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+                    withAnimation(UNMotion.flashOff) { isFlashing = false }
                 }
             } label: {
                 Image(systemName: "doc.on.doc")
                     .font(.system(size: 13))
-                    .foregroundStyle(Color.white.opacity(0.50))
+                    .foregroundStyle(UNConstants.textSecondary)
             }
             .buttonStyle(.plain)
 
             // Delete
-            Button(action: onDelete) {
-                Image(systemName: "trash")
+            Button(action: confirmOrDelete) {
+                Image(systemName: isConfirmingDelete ? "trash.fill" : "trash")
                     .font(.system(size: 13))
-                    .foregroundStyle(Color(hex: "FF453A"))
+                    .foregroundStyle(UNConstants.destructiveRed)
+                    .frame(width: 22, height: 22)
+                    .background(
+                        Circle()
+                            .fill(isConfirmingDelete ? UNConstants.selectedSurface : Color.clear)
+                    )
+                    .scaleEffect(isConfirmingDelete ? 1.12 : 1.0)
             }
             .buttonStyle(.plain)
+        }
+    }
+
+    private func confirmOrDelete() {
+        if isConfirmingDelete {
+            isConfirmingDelete = false
+            onDelete()
+        } else {
+            withAnimation(UNMotion.tap) { isConfirmingDelete = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                withAnimation(UNMotion.tap) { isConfirmingDelete = false }
+            }
         }
     }
 
