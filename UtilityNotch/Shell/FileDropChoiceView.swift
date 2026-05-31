@@ -23,21 +23,21 @@ struct FileDropChoiceView: View {
             header
             HStack(spacing: 10) {
                 trayCard
-                    .onDrop(of: [.fileURL], isTargeted: $isTrayTargeted, perform: handleTrayDrop)
+                    .onDrop(of: [.fileURL], delegate: TrayDropDelegate(
+                        appState: appState,
+                        isTargeted: $isTrayTargeted,
+                        reduceMotion: reduceMotion
+                    ))
                 converterCard
-                    .onDrop(of: [.fileURL], isTargeted: $isConverterTargeted, perform: handleConverterDrop)
+                    .onDrop(of: [.fileURL], delegate: ConverterDropDelegate(
+                        appState: appState,
+                        isTargeted: $isConverterTargeted,
+                        reduceMotion: reduceMotion
+                    ))
             }
             .frame(maxHeight: .infinity)
         }
         .padding(.vertical, 4)
-        .onChange(of: isTrayTargeted) { _, targeted in
-            if targeted { appState.dismissalLocks.insert(.dragDrop) }
-            else        { appState.dismissalLocks.remove(.dragDrop) }
-        }
-        .onChange(of: isConverterTargeted) { _, targeted in
-            if targeted { appState.dismissalLocks.insert(.dragDrop) }
-            else        { appState.dismissalLocks.remove(.dragDrop) }
-        }
     }
 
     // MARK: - Header
@@ -129,14 +129,36 @@ struct FileDropChoiceView: View {
             )
             .animation(reduceMotion ? nil : UNMotion.hover, value: isTargeted)
     }
+}
 
-    // MARK: - Drop Handlers
+// MARK: - Drop Delegates
+// Using DropDelegate instead of the closure-based .onDrop(isTargeted:perform:) because
+// SwiftUI's hover tracking doesn't reliably fire for both siblings in an HStack on macOS
+// — the first sibling "wins" and the second never gets dropEntered/dropExited.
+// DropDelegate gives explicit dropEntered/dropExited per view.
 
-    private func handleTrayDrop(_ providers: [NSItemProvider]) -> Bool {
-        // Commit the state transition synchronously so the cancel-detection branch in
-        // NotchPanelView.onChange(isPanelDropTargeted) sees isExternalFileDrag=false
-        // by the time it fires (the drag ending sets isPanelDropTargeted=false on the
-        // same runloop tick as the drop, before the async loadItem completion runs).
+private struct TrayDropDelegate: DropDelegate {
+    let appState: AppState
+    @Binding var isTargeted: Bool
+    let reduceMotion: Bool
+
+    func validateDrop(info: DropInfo) -> Bool {
+        info.hasItemsConforming(to: [.fileURL])
+    }
+
+    func dropEntered(info: DropInfo) {
+        isTargeted = true
+        appState.dismissalLocks.insert(.dragDrop)
+    }
+
+    func dropExited(info: DropInfo) {
+        isTargeted = false
+        appState.dismissalLocks.remove(.dragDrop)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        isTargeted = false
+        appState.dismissalLocks.remove(.dragDrop)
         appState.isExternalFileDrag = false
         appState.preDragModuleID = nil
         appState.dismissalLocks.remove(.externalDragDrop)
@@ -144,9 +166,7 @@ struct FileDropChoiceView: View {
             appState.selectModule("filesTray")
         }
 
-        // Async: resolve URLs and hand them to the tray.
-        // FilesTrayModuleView is already in the hierarchy at this point, so
-        // its onChange(of: appState.pendingTrayURLs) will fire correctly.
+        let providers = info.itemProviders(for: [.fileURL])
         let group = DispatchGroup()
         var urls: [URL] = []
         for provider in providers {
@@ -164,13 +184,30 @@ struct FileDropChoiceView: View {
         }
         return true
     }
+}
 
-    private func handleConverterDrop(_ providers: [NSItemProvider]) -> Bool {
-        guard let provider = providers.first else { return false }
+private struct ConverterDropDelegate: DropDelegate {
+    let appState: AppState
+    @Binding var isTargeted: Bool
+    let reduceMotion: Bool
 
-        // Commit the state transition synchronously — same reason as handleTrayDrop above.
-        // ConverterModuleView will be in the hierarchy before pendingFileURL is set,
-        // so its onChange(of: appState.pendingFileURL) will fire correctly.
+    func validateDrop(info: DropInfo) -> Bool {
+        info.hasItemsConforming(to: [.fileURL])
+    }
+
+    func dropEntered(info: DropInfo) {
+        isTargeted = true
+        appState.dismissalLocks.insert(.dragDrop)
+    }
+
+    func dropExited(info: DropInfo) {
+        isTargeted = false
+        appState.dismissalLocks.remove(.dragDrop)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        isTargeted = false
+        appState.dismissalLocks.remove(.dragDrop)
         appState.isExternalFileDrag = false
         appState.preDragModuleID = nil
         appState.dismissalLocks.remove(.externalDragDrop)
@@ -178,13 +215,12 @@ struct FileDropChoiceView: View {
             appState.selectModule("fileConverter")
         }
 
-        // Async: resolve the URL and deliver it to the converter.
+        guard let provider = info.itemProviders(for: [.fileURL]).first else { return true }
         provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
             guard let data = item as? Data,
                   let url = URL(dataRepresentation: data, relativeTo: nil),
-                  !url.hasDirectoryPath          // folders not supported by converter
+                  !url.hasDirectoryPath
             else { return }
-
             DispatchQueue.main.async {
                 appState.pendingFileURL = url
             }
