@@ -133,9 +133,22 @@ struct FileDropChoiceView: View {
     // MARK: - Drop Handlers
 
     private func handleTrayDrop(_ providers: [NSItemProvider]) -> Bool {
-        var urls: [URL] = []
-        let group = DispatchGroup()
+        // Commit the state transition synchronously so the cancel-detection branch in
+        // NotchPanelView.onChange(isPanelDropTargeted) sees isExternalFileDrag=false
+        // by the time it fires (the drag ending sets isPanelDropTargeted=false on the
+        // same runloop tick as the drop, before the async loadItem completion runs).
+        appState.isExternalFileDrag = false
+        appState.preDragModuleID = nil
+        appState.dismissalLocks.remove(.externalDragDrop)
+        withAnimation(reduceMotion ? UNMotion.reduced : UNMotion.moduleSwitch) {
+            appState.selectModule("filesTray")
+        }
 
+        // Async: resolve URLs and hand them to the tray.
+        // FilesTrayModuleView is already in the hierarchy at this point, so
+        // its onChange(of: appState.pendingTrayURLs) will fire correctly.
+        let group = DispatchGroup()
+        var urls: [URL] = []
         for provider in providers {
             group.enter()
             provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
@@ -145,23 +158,27 @@ struct FileDropChoiceView: View {
                 group.leave()
             }
         }
-
         group.notify(queue: .main) {
             guard !urls.isEmpty else { return }
             appState.pendingTrayURLs.append(contentsOf: urls)
-            appState.isExternalFileDrag = false
-            appState.preDragModuleID = nil
-            appState.dismissalLocks.remove(.externalDragDrop)
-            withAnimation(reduceMotion ? UNMotion.reduced : UNMotion.moduleSwitch) {
-                appState.selectModule("filesTray")
-            }
         }
         return true
     }
 
     private func handleConverterDrop(_ providers: [NSItemProvider]) -> Bool {
-        // File Converter processes one file at a time. Take the first valid URL.
         guard let provider = providers.first else { return false }
+
+        // Commit the state transition synchronously — same reason as handleTrayDrop above.
+        // ConverterModuleView will be in the hierarchy before pendingFileURL is set,
+        // so its onChange(of: appState.pendingFileURL) will fire correctly.
+        appState.isExternalFileDrag = false
+        appState.preDragModuleID = nil
+        appState.dismissalLocks.remove(.externalDragDrop)
+        withAnimation(reduceMotion ? UNMotion.reduced : UNMotion.moduleSwitch) {
+            appState.selectModule("fileConverter")
+        }
+
+        // Async: resolve the URL and deliver it to the converter.
         provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
             guard let data = item as? Data,
                   let url = URL(dataRepresentation: data, relativeTo: nil),
@@ -170,12 +187,6 @@ struct FileDropChoiceView: View {
 
             DispatchQueue.main.async {
                 appState.pendingFileURL = url
-                appState.isExternalFileDrag = false
-                appState.preDragModuleID = nil
-                appState.dismissalLocks.remove(.externalDragDrop)
-                withAnimation(reduceMotion ? UNMotion.reduced : UNMotion.moduleSwitch) {
-                    appState.selectModule("fileConverter")
-                }
             }
         }
         return true
