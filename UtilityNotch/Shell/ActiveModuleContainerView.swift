@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Center content area that displays the currently active utility module's view.
 /// During an external file drag (`appState.isExternalFileDrag == true`), replaces the
-/// active module with `FileDropChoiceView` — a dual Tray / Converter drop surface.
+/// active module with `FileDropChoiceView` — a Files Tray drop surface.
 /// Lazily resolves the module from the registry each time the active ID changes.
 struct ActiveModuleContainerView: View {
     @Environment(AppState.self) private var appState

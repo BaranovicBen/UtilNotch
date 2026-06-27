@@ -30,8 +30,9 @@ final class AppState {
         _quickNotes = savedNotes ?? []
 
         // Apply module order
-        let defaultOrder = ["todoList", "clipboardHistory", "filesTray", "fileConverter", "downloads", "recentFiles", "activeApps", "liveActivities", "calendar", "quickNotes", "musicControl"]
-        _enabledModuleIDs = savedOrder ?? defaultOrder
+        let defaultOrder = ["todoList", "clipboardHistory", "filesTray", "audioVisualizer", "downloads", "recentFiles", "activeApps", "liveActivities", "calendar", "quickNotes", "musicControl"]
+        // Migrate persisted orders from the removed File Converter slot to the Audio Visualizer.
+        _enabledModuleIDs = (savedOrder ?? defaultOrder).map { $0 == "fileConverter" ? "audioVisualizer" : $0 }
 
         // Apply settings
         if let s = savedSettings {
@@ -88,7 +89,7 @@ final class AppState {
         set { _activeModuleID = newValue; saveSettings() }
     }
 
-    private var _enabledModuleIDs: [String] = ["todoList", "clipboardHistory", "filesTray", "fileConverter", "downloads", "recentFiles", "activeApps", "liveActivities", "calendar", "quickNotes", "musicControl"]
+    private var _enabledModuleIDs: [String] = ["todoList", "clipboardHistory", "filesTray", "audioVisualizer", "downloads", "recentFiles", "activeApps", "liveActivities", "calendar", "quickNotes", "musicControl"]
     /// Ordered list of enabled module IDs (also defines rail order)
     var enabledModuleIDs: [String] {
         get { _enabledModuleIDs }
@@ -293,12 +294,8 @@ final class AppState {
     /// the Files Tray panel finishes opening. FilesTrayModuleView drains this on appear/change.
     var pendingTrayURLs: [URL] = []
 
-    /// Singleton converter store — lives here so ConverterDropDelegate can call selectFile(_:)
-    /// directly without depending on ConverterModuleView's view lifecycle.
-    let fileConverterStore = FileConverterStore()
-
     /// True while the user is actively dragging files over the notch/panel.
-    /// Drives FileDropChoiceView — the dual tray/converter drop surface shown in place of
+    /// Drives FileDropChoiceView — the Files Tray drop surface shown in place of
     /// the active module during the drag session.
     var isExternalFileDrag: Bool = false
 
@@ -328,8 +325,11 @@ final class AppState {
     }
 
     func showPanel() {
+        let wasVisible = isPanelVisible
         isPanelVisible = true
-        panelPresentationRevision &+= 1
+        if !wasVisible {
+            panelPresentationRevision &+= 1
+        }
     }
 
     func hidePanel() {
@@ -362,12 +362,41 @@ final class AppState {
         saveSettings()
     }
 
+    func beginExternalFileDrag() {
+        if preDragModuleID == nil {
+            preDragModuleID = activeModuleID
+        }
+        isExternalFileDrag = true
+        dismissalLocks.insert(.externalDragDrop)
+        showPanel()
+    }
+
+    func finishExternalFileDrag(selecting moduleID: String? = nil) {
+        isExternalFileDrag = false
+        preDragModuleID = nil
+        dismissalLocks.remove(.dragDrop)
+        dismissalLocks.remove(.externalDragDrop)
+        if let moduleID {
+            selectModule(moduleID)
+        }
+    }
+
+    func cancelExternalFileDrag(restorePreviousModule: Bool = true) {
+        isExternalFileDrag = false
+        dismissalLocks.remove(.dragDrop)
+        dismissalLocks.remove(.externalDragDrop)
+        if restorePreviousModule, let preDragModuleID {
+            selectModule(preDragModuleID)
+        }
+        preDragModuleID = nil
+    }
+
     /// Ensure activeModuleID is still valid after enable/disable changes
     func validateActiveModule() {
         _enabledModuleIDs = _enabledModuleIDs.filter { ModuleRegistry.module(for: $0) != nil }
 
         if _enabledModuleIDs.isEmpty {
-            _enabledModuleIDs = ["todoList", "clipboardHistory", "filesTray", "fileConverter", "downloads", "recentFiles", "activeApps", "liveActivities", "calendar", "quickNotes", "musicControl"]
+            _enabledModuleIDs = ["todoList", "clipboardHistory", "filesTray", "audioVisualizer", "downloads", "recentFiles", "activeApps", "liveActivities", "calendar", "quickNotes", "musicControl"]
         }
 
         if let defaultModuleID,
@@ -585,11 +614,26 @@ struct QuickNote: Identifiable, Codable, Equatable {
     var title: String
     var body: String
     var createdAt: Date
+    var isPinned: Bool
 
-    init(id: UUID = UUID(), title: String, body: String, createdAt: Date = .init()) {
+    init(id: UUID = UUID(), title: String, body: String, createdAt: Date = .init(), isPinned: Bool = false) {
         self.id = id
         self.title = title
         self.body = body
         self.createdAt = createdAt
+        self.isPinned = isPinned
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, title, body, createdAt, isPinned
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        body = try container.decode(String.self, forKey: .body)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
     }
 }

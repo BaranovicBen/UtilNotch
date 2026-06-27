@@ -10,7 +10,7 @@ enum ModuleRegistry {
         TodoListModule(),
         ClipboardHistoryModule(),
         FilesTrayModule(),
-        FileConverterModule(),
+        AudioVisualizerModule(),
         DownloadsModule(),
         RecentFilesModule(),
         ActiveAppsModule(),

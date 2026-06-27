@@ -133,7 +133,7 @@ private struct LiveActivityRow: View {
     private var activityColor: Color {
         switch activity.destinationModuleID {
         case "downloads": return UNConstants.fileAudioEnd
-        case "fileConverter": return UNConstants.fileVideoEnd
+        case "audioVisualizer": return UNConstants.fileVideoEnd
         case "musicControl": return UNConstants.musicProgressStart
         case "calendar": return UNConstants.accentBlue
         default: return UNConstants.fileDefaultEnd

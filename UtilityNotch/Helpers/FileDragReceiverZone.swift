@@ -10,8 +10,8 @@ import UniformTypeIdentifiers
 ///     Safe because the window only covers the ~28pt notch cutout where there is no
 ///     interactive UI. HoverTriggerZone sits at level +2 above this window (+1), so
 ///     normal hover events still route to HoverTriggerZone first.
-///   - On drag enter: opens panel, navigates to Files Tray, inserts .externalDragDrop lock.
-///   - On drop: URLs → `appState.pendingTrayURLs` (drained by FilesTrayModuleView).
+///   - On drag enter: opens the panel into the transient Files Tray drop surface.
+///   - On drop directly on the notch strip: routes to Files Tray as a fallback.
 @MainActor
 final class FileDragReceiverZone {
 
@@ -115,10 +115,7 @@ private class FileDragReceiverView: NSView {
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
         Task { @MainActor in
-            appState.preDragModuleID = appState.activeModuleID
-            appState.isExternalFileDrag = true
-            appState.showPanel()
-            appState.dismissalLocks.insert(.externalDragDrop)
+            appState.beginExternalFileDrag()
         }
         return .copy
     }
@@ -129,7 +126,13 @@ private class FileDragReceiverView: NSView {
 
     override func draggingExited(_ sender: NSDraggingInfo?) {
         Task { @MainActor in
-            appState.dismissalLocks.remove(.externalDragDrop)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [appState] in
+                guard appState.isExternalFileDrag,
+                      !appState.dismissalLocks.contains(.dragDrop),
+                      !appState.isPointerInsidePanel
+                else { return }
+                appState.cancelExternalFileDrag()
+            }
         }
     }
 
@@ -147,10 +150,7 @@ private class FileDragReceiverView: NSView {
         Task { @MainActor in
             // Dropped on the notch zone itself (not into a panel card) — route to Files Tray.
             appState.pendingTrayURLs.append(contentsOf: items)
-            appState.isExternalFileDrag = false
-            appState.preDragModuleID = nil
-            appState.selectModule("filesTray")
-            appState.dismissalLocks.remove(.externalDragDrop)
+            appState.finishExternalFileDrag(selecting: "filesTray")
         }
         return true
     }
