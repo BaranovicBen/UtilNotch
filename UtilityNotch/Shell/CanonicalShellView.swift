@@ -83,7 +83,12 @@ struct CanonicalShellView<Content: View>: View {
             .background {
                 ZStack {
                     UNConstants.contentLift
-                    activeModule?.contentTint ?? Color.clear
+                    // A user-set module accent overrides the built-in environmental tint.
+                    if let custom = appState.moduleColors.accentColor(for: appState.activeModuleID) {
+                        custom.opacity(0.05)
+                    } else {
+                        activeModule?.contentTint ?? Color.clear
+                    }
                 }
             }
             .clipped()

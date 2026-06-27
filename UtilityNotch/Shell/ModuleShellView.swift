@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 // MARK: - Environment Keys
 // Kept for source compatibility with module views that set them.
@@ -35,6 +36,15 @@ extension Color {
         let g = Double((int >>  8) & 0xFF) / 255.0
         let b = Double(int         & 0xFF) / 255.0
         self.init(red: r, green: g, blue: b)
+    }
+
+    /// 6-digit uppercase hex ("RRGGBB"), sRGB. Used to persist ColorPicker selections.
+    func toHex() -> String {
+        let ns = NSColor(self).usingColorSpace(.sRGB) ?? NSColor(self)
+        let r = Int((ns.redComponent   * 255).rounded())
+        let g = Int((ns.greenComponent * 255).rounded())
+        let b = Int((ns.blueComponent  * 255).rounded())
+        return String(format: "%02X%02X%02X", r, g, b)
     }
 }
 

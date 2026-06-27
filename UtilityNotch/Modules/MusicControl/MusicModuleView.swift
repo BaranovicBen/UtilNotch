@@ -46,7 +46,8 @@ struct MusicModuleView: View {
     private let carouselCenter = 2
 
     private var coverAccent: Color {
-        orchestrator.waveColor
+        // User-set module accent/glow overrides the album-derived color; nil → fall back to it.
+        appState.moduleColors.musicGlowColor ?? orchestrator.waveColor
     }
 
     var body: some View {
@@ -350,9 +351,16 @@ struct MusicModuleView: View {
     private var pulseWheelView: some View {
         // Meter is 76 wide + 8pt trailing margin (= 84pt footprint, unchanged layout budget).
         // The trailing margin keeps the 4th bar clear of the module's right-edge content clip.
-        MusicSpectrumBarsView(analyzer: spectrumAnalyzer, color: coverAccent, glow: isModuleHovering)
-            .frame(width: 76, height: 178)
-            .padding(.trailing, 8)
+        MusicSpectrumBarsView(
+            analyzer: spectrumAnalyzer,
+            color: coverAccent,
+            glow: isModuleHovering,
+            lowColor: appState.moduleColors.musicVizLow,
+            midColor: appState.moduleColors.musicVizMid,
+            highColor: appState.moduleColors.musicVizHigh
+        )
+        .frame(width: 76, height: 178)
+        .padding(.trailing, 8)
     }
 
     // MARK: - Playback controls

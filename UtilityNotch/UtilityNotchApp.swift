@@ -84,18 +84,25 @@ struct SettingsRootView: View {
                 .tabItem {
                     Label("General", systemImage: "gear")
                 }
-            
+
             ModuleSettingsView()
                 .environment(appState)
                 .tabItem {
                     Label("Modules", systemImage: "square.grid.2x2")
                 }
-            
+
+            ModuleColorSettingsView()
+                .environment(appState)
+                .tabItem {
+                    Label("Colors", systemImage: "paintpalette")
+                }
+
             PermissionsInfoView()
                 .tabItem {
                     Label("Permissions", systemImage: "lock.shield")
                 }
         }
-        .frame(width: 520, height: 460)
+        .frame(width: 600, height: 480)
+        .preferredColorScheme(.dark)
     }
 }

@@ -46,6 +46,7 @@ enum PersistenceKey: String {
     case clipboardHistory = "clipboardHistory"
     case moduleOrder      = "moduleOrder"
     case settings         = "settings"
+    case moduleColors     = "moduleColors"
 }
 
 // MARK: - Persisted Settings Snapshot

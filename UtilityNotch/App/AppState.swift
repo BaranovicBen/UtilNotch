@@ -23,6 +23,9 @@ final class AppState {
         let savedOrder = persistence.load([String].self, key: .moduleOrder)
         let savedSettings = persistence.load(PersistedSettings.self, key: .settings)
 
+        // Apply per-module custom colors
+        _moduleColors = persistence.load(ModuleColorConfig.self, key: .moduleColors) ?? .default
+
         // Apply todos
         _todoItems = savedTodos ?? []
 
@@ -289,6 +292,13 @@ final class AppState {
     var quickNotes: [QuickNote] {
         get { _quickNotes }
         set { _quickNotes = newValue; persistence.save(newValue, key: .notes) }
+    }
+
+    /// User-customized per-module colors (music glow/accent, visualizer zones, module accents).
+    private var _moduleColors: ModuleColorConfig = .default
+    var moduleColors: ModuleColorConfig {
+        get { _moduleColors }
+        set { _moduleColors = newValue; persistence.save(newValue, key: .moduleColors) }
     }
 
     /// URLs captured by FileDragReceiverZone when files are dropped at the notch before

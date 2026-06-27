@@ -16,6 +16,10 @@ struct MusicSpectrumBarsView: View {
     let analyzer: AudioSpectrumAnalyzer
     var color: Color
     var glow: Bool = false
+    // Customizable spectrum zone colors (low/mid/high). Default to the classic green/amber/red.
+    var lowColor: Color = UNConstants.successGreen
+    var midColor: Color = UNConstants.amber
+    var highColor: Color = UNConstants.destructiveRed
 
     private let segments = 24
     private let barSpacing: CGFloat = 8
@@ -64,20 +68,25 @@ struct MusicSpectrumBarsView: View {
                 let fromBottom = segments - 1 - s        // s counts from the top
                 let isLit = fromBottom < lit
                 let base = zoneColor(fromBottom: fromBottom)
-                // Glow = a clear brightness delta on lit pills (0.8 → full). No filters/shadows,
-                // so nothing rasterizes the meter or risks clipping the 4th bar.
+                // Pill keeps its full vibrant color always. On hover each lit pill gets a small
+                // halo in its own color (tight shadow). Safe now because the meter is inset 8pt
+                // from the content clip edge, so the shadow's expanded bounds stay inside it.
                 Capsule(style: .continuous)
-                    .fill(base.opacity(isLit ? (glow ? 1.0 : 0.8) : 0.06))
+                    .fill(isLit ? base : base.opacity(0.06))
                     .frame(width: width, height: segH)
+                    .shadow(
+                        color: (isLit && glow) ? base.opacity(0.85) : .clear,
+                        radius: (isLit && glow) ? 2.5 : 0
+                    )
             }
         }
     }
 
     private func zoneColor(fromBottom: Int) -> Color {
         let frac = Double(fromBottom) / Double(segments - 1)
-        if frac < greenTop { return UNConstants.successGreen }
-        if frac < amberTop { return UNConstants.amber }
-        return UNConstants.destructiveRed
+        if frac < greenTop { return lowColor }
+        if frac < amberTop { return midColor }
+        return highColor
     }
 
     // MARK: - Demo badge
