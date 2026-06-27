@@ -14,6 +14,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var eventManager: EventTriggerManager?
     
     func applicationDidFinishLaunching(_ notification: Notification) {
+        Self.logRunningBinaryIdentity()
+
         // Suppress window state restoration noise
         NSWindow.allowsAutomaticWindowTabbing = false
         UserDefaults.standard.set(false, forKey: "NSQuitAlwaysKeepsWindows")
@@ -39,6 +41,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startObservingPanelVisibility()
     }
     
+    /// Prints exactly which binary is running so a stale/duplicate app instance is obvious in logs.
+    /// Look for "🟢 [UtilityNotch BOOT]" — the bundle path tells you which .app actually launched.
+    private static func logRunningBinaryIdentity() {
+        let b = Bundle.main
+        let info = b.infoDictionary
+        let id = b.bundleIdentifier ?? "?"
+        let path = b.bundlePath
+        let version = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info?["CFBundleVersion"] as? String ?? "?"
+        let commit = info?["GitCommit"] as? String ?? "n/a"
+        let pid = ProcessInfo.processInfo.processIdentifier
+        // NSLog → unified logging, so it's visible in Console.app and `log show` even for a
+        // GUI/LSUIElement app whose stdout isn't attached to a terminal.
+        NSLog("🟢 [UtilityNotch BOOT] bundleID=%@ pid=%d version=%@ build=%@ gitCommit=%@ path=%@",
+              id, pid, version, build, commit, path)
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         hoverTrigger?.uninstall()
         fileDragReceiver?.uninstall()

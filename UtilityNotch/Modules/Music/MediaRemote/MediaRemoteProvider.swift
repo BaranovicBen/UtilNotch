@@ -139,8 +139,12 @@ final class MediaRemoteProvider: MusicProvider {
         let rate     = (info[MRNowPlayingInfoKey.playbackRate] as? NSNumber)?.doubleValue ?? 0
         let trackUID = (info[MRNowPlayingInfoKey.uniqueIdentifier] as? NSNumber)
                         .map { "\($0)" } ?? "\(title)-\(artist)"
-        let artData  = info[MRNowPlayingInfoKey.artworkData] as? Data
-        let artURL   = info[MRNowPlayingInfoKey.artworkURL]  as? URL
+        // Spotify pushes its looping "Canvas" video frames into the MediaRemote artwork slot,
+        // so for Spotify we deliberately ignore the system artwork and let SpotifyEnrichment
+        // supply the stable album cover from the Web API. Apple Music & others keep MR artwork.
+        let isSpotify = kind == .spotify
+        let artData  = isSpotify ? nil : info[MRNowPlayingInfoKey.artworkData] as? Data
+        let artURL   = isSpotify ? nil : info[MRNowPlayingInfoKey.artworkURL]  as? URL
         #if DEBUG
         print("🎵 [MR] now playing: \"\(title)\" – \(artist) | rate=\(rate) elapsed=\(elapsed)s")
         #endif

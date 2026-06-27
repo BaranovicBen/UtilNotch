@@ -1,7 +1,6 @@
 import SwiftUI
 
-/// Music module — vertical-column layout.
-/// Carousel (prev/current/next art) → title/artist → wave → controls → scrubber.
+/// Music module — artwork-led layout with transport controls and a compact pulse meter.
 /// Reads from MusicOrchestrator via \.musicOrchestrator environment key.
 struct MusicModuleView: View {
     @Environment(AppState.self)         private var appState
@@ -15,9 +14,19 @@ struct MusicModuleView: View {
     @State private var isDraggingProgress: Bool = false
     @State private var dragProgress: CGFloat = 0
     @State private var trackWidth: CGFloat = 0
+    @State private var isShuffleEnabled = false
+    @State private var isRepeatOneEnabled = false
 
     // 1-second tick for interpolated elapsed time display
     @State private var displayTime = Date()
+
+    // Live audio spectrum meter (real microphone FFT — replaces the old demo pulse animation)
+    @State private var spectrumAnalyzer = AudioSpectrumAnalyzer()
+
+    // Whole-module hover → ambient glow + visualizer brightening
+    @State private var isModuleHovering = false
+    // Which transport control is directly hovered (gets a slightly stronger glow)
+    @State private var hoveredControlIcon: String? = nil
 
     // Wheel carousel geometry
     private let artSize: CGFloat     = 100
@@ -35,6 +44,10 @@ struct MusicModuleView: View {
     }
     // Center index is always 2 (current track)
     private let carouselCenter = 2
+
+    private var coverAccent: Color {
+        orchestrator.waveColor
+    }
 
     var body: some View {
         let np = orchestrator.nowPlaying
@@ -64,6 +77,19 @@ struct MusicModuleView: View {
         .onAppear {
             appState.setModuleActionButton(nil)
             updateMusicActivity()
+            spectrumAnalyzer.previewMode = false   // re-attempt live each open (mic may now be granted)
+            spectrumAnalyzer.start()               // requests microphone permission on first activation
+        }
+        .onDisappear {
+            spectrumAnalyzer.stop()
+        }
+        .onChange(of: spectrumAnalyzer.lifecycle) { _, newState in
+            // Coarse lifecycle only (changes rarely) — decides demo vs live. Never engine ops here.
+            switch newState {
+            case .denied, .unavailable, .failed: spectrumAnalyzer.previewMode = true
+            case .running:                       spectrumAnalyzer.previewMode = false
+            case .idle, .starting, .requestingPermission, .stopping: break
+            }
         }
         .onChange(of: orchestrator.nowPlaying?.current?.id) { _, _ in updateMusicActivity() }
         .onChange(of: orchestrator.nowPlaying?.isPlaying) { _, _ in updateMusicActivity() }
@@ -112,19 +138,63 @@ struct MusicModuleView: View {
     // MARK: - Full content column
 
     private var musicContent: some View {
-        HStack(spacing: 14) {
-            currentArtworkTile(size: 126)
-                .frame(width: 126, height: 126)
+        ZStack {
+            ambientGlow            // strictly behind content — never covers the visualizer
+            contentRow
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.18)) { isModuleHovering = hovering }
+        }
+    }
 
-            VStack(alignment: .leading, spacing: 10) {
+    private var contentRow: some View {
+        HStack(alignment: .center, spacing: 18) {
+            currentArtworkTile(size: 178)
+                .frame(width: 178, height: 178)
+
+            VStack(alignment: .leading, spacing: 14) {
                 trackInfoView
-                waveView
+
                 controlsView
                 progressView
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            .frame(width: 224, height: 178, alignment: .center)
+
+            Spacer(minLength: 0)
+
+            pulseWheelView
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// Compact, track-colored elliptical ambient glow centered on the content. Sits behind the
+    /// row and fades to clear well inside the module borders, so it reads as soft emitted light
+    /// rather than a translucent rectangle.
+    ///
+    /// IMPORTANT: no `.blendMode` here. A blend mode on a ZStack child forces the *whole* ZStack
+    /// into a bounds-clipped compositing group, which clipped the edge-pinned 4th visualizer bar
+    /// on hover. The glow is instead self-contained in its own `compositingGroup()` (blur + opacity
+    /// only), so it can never impose clipping on the content row.
+    private var ambientGlow: some View {
+        GeometryReader { geo in
+            Ellipse()
+                .fill(
+                    RadialGradient(
+                        colors: [coverAccent.opacity(0.22), coverAccent.opacity(0.07), .clear],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: min(geo.size.width, geo.size.height) * 0.85
+                    )
+                )
+                .frame(width: geo.size.width * 0.66, height: geo.size.height * 0.68)
+                .position(x: geo.size.width * 0.5, y: geo.size.height * 0.52)
+                .blur(radius: 36)
+                .compositingGroup()
+                .opacity(isModuleHovering ? 1 : 0)
+        }
+        .allowsHitTesting(false)
+        .animation(.easeInOut(duration: 0.18), value: isModuleHovering)
     }
 
     @ViewBuilder
@@ -136,6 +206,10 @@ struct MusicModuleView: View {
                 .aspectRatio(contentMode: .fill)
                 .frame(width: size, height: size)
                 .clipShape(RoundedRectangle(cornerRadius: UNConstants.tileCornerRadius, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: UNConstants.tileCornerRadius, style: .continuous)
+                        .strokeBorder(coverAccent.opacity(0.24), lineWidth: 1)
+                )
         } else if let url = card?.artworkURL {
             AsyncImage(url: url) { phase in
                 switch phase {
@@ -144,6 +218,10 @@ struct MusicModuleView: View {
                         .aspectRatio(contentMode: .fill)
                         .frame(width: size, height: size)
                         .clipShape(RoundedRectangle(cornerRadius: UNConstants.tileCornerRadius, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: UNConstants.tileCornerRadius, style: .continuous)
+                                .strokeBorder(coverAccent.opacity(0.24), lineWidth: 1)
+                        )
                 default:
                     artPlaceholder(for: card)
                 }
@@ -241,62 +319,84 @@ struct MusicModuleView: View {
 
     private var trackInfoView: some View {
         let np = orchestrator.nowPlaying
-        return VStack(spacing: 4) {
+        return VStack(alignment: .leading, spacing: 5) {
                 Text(np?.current?.title ?? "—")
-                    .font(.system(size: 17, weight: .bold))
+                    .font(.system(size: 18, weight: .medium))
                 .foregroundStyle(UNConstants.textPrimary)
                 .lineLimit(1)
                 .contentTransition(.numericText())
 
             Text(np?.current?.artist ?? "")
-                .font(.system(size: 13))
+                .font(.system(size: 13, weight: .regular))
                 .foregroundStyle(UNConstants.textSecondary)
                 .lineLimit(1)
                 .contentTransition(.numericText())
+
+            if let album = np?.current?.album, !album.isEmpty {
+                Text(album)
+                    .font(.system(size: 10, weight: .regular, design: .monospaced))
+                    .foregroundStyle(UNConstants.textTertiary)
+                    .lineLimit(1)
+                    .textCase(.uppercase)
+            }
         }
-        .frame(maxWidth: .infinity)
         .multilineTextAlignment(.leading)
         .frame(maxWidth: .infinity, alignment: .leading)
         .animation(UNMotion.standard, value: orchestrator.nowPlaying?.current?.id)
     }
 
-    // MARK: - Sound wave
+    // MARK: - Spectrum meter (5 bars, aligned to album cover height)
 
-    private var waveView: some View {
-        MusicWaveView(
-            isPlaying: orchestrator.nowPlaying?.isPlaying ?? false,
-            color: orchestrator.waveColor
-        )
-        .frame(maxWidth: .infinity)
-        .frame(height: 38)
+    private var pulseWheelView: some View {
+        // Meter is 76 wide + 8pt trailing margin (= 84pt footprint, unchanged layout budget).
+        // The trailing margin keeps the 4th bar clear of the module's right-edge content clip.
+        MusicSpectrumBarsView(analyzer: spectrumAnalyzer, color: coverAccent, glow: isModuleHovering)
+            .frame(width: 76, height: 178)
+            .padding(.trailing, 8)
     }
 
     // MARK: - Playback controls
 
     private var controlsView: some View {
         let caps = orchestrator.capabilities
-        return HStack(spacing: 12) {
-            controlButton(icon: "backward.fill", size: 13, diameter: 30,
+        return HStack(spacing: 9) {
+            modeButton(
+                icon: "shuffle",
+                isActive: isShuffleEnabled,
+                tooltip: "Shuffle queue"
+            ) {
+                toggleShuffle()
+            }
+
+            controlButton(icon: "backward.fill", size: 15, diameter: 38,
                           disabled: !caps.canSkipPrevious || orchestrator.isTransportCommandInFlight || carouselLocked) {
                 triggerCarousel(forward: false)
             }
 
             controlButton(
                 icon: orchestrator.nowPlaying?.isPlaying == true ? "pause.fill" : "play.fill",
-                size: 16, diameter: 34, fillOpacity: 0.22,
+                size: 18, diameter: 44, fillOpacity: 0.18,
                 disabled: !caps.canPlayPause || orchestrator.isTransportCommandInFlight
             ) {
                 Task { await orchestrator.playPause() }
             }
 
-            controlButton(icon: "forward.fill", size: 13, diameter: 30,
+            controlButton(icon: "forward.fill", size: 15, diameter: 38,
                           disabled: !caps.canSkipNext || orchestrator.isTransportCommandInFlight || carouselLocked) {
                 triggerCarousel(forward: true)
             }
+
+            modeButton(
+                icon: "repeat.1",
+                isActive: isRepeatOneEnabled,
+                tooltip: "Repeat current song"
+            ) {
+                toggleRepeatOne()
+            }
         }
+        .frame(width: 224, alignment: .center)
     }
 
-    @ViewBuilder
     private func controlButton(
         icon: String,
         size: CGFloat,
@@ -305,11 +405,16 @@ struct MusicModuleView: View {
         disabled: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
-        Button(action: action) {
+        let strong = hoveredControlIcon == icon
+        return Button(action: action) {
             ZStack {
                 Circle()
-                    .fill(Color.white.opacity(fillOpacity))
+                    .fill(Color.white.opacity(fillOpacity + (isModuleHovering ? 0.05 : 0)))
                     .frame(width: diameter, height: diameter)
+                    .shadow(
+                        color: controlGlowColor(strong: strong),
+                        radius: controlGlowRadius(strong: strong)
+                    )
                 Image(systemName: icon)
                     .font(.system(size: size, weight: .medium))
                     .foregroundStyle(disabled ? UNConstants.textMuted : Color.white)
@@ -318,6 +423,52 @@ struct MusicModuleView: View {
         }
         .buttonStyle(.pressFeedback)
         .disabled(disabled)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) { hoveredControlIcon = hovering ? icon : (hoveredControlIcon == icon ? nil : hoveredControlIcon) }
+        }
+    }
+
+    /// Soft accent glow for transport controls. Off when the module isn't hovered; subtle on module
+    /// hover; a touch stronger on the directly-hovered button. Localized (circular shadow), no layout change.
+    private func controlGlowColor(strong: Bool) -> Color {
+        guard isModuleHovering else { return .clear }
+        return coverAccent.opacity(strong ? 0.75 : 0.32)
+    }
+    private func controlGlowRadius(strong: Bool) -> CGFloat {
+        guard isModuleHovering else { return 0 }
+        return strong ? 9 : 5
+    }
+
+    private func modeButton(
+        icon: String,
+        isActive: Bool,
+        tooltip: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        let strong = hoveredControlIcon == icon
+        return Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(isActive ? Color.white : UNConstants.textSecondary)
+                .frame(width: 34, height: 34)
+                .background(
+                    Circle()
+                        .fill(isActive ? coverAccent.opacity(0.20) : UNConstants.controlSurface)
+                        .shadow(
+                            color: controlGlowColor(strong: strong),
+                            radius: controlGlowRadius(strong: strong)
+                        )
+                )
+                .overlay(
+                    Circle()
+                        .strokeBorder(isActive ? coverAccent.opacity(0.50) : Color.clear, lineWidth: 1)
+                )
+        }
+        .buttonStyle(.pressFeedback)
+        .help(tooltip)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) { hoveredControlIcon = hovering ? icon : (hoveredControlIcon == icon ? nil : hoveredControlIcon) }
+        }
     }
 
     // MARK: - Progress bar + timestamps
@@ -333,18 +484,21 @@ struct MusicModuleView: View {
         return VStack(spacing: 3) {
             ZStack(alignment: .leading) {
                 Capsule()
-                    .fill(UNConstants.controlSurface)
-                    .frame(height: 3)
+                    .fill(coverAccent.opacity(0.16))
+                    .frame(height: 4)
                 Capsule()
                     .fill(LinearGradient(
-                        colors: [UNConstants.musicProgressStart, UNConstants.musicProgressEnd],
+                        colors: [
+                            coverAccent.opacity(0.95),
+                            coverAccent.opacity(0.72)
+                        ],
                         startPoint: .leading, endPoint: .trailing
                     ))
-                    .frame(width: max(0, trackWidth * progress), height: 3)
+                    .frame(width: max(0, trackWidth * progress), height: 4)
                     .animation(isDraggingProgress ? nil : UNMotion.progress,
                                value: progress)
             }
-            .frame(height: 12)
+            .frame(height: 14)
             .contentShape(Rectangle())
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { trackWidth = $0 }
             .gesture(
@@ -373,16 +527,17 @@ struct MusicModuleView: View {
                         ? dragProgress * (np?.durationSeconds ?? 0)
                         : (np?.currentElapsedTime(at: displayTime) ?? 0)
                 ))
-                .font(.system(size: 11, design: .monospaced))
+                .font(.system(size: 10, weight: .regular, design: .monospaced))
                 .foregroundStyle(UNConstants.textTertiary)
 
                 Spacer()
 
                 Text(formatTime(np?.durationSeconds ?? 0))
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(.system(size: 10, weight: .regular, design: .monospaced))
                     .foregroundStyle(UNConstants.textTertiary)
             }
         }
+        .frame(width: 224)
     }
 
     // MARK: - Wheel animation
@@ -395,6 +550,28 @@ struct MusicModuleView: View {
             if forward { await orchestrator.next() }
             else       { await orchestrator.previous() }
             carouselLocked = false
+        }
+    }
+
+    private func toggleShuffle() {
+        let target = !isShuffleEnabled
+        isShuffleEnabled = target
+        Task {
+            let succeeded = await orchestrator.setShuffleEnabled(target)
+            if !succeeded {
+                await MainActor.run { isShuffleEnabled.toggle() }
+            }
+        }
+    }
+
+    private func toggleRepeatOne() {
+        let target = !isRepeatOneEnabled
+        isRepeatOneEnabled = target
+        Task {
+            let succeeded = await orchestrator.setRepeatOneEnabled(target)
+            if !succeeded {
+                await MainActor.run { isRepeatOneEnabled.toggle() }
+            }
         }
     }
 
@@ -430,83 +607,5 @@ struct MusicModuleView: View {
                 destinationModuleID: "musicControl"
             )
         )
-    }
-}
-
-// MARK: - Sound Wave (30 animated bars, beat-rhythmic)
-
-private struct MusicWaveView: View {
-    let isPlaying: Bool
-    let color: Color
-
-    private static let barCount = 30
-    @State private var barHeights: [CGFloat] = Array(repeating: 3, count: barCount)
-    @State private var waveTimer: Timer?
-    @State private var beatPhase: Int = 0
-
-    var body: some View {
-        HStack(spacing: 3) {
-            ForEach(0..<Self.barCount, id: \.self) { i in
-                Capsule()
-                    .fill(color)
-                    .frame(width: 3, height: barHeights[i])
-                    .frame(maxHeight: .infinity, alignment: .bottom)
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: 24)
-        .clipped()
-        .onAppear    { if isPlaying { startAnimating() } }
-        .onDisappear { stopAnimating() }
-        .onChange(of: isPlaying) { _, playing in
-            playing ? startAnimating() : stopAnimating()
-        }
-    }
-
-    private func startAnimating() {
-        stopAnimating()
-        let t = Timer.scheduledTimer(withTimeInterval: 0.13, repeats: true) { _ in
-            Task { @MainActor in tick() }
-        }
-        RunLoop.main.add(t, forMode: .common)
-        waveTimer = t
-    }
-
-    private func tick() {
-        let n = Self.barCount
-        // 4-phase cycle simulating kick / off-beat / snare / off-beat at ~115 BPM
-        // phase 0 = kick: center bars spike, outer bars mid
-        // phase 1 = off: all bars low
-        // phase 2 = snare: outer bars spike, center bars mid
-        // phase 3 = off: all bars low
-        let newHeights: [CGFloat] = (0..<n).map { i in
-            let center = abs(i - n / 2)          // 0 at middle, 14 at edges
-            let isCenter = center < n / 4        // inner ~half
-            switch beatPhase % 4 {
-            case 0:  // kick — center spike
-                return isCenter
-                    ? CGFloat.random(in: 14...24)
-                    : CGFloat.random(in: 5...13)
-            case 2:  // snare — outer spike
-                return isCenter
-                    ? CGFloat.random(in: 5...13)
-                    : CGFloat.random(in: 14...22)
-            default: // off-beat — all low
-                return CGFloat.random(in: 3...7)
-            }
-        }
-        beatPhase += 1
-        withAnimation(UNMotion.standard) {
-            barHeights = newHeights
-        }
-    }
-
-    private func stopAnimating() {
-        waveTimer?.invalidate()
-        waveTimer = nil
-        beatPhase = 0
-        withAnimation(UNMotion.standard) {
-            barHeights = Array(repeating: 3, count: Self.barCount)
-        }
     }
 }

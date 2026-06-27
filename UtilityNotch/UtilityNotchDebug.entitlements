@@ -9,5 +9,12 @@
 	<false/>
 	<key>com.apple.security.automation.apple-events</key>
 	<true/>
+	<!-- Microphone input for the Music module's live audio spectrum visualizer.
+	     Required even with the sandbox off because Hardened Runtime is enabled:
+	     without it macOS denies mic access and the app never appears in
+	     System Settings → Privacy & Security → Microphone.
+	     Dev reset: tccutil reset Microphone <bundle-id> -->
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
 </dict>
 </plist>

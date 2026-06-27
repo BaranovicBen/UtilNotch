@@ -11,9 +11,18 @@ struct MusicControlModule: UtilityModule {
     var isEnabled = true
     let supportsNotifications = true
 
-    // MRMediaRemote has no TCC category — no system permission is needed.
-    // With the Debug sandbox-off entitlements the framework works unconditionally.
-    var requiredPermissions: [PermissionInfo] { [] }
+    // MRMediaRemote itself has no TCC category. The microphone is required by the live
+    // spectrum visualizer (real FFT) embedded in the module — requested when the module opens.
+    var requiredPermissions: [PermissionInfo] {
+        [
+            PermissionInfo(
+                id: "microphone",
+                name: "Microphone",
+                reason: "Drives the live audio spectrum bars in the Music module. Audio is analysed in real time and never recorded or stored.",
+                systemSettingsPath: "Privacy & Security → Microphone"
+            )
+        ]
+    }
 
     func makeMainView() -> AnyView {
         AnyView(MusicModuleView())

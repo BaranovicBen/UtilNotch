@@ -159,7 +159,6 @@ enum UNConstants {
     static let musicContentTint = musicProgressStart.opacity(0.012)
     static let calendarContentTint = accentBlue.opacity(0.015)
     static let filesContentTint = fileDefaultEnd.opacity(0.012)
-    static let audioVisualizerContentTint = fileVideoEnd.opacity(0.012)
     static let activeAppsContentTint = fileDefaultEnd.opacity(0.014)
     static let downloadsContentTint = fileAudioEnd.opacity(0.014)
     static let recentFilesContentTint = fileDefaultStart.opacity(0.014)

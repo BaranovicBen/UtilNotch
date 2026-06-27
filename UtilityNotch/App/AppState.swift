@@ -30,9 +30,10 @@ final class AppState {
         _quickNotes = savedNotes ?? []
 
         // Apply module order
-        let defaultOrder = ["todoList", "clipboardHistory", "filesTray", "audioVisualizer", "downloads", "recentFiles", "activeApps", "liveActivities", "calendar", "quickNotes", "musicControl"]
-        // Migrate persisted orders from the removed File Converter slot to the Audio Visualizer.
-        _enabledModuleIDs = (savedOrder ?? defaultOrder).map { $0 == "fileConverter" ? "audioVisualizer" : $0 }
+        let defaultOrder = ["todoList", "clipboardHistory", "filesTray", "downloads", "recentFiles", "activeApps", "liveActivities", "calendar", "quickNotes", "musicControl"]
+        // Stale IDs from the removed File Converter / standalone Audio Visualizer slots are
+        // dropped by validateActiveModule() (it filters IDs with no registered module).
+        _enabledModuleIDs = savedOrder ?? defaultOrder
 
         // Apply settings
         if let s = savedSettings {
@@ -89,7 +90,7 @@ final class AppState {
         set { _activeModuleID = newValue; saveSettings() }
     }
 
-    private var _enabledModuleIDs: [String] = ["todoList", "clipboardHistory", "filesTray", "audioVisualizer", "downloads", "recentFiles", "activeApps", "liveActivities", "calendar", "quickNotes", "musicControl"]
+    private var _enabledModuleIDs: [String] = ["todoList", "clipboardHistory", "filesTray", "downloads", "recentFiles", "activeApps", "liveActivities", "calendar", "quickNotes", "musicControl"]
     /// Ordered list of enabled module IDs (also defines rail order)
     var enabledModuleIDs: [String] {
         get { _enabledModuleIDs }
@@ -396,7 +397,7 @@ final class AppState {
         _enabledModuleIDs = _enabledModuleIDs.filter { ModuleRegistry.module(for: $0) != nil }
 
         if _enabledModuleIDs.isEmpty {
-            _enabledModuleIDs = ["todoList", "clipboardHistory", "filesTray", "audioVisualizer", "downloads", "recentFiles", "activeApps", "liveActivities", "calendar", "quickNotes", "musicControl"]
+            _enabledModuleIDs = ["todoList", "clipboardHistory", "filesTray", "downloads", "recentFiles", "activeApps", "liveActivities", "calendar", "quickNotes", "musicControl"]
         }
 
         if let defaultModuleID,
