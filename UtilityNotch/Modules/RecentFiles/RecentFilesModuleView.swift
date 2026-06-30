@@ -80,10 +80,32 @@ struct RecentFilesModuleView: View {
             manager.urls(for: .downloadsDirectory, in: .userDomainMask).first
         ].compactMap { $0 }
 
-        let keys: [URLResourceKey] = [.isDirectoryKey, .isRegularFileKey, .contentModificationDateKey, .fileSizeKey, .isHiddenKey]
-        var candidates: [FileEntry] = []
+        let keys: [URLResourceKey] = [
+            .isDirectoryKey,
+            .isRegularFileKey,
+            .contentModificationDateKey,
+            .contentAccessDateKey,
+            .fileSizeKey,
+            .isHiddenKey
+        ]
+        var seen = Set<URL>()
+        var candidates: [FileEntry] = NSDocumentController.shared.recentDocumentURLs.compactMap {
+            makeEntry(for: $0, keys: keys, seen: &seen)
+        }
 
         for directory in directories {
+            if let shallowURLs = try? manager.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: keys,
+                options: [.skipsHiddenFiles]
+            ) {
+                for url in shallowURLs.prefix(120) {
+                    if let entry = makeEntry(for: url, keys: keys, seen: &seen) {
+                        candidates.append(entry)
+                    }
+                }
+            }
+
             guard let enumerator = manager.enumerator(
                 at: directory,
                 includingPropertiesForKeys: keys,
@@ -91,26 +113,13 @@ struct RecentFilesModuleView: View {
                 errorHandler: nil
             ) else { continue }
 
+            var scannedInDirectory = 0
             for case let url as URL in enumerator {
-                guard candidates.count < 220,
-                      let values = try? url.resourceValues(forKeys: Set(keys)),
-                      values.isDirectory != true,
-                      values.isRegularFile == true,
-                      values.isHidden != true,
-                      !Self.isNoise(url) else { continue }
-
-                candidates.append(
-                    FileEntry(
-                        id: url,
-                        url: url,
-                        name: url.lastPathComponent,
-                        kind: url.pathExtension.isEmpty ? "FILE" : url.pathExtension.uppercased(),
-                        size: values.fileSize.map(Int64.init),
-                        modifiedAt: values.contentModificationDate,
-                        symbol: Self.symbol(for: url),
-                        tint: Self.tint(for: url)
-                    )
-                )
+                guard scannedInDirectory < 220 else { break }
+                scannedInDirectory += 1
+                if let entry = makeEntry(for: url, keys: keys, seen: &seen) {
+                    candidates.append(entry)
+                }
             }
         }
 
@@ -121,6 +130,29 @@ struct RecentFilesModuleView: View {
         withAnimation(reduceMotion ? UNMotion.reduced : UNMotion.listItem) {
             files = Array(sorted)
         }
+    }
+
+    private func makeEntry(for url: URL, keys: [URLResourceKey], seen: inout Set<URL>) -> FileEntry? {
+        let standardized = url.standardizedFileURL
+        guard !seen.contains(standardized),
+              let values = try? standardized.resourceValues(forKeys: Set(keys)),
+              values.isDirectory != true,
+              values.isRegularFile == true,
+              values.isHidden != true,
+              !Self.isNoise(standardized)
+        else { return nil }
+
+        seen.insert(standardized)
+        return FileEntry(
+            id: standardized,
+            url: standardized,
+            name: standardized.lastPathComponent,
+            kind: standardized.pathExtension.isEmpty ? "FILE" : standardized.pathExtension.uppercased(),
+            size: values.fileSize.map(Int64.init),
+            modifiedAt: values.contentAccessDate ?? values.contentModificationDate,
+            symbol: Self.symbol(for: standardized),
+            tint: Self.tint(for: standardized)
+        )
     }
 
     private static func isNoise(_ url: URL) -> Bool {

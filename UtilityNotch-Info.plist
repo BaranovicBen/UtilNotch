@@ -34,6 +34,10 @@
 	<string>UtilityNotch reads your local calendars to show upcoming events in the notch.</string>
 	<key>NSCalendarsUsageDescription</key>
 	<string>UtilityNotch reads your local calendars to show upcoming events in the notch.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>UtilityNotch reads your reminders due today to show them in the Calendar module.</string>
+	<key>NSRemindersUsageDescription</key>
+	<string>UtilityNotch reads your reminders due today to show them in the Calendar module.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>UtilityNotch uses the microphone to drive the live audio visualizer. Audio is analysed in real time and never recorded or stored.</string>
 </dict>

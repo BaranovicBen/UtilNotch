@@ -17,12 +17,20 @@ struct CalendarModule: UtilityModule {
     var supportsNotifications: Bool = true
 
     var requiredPermissions: [PermissionInfo] {
-        [PermissionInfo(
-            id: "calendars",
-            name: "Calendars",
-            reason: "Reads upcoming events from your calendar to display them in the notch.",
-            systemSettingsPath: "Privacy & Security → Calendars"
-        )]
+        [
+            PermissionInfo(
+                id: "calendars",
+                name: "Calendars",
+                reason: "Reads upcoming events from your calendar to display them in the notch.",
+                systemSettingsPath: "Privacy & Security → Calendars"
+            ),
+            PermissionInfo(
+                id: "reminders",
+                name: "Reminders",
+                reason: "Reads reminders due today for the Calendar module.",
+                systemSettingsPath: "Privacy & Security → Reminders"
+            )
+        ]
     }
 
     func makeMainView() -> AnyView { AnyView(CalendarModuleView()) }

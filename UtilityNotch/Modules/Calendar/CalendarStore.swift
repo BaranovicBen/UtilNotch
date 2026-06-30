@@ -1,5 +1,6 @@
 import SwiftUI
 import EventKit
+import AppKit
 
 // MARK: - WeekDay model
 
@@ -146,6 +147,7 @@ final class CalendarStore {
     /// Requests full calendar access. Updates authStatus and loads events on success.
     func requestAccess() {
         isRequesting = true
+        NSApp.activate(ignoringOtherApps: true)
         Task {
             do {
                 if #available(macOS 14.0, *) {

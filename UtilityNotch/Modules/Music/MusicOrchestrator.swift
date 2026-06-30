@@ -191,9 +191,68 @@ final class MusicOrchestrator {
         await mediaRemote.seek(to: seconds)
     }
 
+    @discardableResult
+    func setShuffleEnabled(_ enabled: Bool) async -> Bool {
+        await setPlaybackMode(kind: activePlaybackKind, shuffle: enabled, repeatOne: nil)
+    }
+
+    @discardableResult
+    func setRepeatOneEnabled(_ enabled: Bool) async -> Bool {
+        await setPlaybackMode(kind: activePlaybackKind, shuffle: nil, repeatOne: enabled)
+    }
+
     func openCurrentProviderApp() {
         debugLog("openCurrentProviderApp", fields: ["bundleID": mediaRemote.activeAppBundleID ?? "nil"])
         mediaRemote.openNativeApp()
+    }
+
+    private var activePlaybackKind: MusicProviderKind {
+        nowPlaying?.provider ?? activeProviderKind ?? .unknown
+    }
+
+    private func setPlaybackMode(kind: MusicProviderKind, shuffle: Bool?, repeatOne: Bool?) async -> Bool {
+        let source: String
+        switch kind {
+        case .appleMusic:
+            var commands: [String] = []
+            if let shuffle {
+                commands.append("set shuffle enabled to \(shuffle ? "true" : "false")")
+            }
+            if let repeatOne {
+                commands.append("set song repeat to \(repeatOne ? "one" : "off")")
+            }
+            source = """
+            tell application "Music"
+                \(commands.joined(separator: "\n    "))
+            end tell
+            """
+        case .spotify:
+            var commands: [String] = []
+            if let shuffle {
+                commands.append("set shuffling to \(shuffle ? "true" : "false")")
+            }
+            if let repeatOne {
+                commands.append("set repeating to \(repeatOne ? "true" : "false")")
+            }
+            source = """
+            tell application "Spotify"
+                \(commands.joined(separator: "\n    "))
+            end tell
+            """
+        case .unknown:
+            return false
+        }
+
+        var errorInfo: NSDictionary?
+        let result = NSAppleScript(source: source)?.executeAndReturnError(&errorInfo)
+        let succeeded = result != nil && errorInfo == nil
+        debugLog("setPlaybackMode", fields: [
+            "kind": kind.displayName,
+            "shuffle": shuffle.map(String.init) ?? "nil",
+            "repeatOne": repeatOne.map(String.init) ?? "nil",
+            "succeeded": "\(succeeded)"
+        ])
+        return succeeded
     }
 
     // MARK: - Refresh

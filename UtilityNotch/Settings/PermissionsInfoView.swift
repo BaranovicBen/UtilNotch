@@ -5,6 +5,7 @@ import ServiceManagement
 
 /// Permissions information view — displays current system status and which permissions each utility needs.
 struct PermissionsInfoView: View {
+    @State private var isRequestingCalendarAccess = false
     
     var body: some View {
         Form {
@@ -41,7 +42,10 @@ struct PermissionsInfoView: View {
                     title: "Calendars",
                     detail: "EventKit access for the Calendar module.",
                     status: calendarStatus.text,
-                    color: calendarStatus.color
+                    color: calendarStatus.color,
+                    action: {
+                        calendarAccessButton
+                    }
                 )
 
                 let launchStatus = launchAtLoginStatus
@@ -146,7 +150,30 @@ struct PermissionsInfoView: View {
         }
     }
 
-    private func statusRow(title: String, detail: String, status: String, color: Color) -> some View {
+    @ViewBuilder
+    private var calendarAccessButton: some View {
+        switch EKEventStore.authorizationStatus(for: .event) {
+        case .notDetermined:
+            Button(isRequestingCalendarAccess ? "Requesting..." : "Allow Access") {
+                requestCalendarAccess()
+            }
+            .disabled(isRequestingCalendarAccess)
+        case .denied, .restricted, .writeOnly:
+            Button("Open Settings") {
+                openCalendarPrivacySettings()
+            }
+        default:
+            EmptyView()
+        }
+    }
+
+    private func statusRow<Action: View>(
+        title: String,
+        detail: String,
+        status: String,
+        color: Color,
+        @ViewBuilder action: () -> Action
+    ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 Image(systemName: "circle.fill")
@@ -158,6 +185,7 @@ struct PermissionsInfoView: View {
                 Text(status)
                     .font(.caption)
                     .foregroundStyle(color)
+                action()
             }
 
             Text(detail)
@@ -165,5 +193,46 @@ struct PermissionsInfoView: View {
                 .foregroundStyle(.secondary)
         }
         .padding(.vertical, 2)
+    }
+
+    private func statusRow(title: String, detail: String, status: String, color: Color) -> some View {
+        statusRow(title: title, detail: detail, status: status, color: color) {
+            EmptyView()
+        }
+    }
+
+    private func requestCalendarAccess() {
+        guard !isRequestingCalendarAccess else { return }
+        isRequestingCalendarAccess = true
+        NSApp.activate(ignoringOtherApps: true)
+        Task {
+            do {
+                if #available(macOS 14.0, *) {
+                    _ = try await sharedEventStore.requestFullAccessToEvents()
+                } else {
+                    _ = try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Bool, Error>) in
+                        sharedEventStore.requestAccess(to: .event) { granted, error in
+                            if let error {
+                                cont.resume(throwing: error)
+                            } else {
+                                cont.resume(returning: granted)
+                            }
+                        }
+                    }
+                }
+            } catch {
+                #if DEBUG
+                print("Calendar permission request failed: \(error)")
+                #endif
+            }
+            await MainActor.run {
+                isRequestingCalendarAccess = false
+            }
+        }
+    }
+
+    private func openCalendarPrivacySettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars") else { return }
+        NSWorkspace.shared.open(url)
     }
 }

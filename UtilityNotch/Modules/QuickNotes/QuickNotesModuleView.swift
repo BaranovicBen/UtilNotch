@@ -52,7 +52,7 @@ struct QuickNotesModuleView: View {
                             if isUsingDummy {
                                 notesEmptyState
                             } else {
-                                ForEach(appState.quickNotes) { note in
+                                ForEach(orderedNotes) { note in
                                     liveNoteCard(note)
                                         .transition(.opacity.combined(with: .move(edge: .trailing)))
                                 }
@@ -96,9 +96,17 @@ struct QuickNotesModuleView: View {
                 .foregroundStyle(UNConstants.textTertiary)
         }
         .padding(12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background {
             RoundedRectangle(cornerRadius: UNConstants.tileCornerRadius, style: .continuous)
                 .fill(UNConstants.insetSurface)
+        }
+    }
+
+    private var orderedNotes: [QuickNote] {
+        appState.quickNotes.sorted {
+            if $0.isPinned != $1.isPinned { return $0.isPinned && !$1.isPinned }
+            return $0.createdAt > $1.createdAt
         }
     }
 
@@ -135,6 +143,7 @@ struct QuickNotesModuleView: View {
             },
             onToggleExpanded: { togglePinnedExpansion(note.id) },
             onEdit: { openEditPopup(note) },
+            onTogglePin: { togglePinned(note) },
             onCopy: { copyNote(note) },
             onDelete: { deleteNote(note) }
         )
@@ -315,6 +324,13 @@ struct QuickNotesModuleView: View {
         NSPasteboard.general.setString(text, forType: .string)
     }
 
+    private func togglePinned(_ note: QuickNote) {
+        guard let idx = appState.quickNotes.firstIndex(where: { $0.id == note.id }) else { return }
+        withAnimation(UNMotion.listItem) {
+            appState.quickNotes[idx].isPinned.toggle()
+        }
+    }
+
     private func deleteNote(_ note: QuickNote) {
         withAnimation(UNMotion.listItem) {
             appState.quickNotes.removeAll { $0.id == note.id }
@@ -336,6 +352,7 @@ private struct LiveNoteCardView: View {
     let onHoverChanged: (Bool) -> Void
     let onToggleExpanded: () -> Void
     let onEdit: () -> Void
+    let onTogglePin: () -> Void
     let onCopy: () -> Void
     let onDelete: () -> Void
 
@@ -346,6 +363,12 @@ private struct LiveNoteCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
+                if note.isPinned {
+                    Image(systemName: "pin.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(UNConstants.amber)
+                }
+
                 Text(note.title)
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(UNConstants.textPrimary)
@@ -379,7 +402,9 @@ private struct LiveNoteCardView: View {
         .overlay(
             RoundedRectangle(cornerRadius: UNConstants.rowCornerRadius, style: .continuous)
                 .strokeBorder(
-                    isExpanded ? UNConstants.iconActiveTint.opacity(0.28) : Color.clear,
+                    note.isPinned
+                        ? UNConstants.amber.opacity(0.32)
+                        : (isExpanded ? UNConstants.iconActiveTint.opacity(0.28) : Color.clear),
                     lineWidth: 1
                 )
         )
@@ -401,6 +426,13 @@ private struct LiveNoteCardView: View {
                 Image(systemName: "pencil")
                     .font(.system(size: 13))
                     .foregroundStyle(UNConstants.textSecondary)
+            }
+            .buttonStyle(.plain)
+
+            Button(action: onTogglePin) {
+                Image(systemName: note.isPinned ? "pin.slash" : "pin")
+                    .font(.system(size: 13))
+                    .foregroundStyle(note.isPinned ? UNConstants.amber : UNConstants.textSecondary)
             }
             .buttonStyle(.plain)
 

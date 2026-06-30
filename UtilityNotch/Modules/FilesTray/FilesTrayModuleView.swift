@@ -9,10 +9,6 @@ struct FilesTrayModuleView: View {
 
     @State private var store = FilesTrayStore()
     @State private var isDragTargeted: Bool = false
-    @State private var workflow: FilesWorkflow = .store
-    @State private var isConverterDragTargeted: Bool = false
-    @State private var converterFileName: String?
-    @State private var converterStatus: ConversionDisplayState = .idle
     // Captures the AirDrop button's NSView so NSSharingServicePicker anchors to it
     @State private var shareAnchorView: NSView? = nil
 
@@ -45,8 +41,8 @@ struct FilesTrayModuleView: View {
                 }
             },
             statusDotColor: Color.white.opacity(0.2),
-            statusLeft: workflow == .store ? (isUsingDummy ? "0 FILES" : "\(store.trayItems.count) FILES") : "LOCAL CONVERT",
-            statusRight: workflow == .store ? "DROP TO ADD" : converterStatus.footerText,
+            statusLeft: isUsingDummy ? "0 FILES" : "\(store.trayItems.count) FILES",
+            statusRight: "DROP TO ADD",
             actionButton: {
                 AnyView(
                     HStack(spacing: 6) {
@@ -106,16 +102,7 @@ struct FilesTrayModuleView: View {
                 )
             }
         ) {
-            VStack(spacing: 10) {
-                workflowSwitch
-
-                if workflow == .store {
-                    filesStoreSurface
-                } else {
-                    converterSurface
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            filesStoreSurface
         }
         .onAppear {
             store.onAppear()
@@ -134,37 +121,6 @@ struct FilesTrayModuleView: View {
             if targeted { appState.dismissalLocks.insert(.dragDrop) }
             else { appState.dismissalLocks.remove(.dragDrop) }
         }
-        .onChange(of: isConverterDragTargeted) { _, targeted in
-            if targeted { appState.dismissalLocks.insert(.dragDrop) }
-            else { appState.dismissalLocks.remove(.dragDrop) }
-        }
-    }
-
-    private var workflowSwitch: some View {
-        HStack(spacing: 2) {
-            ForEach(FilesWorkflow.allCases) { item in
-                Button {
-                    withAnimation(UNMotion.standard) { workflow = item }
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: item.icon)
-                            .font(.system(size: 11, weight: .medium))
-                        Text(item.label)
-                            .font(.system(size: 12, weight: .semibold))
-                    }
-                    .foregroundStyle(workflow == item ? UNConstants.textPrimary : UNConstants.textTertiary)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 28)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(workflow == item ? UNConstants.selectedSurface : Color.clear)
-                    )
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(3)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(UNConstants.insetSurface))
     }
 
     private var filesStoreSurface: some View {
@@ -195,48 +151,6 @@ struct FilesTrayModuleView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onDrop(of: [.fileURL], isTargeted: $isDragTargeted) { providers in
             handleDrop(providers)
-        }
-    }
-
-    private var converterSurface: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: UNConstants.tileCornerRadius, style: .continuous)
-                .fill(isConverterDragTargeted ? UNConstants.insetSurface : UNConstants.contentLift)
-                .overlay(
-                    RoundedRectangle(cornerRadius: UNConstants.tileCornerRadius, style: .continuous)
-                        .strokeBorder(
-                            Color.white.opacity(isConverterDragTargeted ? 0.35 : 0.15),
-                            style: StrokeStyle(lineWidth: isConverterDragTargeted ? 1.5 : 1, dash: isConverterDragTargeted ? [] : [6, 4])
-                        )
-                )
-
-            VStack(spacing: 10) {
-                Image(systemName: converterStatus.iconName)
-                    .font(.system(size: 28, weight: .light))
-                    .foregroundStyle(converterStatus == .done ? UNConstants.successGreen : UNConstants.textPlaceholder)
-
-                Text(converterFileName ?? (isConverterDragTargeted ? "release to convert" : "drop a file to convert"))
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(UNConstants.textPrimary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-
-                if converterStatus == .converting {
-                    ProgressView()
-                        .controlSize(.small)
-                } else {
-                    Text(converterStatus.message)
-                        .font(.system(size: 11, weight: .regular, design: .monospaced))
-                        .foregroundStyle(UNConstants.textTertiary)
-                        .textCase(.uppercase)
-                }
-            }
-            .padding(.horizontal, 24)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .contentShape(Rectangle())
-        .onDrop(of: [.fileURL], isTargeted: $isConverterDragTargeted) { providers in
-            handleConverterDrop(providers)
         }
     }
 
@@ -310,92 +224,13 @@ struct FilesTrayModuleView: View {
     // MARK: - Drop Handler
 
     private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
-        for provider in providers {
-            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
-                guard let data = item as? Data,
-                      let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
-                Task { @MainActor in
-                    store.addURLs([url])
-                }
-            }
+        FileURLDropLoader.load(from: providers) { urls in
+            guard !urls.isEmpty else { return }
+            store.addURLs(urls)
         }
         return true
     }
 
-    private func handleConverterDrop(_ providers: [NSItemProvider]) -> Bool {
-        guard let provider = providers.first else { return false }
-        provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
-            guard let data = item as? Data,
-                  let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
-            DispatchQueue.main.async {
-                converterFileName = url.lastPathComponent
-                runMockConversion()
-            }
-        }
-        return true
-    }
-
-    private func runMockConversion() {
-        converterStatus = .converting
-        appState.dismissalLocks.insert(.activeConvert)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-            withAnimation(UNMotion.progress) {
-                converterStatus = .done
-            }
-            appState.dismissalLocks.remove(.activeConvert)
-        }
-    }
-}
-
-private enum FilesWorkflow: String, CaseIterable, Identifiable {
-    case store
-    case convert
-
-    var id: String { rawValue }
-
-    var label: String {
-        switch self {
-        case .store: return "Store"
-        case .convert: return "Convert"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .store: return "tray"
-        case .convert: return "arrow.2.squarepath"
-        }
-    }
-}
-
-private enum ConversionDisplayState: Equatable {
-    case idle
-    case converting
-    case done
-
-    var iconName: String {
-        switch self {
-        case .idle: return "arrow.down.doc"
-        case .converting: return "arrow.2.squarepath"
-        case .done: return "checkmark.circle"
-        }
-    }
-
-    var message: String {
-        switch self {
-        case .idle: return "choose format later"
-        case .converting: return "converting"
-        case .done: return "ready to open or share"
-        }
-    }
-
-    var footerText: String {
-        switch self {
-        case .idle: return "DROP TO START"
-        case .converting: return "CONVERTING"
-        case .done: return "COMPLETE"
-        }
-    }
 }
 
 // MARK: - NSView anchor helper
