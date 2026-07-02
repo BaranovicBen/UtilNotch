@@ -22,6 +22,16 @@ struct MusicModuleView: View {
 
     // Live audio spectrum meter (real microphone FFT — replaces the old demo pulse animation)
     @State private var spectrumAnalyzer = AudioSpectrumAnalyzer()
+    // Watches the default output device so live mic is auto-suppressed on Bluetooth headphones.
+    @State private var routeMonitor = AudioOutputRouteMonitor()
+
+    // User's chosen visualizer source (persisted). Defaults to the animated dummy.
+    @AppStorage(MusicVizKey.source) private var vizSourceRaw = MusicVizSource.dummy.rawValue
+    private var vizSource: MusicVizSource { MusicVizSource(rawValue: vizSourceRaw) ?? .dummy }
+
+    /// Live mic only when the user picked it AND we're not on a Bluetooth output. Capturing the mic
+    /// over Bluetooth forces the headset into low-quality call mode and degrades playback.
+    private var wantsLiveAudio: Bool { vizSource == .live && !routeMonitor.isBluetoothOutput }
 
     // Whole-module hover → ambient glow + visualizer brightening
     @State private var isModuleHovering = false
@@ -78,18 +88,22 @@ struct MusicModuleView: View {
         .onAppear {
             appState.setModuleActionButton(nil)
             updateMusicActivity()
-            spectrumAnalyzer.previewMode = false   // re-attempt live each open (mic may now be granted)
-            spectrumAnalyzer.start()               // requests microphone permission on first activation
+            routeMonitor.start()
+            applyVizMode()
         }
         .onDisappear {
             spectrumAnalyzer.stop()
+            routeMonitor.stop()
         }
+        .onChange(of: vizSourceRaw) { _, _ in applyVizMode() }
+        .onChange(of: routeMonitor.isBluetoothOutput) { _, _ in applyVizMode() }
         .onChange(of: spectrumAnalyzer.lifecycle) { _, newState in
-            // Coarse lifecycle only (changes rarely) — decides demo vs live. Never engine ops here.
+            // If live was requested but the mic is denied/unavailable, fall back to dummy. Coarse
+            // lifecycle only (changes rarely) — never engine ops here.
+            guard wantsLiveAudio else { return }
             switch newState {
             case .denied, .unavailable, .failed: spectrumAnalyzer.previewMode = true
-            case .running:                       spectrumAnalyzer.previewMode = false
-            case .idle, .starting, .requestingPermission, .stopping: break
+            default: break
             }
         }
         .onChange(of: orchestrator.nowPlaying?.current?.id) { _, _ in updateMusicActivity() }
@@ -361,6 +375,17 @@ struct MusicModuleView: View {
         )
         .frame(width: 76, height: 178)
         .padding(.trailing, 8)
+    }
+
+    /// Applies the current source choice to the analyzer. Live starts the mic engine; dummy (or the
+    /// Bluetooth-forced fallback) flips on the animated preview, which frees the mic immediately.
+    private func applyVizMode() {
+        if wantsLiveAudio {
+            spectrumAnalyzer.previewMode = false   // re-attempt live (mic may now be granted)
+            spectrumAnalyzer.start()               // requests microphone permission on first activation
+        } else {
+            spectrumAnalyzer.previewMode = true    // setter stops the engine + runs the dummy motion
+        }
     }
 
     // MARK: - Playback controls

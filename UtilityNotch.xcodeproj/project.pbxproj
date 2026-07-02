@@ -13,24 +13,10 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		CD9BE55C2F5B271300B91731 /* UtilityNotch */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				CDEE00012F5B271300B91731 /* PBXFileSystemSynchronizedBuildFileExceptionSet */,
-			);
 			path = UtilityNotch;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
-
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		CDEE00012F5B271300B91731 /* Exceptions for "UtilityNotch" folder in "UtilityNotch" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				UtilityNotch.entitlements,
-				UtilityNotchDebug.entitlements,
-			);
-			target = CD9BE5592F5B271300B91731 /* UtilityNotch */;
-		};
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		CD9BE5572F5B271300B91731 /* Frameworks */ = {

@@ -89,6 +89,8 @@ struct ModuleColorSettingsView: View {
 
                 if selectedID == "musicControl" {
                     musicControls
+                } else if selectedID == "activeApps" {
+                    activeAppsControls
                 } else {
                     genericControls
                 }
@@ -123,6 +125,24 @@ struct ModuleColorSettingsView: View {
             c.musicVizLowHex = ModuleColorConfig.defaultVizLow
             c.musicVizMidHex = ModuleColorConfig.defaultVizMid
             c.musicVizHighHex = ModuleColorConfig.defaultVizHigh
+            appState.moduleColors = c
+        }
+    }
+
+    // MARK: - Active Apps
+
+    @ViewBuilder
+    private var activeAppsControls: some View {
+        sectionLabel("MEMORY PRESSURE ZONES")
+        ColorEditRow(title: "Normal (green)",   subtitle: "Low pressure",      hex: bindOpt(\.activeAppsNormalHex))
+        ColorEditRow(title: "Heavy (amber)",    subtitle: "Elevated pressure", hex: bindOpt(\.activeAppsHeavyHex))
+        ColorEditRow(title: "Critical (red)",   subtitle: "High pressure",     hex: bindOpt(\.activeAppsCriticalHex))
+
+        resetButton {
+            var c = appState.moduleColors
+            c.activeAppsNormalHex = nil
+            c.activeAppsHeavyHex = nil
+            c.activeAppsCriticalHex = nil
             appState.moduleColors = c
         }
     }
@@ -175,6 +195,17 @@ struct ModuleColorSettingsView: View {
     private func bind(_ keyPath: WritableKeyPath<ModuleColorConfig, String>) -> Binding<String> {
         Binding(
             get: { appState.moduleColors[keyPath: keyPath] },
+            set: { newVal in
+                var c = appState.moduleColors
+                c[keyPath: keyPath] = Self.sanitize(newVal)
+                appState.moduleColors = c
+            }
+        )
+    }
+
+    private func bindOpt(_ keyPath: WritableKeyPath<ModuleColorConfig, String?>) -> Binding<String> {
+        Binding(
+            get: { appState.moduleColors[keyPath: keyPath] ?? "" },
             set: { newVal in
                 var c = appState.moduleColors
                 c[keyPath: keyPath] = Self.sanitize(newVal)
