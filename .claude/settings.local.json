@@ -67,7 +67,15 @@
       "WebFetch(domain:www.producthunt.com)",
       "WebFetch(domain:www.visalytica.com)",
       "WebFetch(domain:notchable.com)",
-      "WebFetch(domain:www.macobserver.com)"
+      "WebFetch(domain:www.macobserver.com)",
+      "Bash(echo \"exit:$?\")",
+      "Bash(git push *)",
+      "Bash(git mv *)",
+      "Bash(echo \"grep-exit:$?\")",
+      "Bash(killall UtilityNotch)",
+      "Bash(DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -scheme UtilityNotch -configuration Debug -destination 'platform=macOS' clean build)",
+      "Bash(git checkout *)",
+      "Bash(git merge *)"
     ]
   },
   "enabledPlugins": {

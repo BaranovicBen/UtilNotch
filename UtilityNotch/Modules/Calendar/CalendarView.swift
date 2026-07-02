@@ -4,8 +4,24 @@ import EventKit
 // MARK: - Settings Keys
 
 enum CalKey {
-    static let lookahead  = "cal.lookaheadDays"   // Int: 1, 3, or 7
-    static let enabledIDs = "cal.enabledCalIDs"   // comma-joined calendar identifiers
+    static let lookahead       = "cal.lookaheadDays"     // Int: 1, 3, or 7
+    static let enabledIDs      = "cal.enabledCalIDs"     // comma-joined calendar identifiers
+    static let indicatorMode   = "cal.indicatorMode"     // "segmented" or "pills"
+    static let enabledReminders = "cal.enabledReminderIDs" // comma-joined reminder-list identifiers
+    static let weekStart       = "cal.weekStart"         // Int: 1 = Sunday, 2 = Monday
+}
+
+/// How per-day events are drawn under each day in the month grid.
+enum CalendarIndicatorMode: String, CaseIterable, Identifiable {
+    case segmented        // one rounded bar split into colored segments
+    case pills            // a stack of thin colored pills
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .segmented: return "Segmented"
+        case .pills:     return "Stacked pills"
+        }
+    }
 }
 
 enum CalLookahead: Int, CaseIterable, Identifiable {
@@ -184,18 +200,9 @@ struct CalendarView: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 16)
-            Button {
-                requestCalendarAccess()
-            } label: {
-                Text(isRequesting ? "Requesting…" : "Grant Access")
-                    .font(.callout.weight(.semibold))
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 8)
-                    .background(Color.accentColor.opacity(0.25), in: RoundedRectangle(cornerRadius: 9))
-                    .foregroundStyle(Color.accentColor)
-            }
-            .buttonStyle(.plain)
-            .disabled(isRequesting)
+            Text("Manage access in Settings.")
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(.tertiary)
             Spacer()
         }
         .frame(maxWidth: .infinity)
@@ -215,17 +222,6 @@ struct CalendarView: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 16)
-            Button {
-                NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars")!)
-            } label: {
-                Text("Open System Settings")
-                    .font(.caption.weight(.medium))
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 6)
-                    .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 7))
-                    .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.plain)
             Spacer()
         }
         .frame(maxWidth: .infinity)
@@ -419,15 +415,40 @@ private struct EventRow: View {
 // MARK: - Settings View
 
 struct CalendarSettingsView: View {
-    @AppStorage(CalKey.lookahead)  private var lookaheadDays: Int = 1
-    @AppStorage(CalKey.enabledIDs) private var enabledIDsRaw: String = ""
+    @AppStorage(CalKey.lookahead)       private var lookaheadDays: Int = 3
+    @AppStorage(CalKey.enabledIDs)      private var enabledIDsRaw: String = ""
+    @AppStorage(CalKey.indicatorMode)   private var indicatorModeRaw: String = CalendarIndicatorMode.segmented.rawValue
+    @AppStorage(CalKey.enabledReminders) private var enabledReminderIDsRaw: String = ""
+    @AppStorage(CalKey.weekStart)       private var weekStartRaw: Int = Calendar.current.firstWeekday
     @State private var allCalendars: [EKCalendar] = []
+    @State private var allReminderLists: [EKCalendar] = []
+
+    private var indicatorMode: Binding<CalendarIndicatorMode> {
+        Binding(
+            get: { CalendarIndicatorMode(rawValue: indicatorModeRaw) ?? .segmented },
+            set: { indicatorModeRaw = $0.rawValue }
+        )
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Calendar Settings")
                 .font(.headline)
                 .foregroundStyle(.primary)
+
+            // Event indicator style
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Day event indicator")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Picker("", selection: indicatorMode) {
+                    ForEach(CalendarIndicatorMode.allCases) { mode in
+                        Text(mode.label).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            }
 
             // Lookahead picker
             VStack(alignment: .leading, spacing: 6) {
@@ -443,6 +464,20 @@ struct CalendarSettingsView: View {
                 .labelsHidden()
             }
 
+            // Week start
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Start week on")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Picker("", selection: $weekStartRaw) {
+                    Text("Monday").tag(2)
+                    Text("Sunday").tag(1)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 200)
+            }
+
             // Calendar multi-select
             VStack(alignment: .leading, spacing: 6) {
                 Text("Show calendars")
@@ -454,7 +489,23 @@ struct CalendarSettingsView: View {
                         .foregroundStyle(.tertiary)
                 } else {
                     ForEach(allCalendars, id: \.calendarIdentifier) { cal in
-                        CalendarToggleRow(calendar: cal, enabledIDsRaw: $enabledIDsRaw)
+                        CalendarToggleRow(calendar: cal, enabledIDsRaw: $enabledIDsRaw, entity: .event)
+                    }
+                }
+            }
+
+            // Reminder-list multi-select
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Include reminder lists")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if allReminderLists.isEmpty {
+                    Text("No reminder lists accessible.")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                } else {
+                    ForEach(allReminderLists, id: \.calendarIdentifier) { list in
+                        CalendarToggleRow(calendar: list, enabledIDsRaw: $enabledReminderIDsRaw, entity: .reminder)
                     }
                 }
             }
@@ -465,6 +516,9 @@ struct CalendarSettingsView: View {
         .padding()
         .onAppear {
             if isAuthorized { allCalendars = sharedEventStore.calendars(for: .event) }
+            if EKEventStore.authorizationStatus(for: .reminder) == .fullAccess {
+                allReminderLists = sharedEventStore.calendars(for: .reminder)
+            }
         }
     }
 
@@ -477,6 +531,7 @@ struct CalendarSettingsView: View {
 private struct CalendarToggleRow: View {
     let calendar: EKCalendar
     @Binding var enabledIDsRaw: String
+    var entity: EKEntityType = .event
 
     var body: some View {
         HStack(spacing: 8) {
@@ -510,13 +565,13 @@ private struct CalendarToggleRow: View {
         var set = currentSet
         if set.isEmpty {
             // All were enabled — explicitly enable all except this one if turning off
-            let all = sharedEventStore.calendars(for: .event).map(\.calendarIdentifier)
+            let all = sharedEventStore.calendars(for: entity).map(\.calendarIdentifier)
             set = Set(all)
         }
         if on { set.insert(calendar.calendarIdentifier) }
         else  { set.remove(calendar.calendarIdentifier) }
         // If all are enabled again, clear to "show all"
-        let allIDs = Set(sharedEventStore.calendars(for: .event).map(\.calendarIdentifier))
+        let allIDs = Set(sharedEventStore.calendars(for: entity).map(\.calendarIdentifier))
         enabledIDsRaw = set == allIDs ? "" : set.joined(separator: ",")
     }
 }

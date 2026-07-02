@@ -257,11 +257,14 @@
 				DEVELOPMENT_TEAM = C8TPFM3LM9;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "UtilityNotch-Info.plist";
 				INFOPLIST_KEY_CFBundleIconName = UtilityNotchIcon;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSAppleEventsUsageDescription = "UtilityNotch sends Apple Events to Music.app to read and control playback.";
 				INFOPLIST_KEY_NSAppleMusicUsageDescription = "UtilityNotch uses Apple Music to display and control your currently playing music.";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "UtilityNotch reads your local calendars to show upcoming events in the notch.";
+				INFOPLIST_KEY_NSCalendarsUsageDescription = "UtilityNotch reads your local calendars to show upcoming events in the notch.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -289,12 +292,15 @@
 				DEVELOPMENT_TEAM = C8TPFM3LM9;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "UtilityNotch-Info.plist";
 				INFOPLIST_KEY_CFBundleIconName = UtilityNotchIcon;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSAppleEventsUsageDescription = "UtilityNotch sends Apple Events to Music.app to read and control playback.";
 				INFOPLIST_KEY_NSAppleMusicUsageDescription = "UtilityNotch uses Apple Music to display and control your currently playing music.";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "UtilityNotch reads your local calendars to show upcoming events in the notch.";
+				INFOPLIST_KEY_NSCalendarsUsageDescription = "UtilityNotch reads your local calendars to show upcoming events in the notch.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

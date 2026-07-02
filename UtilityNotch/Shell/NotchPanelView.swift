@@ -1,11 +1,9 @@
 import SwiftUI
-import UniformTypeIdentifiers
 
 /// Root SwiftUI view hosted inside the floating NSPanel.
 /// Layout: notch-shaped top edge, center content + right utility rail, dark glass surface.
 struct NotchPanelView: View {
     @Environment(AppState.self) private var appState
-    @State private var isPanelDropTargeted = false
     
     var body: some View {
         // CanonicalShellView is the stable shell — it never rebuilds on module switch.
@@ -44,43 +42,6 @@ struct NotchPanelView: View {
         .onHover { hovering in
             appState.isPointerInsidePanel = hovering
         }
-        .onDrop(of: [.fileURL], isTargeted: $isPanelDropTargeted) { providers in
-            handlePanelDrop(providers)
-        }
-        .onChange(of: isPanelDropTargeted) { _, targeted in
-            if targeted { appState.dismissalLocks.insert(.dragDrop) }
-            else {
-                appState.dismissalLocks.remove(.dragDrop)
-                // Drag left the panel without a drop (cancelled) — restore previous module.
-                if appState.isExternalFileDrag {
-                    withAnimation(UNMotion.standard) {
-                        appState.isExternalFileDrag = false
-                        if let prev = appState.preDragModuleID {
-                            appState.selectModule(prev)
-                            appState.preDragModuleID = nil
-                        }
-                    }
-                }
-            }
-        }
         .environment(\.colorScheme, .dark)
-    }
-    
-    private func handlePanelDrop(_ providers: [NSItemProvider]) -> Bool {
-        guard let provider = providers.first else { return false }
-        provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
-            if let data = item as? Data, let url = URL(dataRepresentation: data, relativeTo: nil) {
-                DispatchQueue.main.async {
-                    // Background fallback: dropped on panel chrome outside any card.
-                    // Route to Files Tray and clean up drag state.
-                    appState.pendingTrayURLs.append(url)
-                    appState.isExternalFileDrag = false
-                    appState.preDragModuleID = nil
-                    appState.selectModule("filesTray")
-                    appState.showPanel()
-                }
-            }
-        }
-        return true
     }
 }

@@ -73,7 +73,9 @@ final class AudioSpectrumAnalyzer {
     private let processor = SpectrumProcessor(bandCount: AudioSpectrumAnalyzer.bandCount)
     private var isTapInstalled = false
     private var previewTimer: Timer?
-    private var previewPhase: Double = 0
+    /// Per-band moving target for the organic random dummy motion. Each band drifts toward its own
+    /// target and re-rolls it on its own loose cadence, so bars move independently — not in lockstep.
+    private var previewTargets: [CGFloat] = Array(repeating: 0.3, count: AudioSpectrumAnalyzer.bandCount)
 
     /// Debounce teardown so rapid disappear→appear (panel open/close animations) doesn't churn
     /// the audio graph — the classic source of -10877 (kAudioUnitErr_CannotDoInCurrentContext).
@@ -293,7 +295,7 @@ final class AudioSpectrumAnalyzer {
         levels = Array(repeating: 0, count: Self.bandCount)
     }
 
-    // MARK: - Preview (deterministic, clearly labelled in the UI)
+    // MARK: - Preview (organic random dummy motion, clearly labelled in the UI)
 
     private func startPreview() {
         // Free the mic immediately for demo mode (no debounce), but leave `lifecycle` as-is
@@ -312,14 +314,19 @@ final class AudioSpectrumAnalyzer {
         if !previewMode { decayToBaseline() }
     }
 
+    /// Organic random motion: each band occasionally picks a fresh random target and eases toward it
+    /// (faster up than down → a lively bounce). Independent per-band re-rolls keep the bars from
+    /// marching in sync, so it reads as music-like rather than a repeating sweep.
     private func tickPreview() {
-        previewPhase += 0.18
         var next = levels
         for i in 0..<Self.bandCount {
-            // Traveling sine across the bars — deterministic, not random.
-            let wave = sin(previewPhase + Double(i) * 0.5)
-            let env = 0.45 + 0.4 * sin(previewPhase * 0.5 + Double(i) * 0.2)
-            next[i] = CGFloat(max(0.04, (wave * 0.5 + 0.5) * env))
+            // ~12% chance per frame to retarget → each band drifts on its own loose cadence.
+            if CGFloat.random(in: 0...1) < 0.12 {
+                previewTargets[i] = CGFloat.random(in: 0.10...1.0)
+            }
+            let target = previewTargets[i]
+            let rate: CGFloat = target > next[i] ? 0.45 : 0.20
+            next[i] = max(0.04, next[i] + (target - next[i]) * rate)
         }
         levels = next
     }

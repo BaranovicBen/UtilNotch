@@ -17,6 +17,7 @@ final class EventTriggerManager {
     private var globalClickMonitor: Any?
     private var localClickMonitor: Any?
     private var mouseMoveMonitor: Any?
+    private var localMouseMoveMonitor: Any?
     private var inactivityTimer: Timer?
     private var mouseLeaveTimer: Timer?
 
@@ -45,6 +46,7 @@ final class EventTriggerManager {
         if let globalClickMonitor { NSEvent.removeMonitor(globalClickMonitor) }
         if let localClickMonitor { NSEvent.removeMonitor(localClickMonitor) }
         if let mouseMoveMonitor { NSEvent.removeMonitor(mouseMoveMonitor) }
+        if let localMouseMoveMonitor { NSEvent.removeMonitor(localMouseMoveMonitor) }
         inactivityTimer?.invalidate()
         mouseLeaveTimer?.invalidate()
 
@@ -53,6 +55,7 @@ final class EventTriggerManager {
         globalClickMonitor = nil
         localClickMonitor = nil
         mouseMoveMonitor = nil
+        localMouseMoveMonitor = nil
     }
 
     // MARK: - Global Hotkey (⌥Space)
@@ -125,6 +128,13 @@ final class EventTriggerManager {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in self?.checkMousePosition() }
         }
+
+        localMouseMoveMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.mouseMoved, .leftMouseDragged, .rightMouseDragged]
+        ) { [weak self] event in
+            Task { @MainActor [weak self] in self?.checkMousePosition() }
+            return event
+        }
     }
 
     private func checkMousePosition() {
@@ -138,9 +148,8 @@ final class EventTriggerManager {
         guard let panelWindow = panelController?.panelWindow else { return }
 
         let mouseLocation = NSEvent.mouseLocation
-        // Expand the panel frame slightly for a generous hit area
-        let expandedFrame = panelWindow.frame.insetBy(dx: -16, dy: -16)
-        appState.isPointerInsidePanel = expandedFrame.contains(mouseLocation)
+        let interactionFrame = panelInteractionFrame(for: panelWindow)
+        appState.isPointerInsidePanel = interactionFrame.contains(mouseLocation)
 
         if appState.isPointerInsidePanel {
             // Mouse is inside — cancel any pending close
@@ -158,7 +167,7 @@ final class EventTriggerManager {
                         // Double-check: still outside and not suppressed?
                         if let pw = self.panelController?.panelWindow {
                             let pos = NSEvent.mouseLocation
-                            let frame = pw.frame.insetBy(dx: -16, dy: -16)
+                            let frame = self.panelInteractionFrame(for: pw)
                             if !frame.contains(pos) && !self.appState.shouldSuppressClose {
                                 self.appState.hidePanel()
                             }
@@ -168,6 +177,17 @@ final class EventTriggerManager {
                 }
             }
         }
+    }
+
+    private func panelInteractionFrame(for panelWindow: NSWindow) -> CGRect {
+        let panelFrame = panelWindow.frame.insetBy(dx: -16, dy: -16)
+        let triggerFrame = CGRect(
+            x: ScreenGeometry.triggerZoneOriginX - 24,
+            y: ScreenGeometry.triggerZoneOriginY - 12,
+            width: ScreenGeometry.triggerZoneWidth + 48,
+            height: ScreenGeometry.triggerZoneHeight + 24
+        )
+        return panelFrame.union(triggerFrame)
     }
 
     // MARK: - Inactivity Timer

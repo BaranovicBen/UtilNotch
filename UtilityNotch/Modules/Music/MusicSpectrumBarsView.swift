@@ -30,11 +30,8 @@ struct MusicSpectrumBarsView: View {
     private let amberTop = 0.85
 
     var body: some View {
-        ZStack(alignment: .top) {
-            bars
-            if isDemo { demoBadge }
-        }
-        .frame(width: 76, height: 178)
+        bars
+            .frame(width: 76, height: 178)
     }
     // NOTE: deliberately NO shadow/brightness/saturation/blur on the meter. Every one of those is a
     // rasterizing filter that draws the meter into an offscreen layer; against the module's
@@ -89,20 +86,4 @@ struct MusicSpectrumBarsView: View {
         return highColor
     }
 
-    // MARK: - Demo badge
-
-    private var isDemo: Bool { analyzer.previewMode }
-
-    private var demoBadge: some View {
-        Text(analyzer.lifecycle == .denied ? "MIC OFF · DEMO" : "DEMO")
-            .font(.system(size: 7, weight: .semibold, design: .monospaced))
-            .foregroundStyle(UNConstants.amber)
-            .padding(.horizontal, 4)
-            .padding(.vertical, 1)
-            .background(
-                Capsule().fill(Color.black.opacity(0.55))
-                    .overlay(Capsule().strokeBorder(UNConstants.amber.opacity(0.4), lineWidth: 0.5))
-            )
-            .offset(y: -2)
-    }
 }

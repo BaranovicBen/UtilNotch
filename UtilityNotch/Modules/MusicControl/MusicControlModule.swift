@@ -37,9 +37,31 @@ struct MusicControlModule: UtilityModule {
 
 private struct MusicSettingsView: View {
     @Environment(\.musicOrchestrator) private var orchestrator
+    @AppStorage(MusicVizKey.source) private var vizSourceRaw = MusicVizSource.dummy.rawValue
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
+            // Visualizer source
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Visualizer")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.primary)
+
+                Picker("Bars", selection: $vizSourceRaw) {
+                    ForEach(MusicVizSource.allCases) { src in
+                        Text(src.label).tag(src.rawValue)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+
+                Text("Animated shows organic random bars. Live uses the microphone to react to real audio — but on Bluetooth headphones it automatically falls back to animated, because opening the mic forces the headset into a low-quality call mode and degrades playback.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Divider()
+
             Text("Music Sources")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.primary)
